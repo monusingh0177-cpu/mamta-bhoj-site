@@ -10,14 +10,15 @@ function renderContact(content, query) {
     alertHtml = `<div class="alert alert-error">Please fill in your name, phone number and message before sending.</div>`;
   }
   return `
-<section class="page-hero wrap">
+<section class="page-hero wrap" data-reveal>
   <span class="eyebrow">Get In Touch</span>
   <h1>For dealership &amp; bulk enquiries</h1>
   <p>${escapeHtml(content.contact_intro)}</p>
 </section>
-<section class="wrap">
+<section class="wrap" data-reveal>
   <div class="contact-grid">
     <div class="contact-info">
+      <div class="contact-art" aria-hidden="true">${icons.aboutArt()}</div>
       <div class="contact-row">${icons.trust.pin}<div><strong>Mill Address</strong><span>${escapeHtml(content.address)}</span></div></div>
       <div class="contact-row">${icons.trust.phone}<div><strong>Phone</strong><a href="tel:${escapeHtml((content.phone || '').replace(/\s+/g, ''))}">${escapeHtml(content.phone)}</a></div></div>
       <div class="contact-row">${icons.trust.mail}<div><strong>Email</strong><a href="mailto:${escapeHtml(content.email)}">${escapeHtml(content.email)}</a></div></div>

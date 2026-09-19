@@ -1,6 +1,7 @@
 'use strict';
 const { escapeHtml } = require('../lib/http-utils');
-const { ctaBand } = require('../lib/render');
+const { ctaBand, wheatDividerBand } = require('../lib/render');
+const { wheatEar } = require('../lib/icons');
 
 function arrowIcon() {
   return '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>';
@@ -24,12 +25,13 @@ function renderFAQ(content) {
     )
     .join('');
   return `
-<section class="page-hero wrap">
+<section class="page-hero wrap" data-reveal>
   <span class="eyebrow">FAQs</span>
   <h1>Frequently asked questions</h1>
   <p>Answers to common questions about our products, certifications and how to order.</p>
 </section>
-<section class="wrap"><div class="faq-list">${faqHtml}</div></section>
+${wheatDividerBand()}
+<section class="wrap" data-reveal><div class="faq-list"><span class="faq-corner-ear" aria-hidden="true">${wheatEar('var(--wheat-gold)', 4)}</span>${faqHtml}</div></section>
 ${ctaBand(content)}
 `;
 }

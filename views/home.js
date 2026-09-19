@@ -1,16 +1,16 @@
 'use strict';
 const { escapeHtml } = require('../lib/http-utils');
 const icons = require('../lib/icons');
-const { whyGrid, promoStrip, ctaBand } = require('../lib/render');
+const { whyGrid, promoStrip, ctaBand, wheatDividerBand, journeySection } = require('../lib/render');
 
 function renderHome(content, products) {
   const sorted = products.slice().sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
   const featured = products.find((p) => p.featured) || products[0];
 
   return `
-<section class="hero-band"><div class="hero wrap">
+<section class="hero-band"><div class="hero-field-wrap" aria-hidden="true">${icons.heroField()}</div><div class="hero wrap">
   <div class="hero-grid">
-    <div>
+    <div data-reveal>
       <span class="eyebrow">${escapeHtml(content.hero_eyebrow)}</span>
       <h1>${escapeHtml(content.hero_title)}<br><em>${escapeHtml(content.hero_title_accent)}</em></h1>
       <p class="lead">${escapeHtml(content.hero_lead)}</p>
@@ -18,8 +18,15 @@ function renderHome(content, products) {
         <a href="/products" class="btn btn-primary">Explore Products</a>
         <a href="/contact" class="btn btn-ghost">Get in Touch</a>
       </div>
+      <ul class="hero-flow" aria-label="From wheat to your family's table">
+        <li>Wheat</li><li aria-hidden="true">${arrowIcon()}</li>
+        <li>Mill</li><li aria-hidden="true">${arrowIcon()}</li>
+        <li>Flour</li><li aria-hidden="true">${arrowIcon()}</li>
+        <li>Food</li><li aria-hidden="true">${arrowIcon()}</li>
+        <li>Family</li>
+      </ul>
     </div>
-    <div class="hero-art">${icons.heroArt()}</div>
+    <div class="hero-art" data-reveal>${icons.heroArt()}</div>
   </div>
 </div></section>
 
@@ -38,11 +45,40 @@ ${promoStrip(icons)}
   <div class="stats-cell"><strong>${escapeHtml(content.stat3_num)}</strong><span>${escapeHtml(content.stat3_label)}</span></div>
 </div></section>
 
+<section class="wrap"><div class="home-about" data-reveal>
+  <div class="about-art about-art--framed">${icons.aboutArt()}<span class="wheat-corner">${icons.wheatEar('var(--wheat-gold)', 5)}</span></div>
+  <div>
+    <span class="eyebrow">Who We Are</span>
+    <h2 style="margin-top:.4em;font-size:clamp(1.4rem,2.6vw,1.9rem);">${escapeHtml(content.about_title)}</h2>
+    <p style="margin-top:.6em;">${escapeHtml(content.about_body1)}</p>
+    <a href="/about" class="btn btn-ghost" style="margin-top:1.2em;">Know More About Us</a>
+  </div>
+</div></section>
+
+<section class="wheat-feature">
+  <div class="wrap wheat-feature-grid" data-reveal>
+    <div class="wheat-feature-copy">
+      <span class="eyebrow">Our Raw Material</span>
+      <h2>Good Flour Begins With Good Grain</h2>
+      <p>Every Mamta Bhoj pack starts the same way — with wheat, not shortcuts. We mill naturally, the traditional chakki way, so the fibre, bran and nutrition already in the grain stay in the flour instead of being stripped out for speed.</p>
+      <ul class="wheat-feature-list">
+        <li>${icons.trust.check}<span>Naturally stone-ground, never over-processed</span></li>
+        <li>${icons.trust.check}<span>Milled in small, frequent batches for freshness</span></li>
+        <li>${icons.trust.check}<span>Produced under ISO 9001:2015 &amp; FSSAI conditions</span></li>
+      </ul>
+    </div>
+    <div class="wheat-feature-art" aria-hidden="true">
+      <div class="wheat-ear-lg">${icons.wheatEar('var(--wheat-gold)', 7)}</div>
+      <div class="wheat-ear-lg wheat-ear-lg--alt">${icons.wheatEar('var(--brand-navy)', 6)}</div>
+    </div>
+  </div>
+</section>
+
 <section class="wrap">
   <div class="section-head">
     <span class="eyebrow">Our Range</span>
     <h2>Milled fresh, straight from Kanpur</h2>
-    <p>Three staples, ground the same careful way — 100% whole-grain atta, fine maida and soft-textured sooji.</p>
+    <p>Every staple under the Mamta Bhoj name is ground the same careful way — naturally stone-ground, hygienically packed, milled close to when you order.</p>
   </div>
   <div class="product-grid">
     ${sorted.map((p) => productCard(p)).join('')}
@@ -54,24 +90,9 @@ ${promoStrip(icons)}
 
 ${featured && featured.image ? packagingShowcase(featured) : ''}
 
-<section class="wrap"><div class="home-about">
-  <div class="about-art">${icons.aboutArt()}</div>
-  <div>
-    <span class="eyebrow">About Devmam Flourish Foods</span>
-    <h2 style="margin-top:.4em;font-size:clamp(1.4rem,2.6vw,1.9rem);">${escapeHtml(content.about_title)}</h2>
-    <p style="margin-top:.6em;">${escapeHtml(content.about_body1)}</p>
-    <a href="/about" class="btn btn-ghost" style="margin-top:1.2em;">Know More About Us</a>
-  </div>
-</div></section>
+${wheatDividerBand()}
 
-<section class="mini-process"><div class="wrap"><div class="mini-process-grid">
-  <div class="mini-process-step"><div class="num">01</div><span>${escapeHtml(content.process1_title)}</span></div>
-  <div class="mini-process-step"><div class="num">02</div><span>${escapeHtml(content.process2_title)}</span></div>
-  <div class="mini-process-step"><div class="num">03</div><span>${escapeHtml(content.process3_title)}</span></div>
-  <div class="mini-process-step"><div class="num">04</div><span>${escapeHtml(content.process4_title)}</span></div>
-</div>
-<div style="text-align:center;margin-top:20px;"><a href="/quality" class="know-more" style="margin:0 auto;">See Our Full Process ${arrowIcon()}</a></div>
-</div></section>
+${journeySection(content, { link: true })}
 
 ${whyGrid(icons, 'Freshness you can taste, standards you can trust')}
 
@@ -86,9 +107,9 @@ function arrowIcon() {
 function productCard(p) {
   const tags = (Array.isArray(p.tags) ? p.tags : []).map((t) => `<span class="tag">${escapeHtml(t)}</span>`).join('');
   const visual = p.image
-    ? `<img class="product-photo" src="${escapeHtml(p.image)}" alt="${escapeHtml(p.name)}">`
+    ? `<img class="product-photo" src="${escapeHtml(p.image)}" alt="${escapeHtml(p.name)}" loading="lazy">`
     : `<div class="product-icon" style="margin:20px 0 0 20px;">${icons.productIcons[p.icon] || icons.productIcons.wheat}</div>`;
-  return `<div class="product-card${p.featured ? ' featured' : ''}">
+  return `<div class="product-card${p.featured ? ' featured' : ''}" data-reveal-item>
     ${p.image ? visual : ''}
     <div class="pc-body">
       ${p.image ? '' : visual}
@@ -102,9 +123,9 @@ function productCard(p) {
 
 function packagingShowcase(product) {
   if (!product.image) return '';
-  return `<section class="wrap">
+  return `<section class="wrap" data-reveal>
     <div class="pack-grid">
-      <div class="pack-photo"><img src="${escapeHtml(product.image)}" alt="${escapeHtml(product.name)} pack"></div>
+      <div class="pack-photo"><img src="${escapeHtml(product.image)}" alt="${escapeHtml(product.name)} pack" loading="lazy"></div>
       <div>
         <span class="eyebrow">As It Reaches Your Kitchen</span>
         <h2 style="margin-top:.4em;font-size:clamp(1.4rem,2.6vw,1.9rem);">Packed for freshness, labelled for trust</h2>

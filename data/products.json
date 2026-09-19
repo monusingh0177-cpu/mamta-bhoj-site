@@ -38,5 +38,32 @@
     "icon": "grid",
     "featured": false,
     "sortOrder": 3
+  },
+  {
+    "id": 4,
+    "name": "Tandoori Atta",
+    "description": "A coarser stone-ground wheat atta suited to tandoori rotis and thicker parathas — the same natural, additive-free milling as our Chakki Atta.",
+    "tags": [
+      "Coarser Grind",
+      "Tandoori-Style",
+      "Stone-Ground"
+    ],
+    "image": null,
+    "icon": "wheat",
+    "featured": false,
+    "sortOrder": 4
+  },
+  {
+    "id": 5,
+    "name": "Besan",
+    "description": "Finely milled from cleaned chana dal — for pakoras, dhokla, kadhi and everyday Indian cooking.",
+    "tags": [
+      "Gram Flour",
+      "Fine Texture"
+    ],
+    "image": null,
+    "icon": "sack",
+    "featured": false,
+    "sortOrder": 5
   }
 ]

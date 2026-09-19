@@ -1,24 +1,33 @@
 :root{
-  /* deep-blue + white + steel "premium corporate" palette — own color values,
-     not scraped from any brand's site. */
+  /* Deep navy + white + warm wheat-gold — Mamta Bhoj's brand palette.
+     --red/--brand-navy keep their historical names for backward
+     compatibility with existing rules, but carry the same royal-blue/navy
+     value throughout; own color values, not scraped from any brand's site. */
   --red:#1447a8; --red-dark:#0a2b63; --cream:#f5f7fa; --cream-soft:#ffffff;
-  --cream-line:#dde2e8; --gold:#4f8fd1; --ink:#14181f; --ink-soft:#5a6270;
+  --cream-line:#dde2e8; --ink:#14181f; --ink-soft:#5a6270;
   --surface:#ffffff; --shadow:0 1px 2px rgba(20,30,50,.08),0 8px 24px -12px rgba(20,30,50,.20);
+  /* warm wheat-gold accent family — the redesign's signature accent, used
+     sparingly against the navy/white base per the brand's colour system. */
+  --wheat-gold:#c1922c; --wheat-gold-dark:#8f6a1e; --wheat-gold-light:#f6ecd3;
+  --gold:var(--wheat-gold); /* legacy alias — some older rules still reference --gold */
+  --stone:#f3ede1; /* warm neutral surface, an alternative to cool --cream for texture variety */
   /* fixed brand-navy tokens: deliberately NOT redefined in the dark-mode blocks below —
      header/footer/hero/CTA brand bands stay this exact blue in both light and dark
      system theme (only --ink/--cream/--red flip meaning between themes; these never do). */
-  --brand-navy:#1447a8; --brand-navy-dark:#071d3f; --brand-gold:#ffffff;
+  --brand-navy:#1447a8; --brand-navy-dark:#071d3f; --brand-gold:var(--wheat-gold);
 }
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
     --red:#5b9bd5;--red-dark:#3f7ab8;--cream:#0b0f16;--cream-soft:#131a24;--cream-line:#24303f;
-    --gold:#7fb3e8;--ink:#eef1f5;--ink-soft:#a7b0bd;--surface:#131a24;
+    --wheat-gold:#d9ac4c;--wheat-gold-dark:#a9832f;--wheat-gold-light:#2a2213;--gold:var(--wheat-gold);
+    --stone:#1c1712;--ink:#eef1f5;--ink-soft:#a7b0bd;--surface:#131a24;
     --shadow:0 1px 2px rgba(0,0,0,.4),0 12px 28px -14px rgba(0,0,0,.65);
   }
 }
 :root[data-theme="dark"]{
   --red:#5b9bd5;--red-dark:#3f7ab8;--cream:#0b0f16;--cream-soft:#131a24;--cream-line:#24303f;
-  --gold:#7fb3e8;--ink:#eef1f5;--ink-soft:#a7b0bd;--surface:#131a24;
+  --wheat-gold:#d9ac4c;--wheat-gold-dark:#a9832f;--wheat-gold-light:#2a2213;--gold:var(--wheat-gold);
+  --stone:#1c1712;--ink:#eef1f5;--ink-soft:#a7b0bd;--surface:#131a24;
   --shadow:0 1px 2px rgba(0,0,0,.4),0 12px 28px -14px rgba(0,0,0,.65);
 }
 *{box-sizing:border-box;}
@@ -156,7 +165,7 @@ header{position:sticky;top:0;z-index:50;background:color-mix(in srgb, var(--crea
 .pack-list{list-style:none;margin:1.2em 0 0;padding:0;display:flex;flex-direction:column;gap:12px;}
 .pack-list li{display:flex;gap:10px;font-size:.94rem;color:var(--ink-soft);}
 .pack-list svg{width:18px;height:18px;color:var(--red);flex-shrink:0;margin-top:2px;}
-.process-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;}
+.process-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;}
 @media (max-width:900px){.process-grid{grid-template-columns:1fr 1fr;}}
 @media (max-width:560px){.process-grid{grid-template-columns:1fr;}}
 .process-num{font-family:'Poppins',sans-serif;font-size:2.3rem;color:var(--cream-line);line-height:1;margin-bottom:.2em;font-weight:700;}
@@ -215,9 +224,125 @@ footer{background:var(--brand-navy-dark);padding-block:44px 24px;margin-top:16px
 .cert-badge{display:flex;align-items:center;gap:10px;font-size:.74rem;color:#9fb3cc;line-height:1.4;}
 .cert-badge strong{display:block;color:#fff;font-size:.82rem;}
 
+/* ==================================================================
+   PREMIUM FLOUR-MILL REDESIGN — wheat visual language, richer sections,
+   refined typography and reveal-on-scroll motion.
+   ================================================================== */
+
+/* ---- typography refinements ---- */
+.section-head--center{max-width:640px;margin-left:auto;margin-right:auto;text-align:center;}
+h1{letter-spacing:-.01em;}
+.hero h1{letter-spacing:-.015em;}
+
+/* ---- reveal-on-scroll (progressive enhancement; see main.js) ----
+   Base state only applies once JS has added .js-reveal-ready to <html>,
+   so the site is fully visible/functional with JS disabled or before
+   the observer attaches. */
+html.js-reveal-ready [data-reveal],
+html.js-reveal-ready [data-reveal-item]{opacity:0;transform:translateY(18px);transition:opacity .6s ease, transform .6s ease;}
+html.js-reveal-ready [data-reveal].is-revealed,
+html.js-reveal-ready [data-reveal-item].is-revealed{opacity:1;transform:none;}
+html.js-reveal-ready [data-reveal-item]{transition-delay:calc(var(--i, 0) * 70ms);}
+@media (prefers-reduced-motion: reduce){
+  html.js-reveal-ready [data-reveal],
+  html.js-reveal-ready [data-reveal-item]{opacity:1;transform:none;transition:none;}
+}
+
+/* ---- wheat divider strips (section separators) ---- */
+.wheat-divider-band{width:100%;overflow:hidden;line-height:0;}
+.wheat-divider-band--top{position:relative;z-index:1;}
+footer .wheat-divider-band{background:var(--brand-navy-dark);padding-top:18px;}
+.cta-band .wheat-divider-band{padding-top:6px;}
+
+/* ---- hero: cinematic wheat-field backdrop ---- */
+.hero-band{position:relative;overflow:hidden;}
+.hero-field-wrap{position:absolute;inset:0;z-index:0;pointer-events:none;}
+.hero-field-svg{width:100%;height:100%;display:block;}
+.hero-band .hero{position:relative;z-index:1;}
+.hero-flow{list-style:none;margin:1.6em 0 0;padding:0;display:flex;align-items:center;flex-wrap:wrap;gap:.5em;font-size:.78rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--wheat-gold);}
+.hero-flow li{display:flex;align-items:center;}
+.hero-flow li[aria-hidden]{color:rgba(255,255,255,.45);}
+.hero-flow li:not([aria-hidden]){color:#fff;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.16);border-radius:20px;padding:.4em .9em;}
+
+/* ---- "Who We Are" framed art with wheat corner accent ---- */
+.about-art--framed{position:relative;}
+.wheat-corner{position:absolute;bottom:-14px;right:-10px;width:64px;height:auto;filter:drop-shadow(0 6px 10px rgba(20,30,50,.2));pointer-events:none;}
+.wheat-corner svg{width:100%;height:auto;display:block;}
+
+/* ---- "Good Flour Begins With Good Grain" feature section ---- */
+.wheat-feature{background:var(--stone);border-top:1px solid var(--cream-line);border-bottom:1px solid var(--cream-line);position:relative;overflow:hidden;}
+.wheat-feature-grid{display:grid;grid-template-columns:1.1fr .9fr;gap:clamp(24px,5vw,56px);align-items:center;position:relative;z-index:1;}
+@media (max-width:900px){.wheat-feature-grid{grid-template-columns:1fr;}}
+.wheat-feature-copy h2{margin-top:.4em;font-size:clamp(1.4rem,2.8vw,2rem);}
+.wheat-feature-copy p{margin-top:.7em;max-width:56ch;}
+.wheat-feature-list{list-style:none;margin:1.3em 0 0;padding:0;display:flex;flex-direction:column;gap:11px;}
+.wheat-feature-list li{display:flex;gap:10px;font-size:.94rem;color:var(--ink);font-weight:500;}
+.wheat-feature-list svg{width:19px;height:19px;color:var(--wheat-gold-dark);flex-shrink:0;margin-top:2px;}
+.wheat-feature-art{display:flex;justify-content:center;align-items:flex-end;gap:18px;height:260px;}
+.wheat-ear-lg{width:70px;height:auto;filter:drop-shadow(0 10px 18px rgba(20,30,50,.15));}
+.wheat-ear-lg--alt{width:50px;opacity:.75;transform:translateY(10px);}
+.wheat-ear-lg svg{width:100%;height:auto;display:block;}
+@media (max-width:600px){.wheat-feature-art{height:180px;}.wheat-ear-lg{width:52px;}.wheat-ear-lg--alt{width:38px;}}
+
+/* ---- "From Wheat to Flour" journey section ---- */
+.journey-section{position:relative;}
+.journey-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;}
+@media (max-width:900px){.journey-grid{grid-template-columns:1fr 1fr;}}
+@media (max-width:560px){.journey-grid{grid-template-columns:1fr;}}
+.journey-card{background:var(--surface);border:1px solid var(--cream-line);border-radius:10px;padding:26px 22px;position:relative;box-shadow:var(--shadow);}
+.journey-card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:linear-gradient(var(--wheat-gold), var(--brand-navy));border-radius:10px 0 0 10px;}
+.journey-num{font-family:'Poppins',sans-serif;font-weight:800;font-size:1.6rem;color:var(--cream-line);line-height:1;margin-bottom:10px;}
+.journey-icon{width:42px;height:42px;border-radius:50%;background:color-mix(in srgb, var(--wheat-gold) 14%, transparent);color:var(--wheat-gold-dark);display:flex;align-items:center;justify-content:center;margin-bottom:12px;}
+.journey-icon svg{width:22px;height:22px;}
+.journey-card h4{font-size:1rem;margin-bottom:.4em;}
+.journey-card p{font-size:.88rem;}
+
+/* ---- Quality page: split hygiene spotlight ---- */
+.quality-spotlight{display:grid;grid-template-columns:1fr 1.1fr;gap:clamp(24px,5vw,52px);align-items:center;}
+@media (max-width:900px){.quality-spotlight{grid-template-columns:1fr;}}
+.quality-spotlight-art{position:relative;border-radius:10px;overflow:hidden;border:1px solid var(--cream-line);box-shadow:var(--shadow);}
+.quality-badge-float{position:absolute;left:16px;bottom:16px;background:var(--brand-navy-dark);color:#fff;border-radius:8px;padding:10px 14px;display:flex;align-items:center;gap:10px;font-size:.72rem;line-height:1.35;font-weight:600;box-shadow:0 10px 24px -10px rgba(0,0,0,.4);}
+.quality-badge-float svg{width:24px;height:24px;color:var(--wheat-gold);flex-shrink:0;}
+.quality-spotlight-copy h2{margin-top:.35em;font-size:clamp(1.4rem,2.8vw,2rem);}
+.quality-spotlight-copy p{margin-top:.6em;}
+.quality-checklist{list-style:none;margin:1.2em 0 0;padding:0;display:flex;flex-direction:column;gap:11px;}
+.quality-checklist li{display:flex;gap:10px;font-size:.92rem;color:var(--ink);}
+.quality-checklist svg{width:18px;height:18px;color:var(--wheat-gold-dark);flex-shrink:0;margin-top:2px;}
+
+/* ---- About page: story timeline ---- */
+.story-timeline{display:grid;grid-template-columns:repeat(4,1fr);gap:22px;position:relative;}
+@media (max-width:900px){.story-timeline{grid-template-columns:1fr 1fr;}}
+@media (max-width:560px){.story-timeline{grid-template-columns:1fr;}}
+.story-step{text-align:center;position:relative;padding-top:8px;}
+.story-step-icon{width:56px;height:56px;border-radius:50%;background:var(--surface);border:2px solid var(--wheat-gold);color:var(--brand-navy);display:flex;align-items:center;justify-content:center;margin:0 auto 14px;position:relative;z-index:1;box-shadow:var(--shadow);}
+.story-step-icon svg{width:26px;height:26px;}
+.story-step-line{display:none;}
+/* the connecting line's offset math assumes exactly 4 equal columns, which
+   only happens at the widest breakpoint (.story-timeline is 2 columns below
+   900px) — restricting it here avoids the line overflowing at tablet widths */
+@media (min-width:901px){
+  .story-step:not(:last-child)::after{content:"";position:absolute;top:36px;left:calc(50% + 34px);right:calc(-50% + 34px);height:2px;background:repeating-linear-gradient(to right, var(--wheat-gold) 0 6px, transparent 6px 12px);}
+}
+.story-step h4{font-size:.94rem;margin-bottom:.35em;}
+.story-step p{font-size:.84rem;}
+
+/* ---- FAQ: subtle wheat corner detail ---- */
+.faq-list{position:relative;}
+.faq-corner-ear{position:absolute;top:-34px;right:6px;width:30px;opacity:.7;pointer-events:none;}
+.faq-corner-ear svg{width:100%;height:auto;display:block;}
+@media (max-width:600px){.faq-corner-ear{display:none;}}
+
+/* ---- Contact: small decorative facility art above the info column ---- */
+.contact-art{border-radius:8px;overflow:hidden;border:1px solid var(--cream-line);margin-bottom:18px;max-height:160px;}
+.contact-art svg{display:block;width:100%;height:auto;}
+
 /* ---- micro-interactions & UX polish ---- */
-.promo-card,.why-card,.product-card,.trust-item,.form-panel{transition:transform .18s ease,box-shadow .18s ease,border-color .18s ease;}
-.promo-card:hover,.why-card:hover,.product-card:hover,.trust-item:hover{transform:translateY(-3px);box-shadow:0 10px 26px -12px rgba(20,30,50,.28);border-color:var(--red);}
+.promo-card,.why-card,.product-card,.trust-item,.form-panel,.journey-card,.gallery-tile,.quality-spotlight-art{transition:transform .18s ease,box-shadow .18s ease,border-color .18s ease;}
+.promo-card:hover,.why-card:hover,.product-card:hover,.trust-item:hover,.journey-card:hover{transform:translateY(-3px);box-shadow:0 10px 26px -12px rgba(20,30,50,.28);border-color:var(--wheat-gold);}
+.gallery-tile:hover img{transform:scale(1.05);}
+.gallery-tile img{transition:transform .35s ease;}
+.story-step-icon{transition:transform .2s ease,box-shadow .2s ease;}
+.story-step:hover .story-step-icon{transform:translateY(-3px);box-shadow:0 10px 20px -8px rgba(20,30,50,.3);}
 .btn[disabled]{opacity:.65;cursor:not-allowed;transform:none !important;}
 .faq-item{transition:border-color .15s ease;}
 .faq-item:hover{border-color:var(--red);}

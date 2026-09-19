@@ -30,15 +30,17 @@ function tryServeStatic(req, res, pathname) {
   // Only ever serve files that live under /css, /js, /images or /uploads —
   // never let a request path escape the public/ (or persistent uploads) directory.
   if (!/^\/(css|js|images|uploads)\//.test(pathname)) return false;
-  const safeSuffix = path.normalize(pathname).replace(/^([.]{2}[/\\])+/, '');
   // Uploaded photos are served from UPLOADS_DIR, which is redirected to a
   // mounted persistent disk when PERSIST_DIR is set (see lib/persist-paths.js)
-  // — everything else (css/js) always ships from the deployed code itself.
+  // — everything else (css/js/images) always ships from the deployed code
+  // itself. The prefix must be stripped from the URL (always forward-slash)
+  // *before* normalizing — path.normalize() switches to backslashes on
+  // Windows, which would otherwise break a forward-slash prefix strip.
   const isUpload = pathname.startsWith('/uploads/');
   const baseDir = isUpload ? UPLOADS_DIR : PUBLIC_DIR;
-  const filePath = isUpload
-    ? path.join(UPLOADS_DIR, safeSuffix.replace(/^\/uploads/, ''))
-    : path.join(PUBLIC_DIR, safeSuffix);
+  const relPath = isUpload ? pathname.slice('/uploads/'.length) : pathname.slice(1);
+  const safeRelPath = path.normalize(relPath).replace(/^([.]{2}[/\\])+/, '');
+  const filePath = path.join(baseDir, safeRelPath);
   if (!filePath.startsWith(baseDir)) return false;
   if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) return false;
 
