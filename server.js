@@ -27,9 +27,9 @@ const MIME = {
 };
 
 function tryServeStatic(req, res, pathname) {
-  // Only ever serve files that live under /css, /js or /uploads — never
-  // let a request path escape the public/ (or persistent uploads) directory.
-  if (!/^\/(css|js|uploads)\//.test(pathname)) return false;
+  // Only ever serve files that live under /css, /js, /images or /uploads —
+  // never let a request path escape the public/ (or persistent uploads) directory.
+  if (!/^\/(css|js|images|uploads)\//.test(pathname)) return false;
   const safeSuffix = path.normalize(pathname).replace(/^([.]{2}[/\\])+/, '');
   // Uploaded photos are served from UPLOADS_DIR, which is redirected to a
   // mounted persistent disk when PERSIST_DIR is set (see lib/persist-paths.js)
