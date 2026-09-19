@@ -8,7 +8,7 @@ function renderHome(content, products) {
   const featured = products.find((p) => p.featured) || products[0];
 
   return `
-<section class="hero-band"><div class="hero-field-wrap" aria-hidden="true">${icons.heroField()}</div><div class="hero wrap">
+<section class="hero-band"><div class="hero wrap">
   <div class="hero-grid">
     <div data-reveal>
       <span class="eyebrow">${escapeHtml(content.hero_eyebrow)}</span>
@@ -22,11 +22,10 @@ function renderHome(content, products) {
         <li>Wheat</li><li aria-hidden="true">${arrowIcon()}</li>
         <li>Mill</li><li aria-hidden="true">${arrowIcon()}</li>
         <li>Flour</li><li aria-hidden="true">${arrowIcon()}</li>
-        <li>Food</li><li aria-hidden="true">${arrowIcon()}</li>
-        <li>Family</li>
+        <li>Food</li>
       </ul>
     </div>
-    <div class="hero-art" data-reveal>${icons.heroArt()}</div>
+    <div class="hero-mill-visual" data-reveal>${icons.heroMillVisual()}</div>
   </div>
 </div></section>
 
