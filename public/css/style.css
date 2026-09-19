@@ -108,9 +108,10 @@ header{position:sticky;top:0;z-index:50;background:color-mix(in srgb, var(--crea
 .footer-cols{max-width:1120px;margin:0 auto;display:grid;grid-template-columns:1.3fr 1fr 1fr 1.3fr;gap:28px;}
 @media (max-width:760px){.footer-cols{grid-template-columns:1fr 1fr;}}
 @media (max-width:480px){.footer-cols{grid-template-columns:1fr;}}
+.footer-col{min-width:0;}
 .footer-col h4{color:#fff;font-size:.78rem;text-transform:uppercase;letter-spacing:.06em;margin-bottom:14px;font-family:'Poppins',sans-serif;}
 .footer-col ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:9px;}
-.footer-col a{font-size:.86rem;color:#9fb3cc;text-decoration:none;}
+.footer-col a{font-size:.86rem;color:#9fb3cc;text-decoration:none;overflow-wrap:break-word;}
 .footer-col a:hover{color:#fff;}
 .page-hero{padding-top:clamp(28px,5vw,48px);padding-bottom:8px;}
 .page-hero h1{font-size:clamp(1.8rem,3.6vw,2.5rem);margin-top:.4em;}
