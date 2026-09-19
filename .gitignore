@@ -1,0 +1,31 @@
+# Dependencies (this project ships with zero npm packages, but ignore
+# node_modules defensively in case any are ever added locally)
+node_modules/
+
+# Environment / secrets — never commit these
+.env
+.env.*
+*.pem
+*.key
+
+# Local persistent-storage mount (only relevant if PERSIST_DIR is ever
+# pointed inside the repo during local testing; production data lives on
+# the host's mounted disk, not in git)
+/var/data/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Runtime data that accumulates real customer info after deployment —
+# these start as empty arrays in the repo (needed so the app has a file to
+# read on first boot) but must never carry real enquiries/newsletter
+# signups into version control.
+data/enquiries.json
+data/newsletter.json
+
+# OS / editor junk
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

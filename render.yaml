@@ -1,0 +1,20 @@
+# Render "Blueprint" file — lets Render auto-configure this app with zero
+# manual setup: no start command to type, no instance type to pick, no env
+# vars to remember. Once this repo is on GitHub (public or private), go to
+# Render → New → Blueprint → paste the repo URL → Apply. Render reads this
+# file and creates the service exactly as specified below, on the Free plan.
+#
+# To move to a paid plan with a persistent disk later (see README section 3,
+# Option B), add a "disk" block here and change PERSIST_DIR to point at its
+# mount path — or just make those two changes directly in the Render
+# dashboard after the service exists.
+services:
+  - type: web
+    name: mamta-bhoj-site
+    runtime: node
+    plan: free
+    buildCommand: "echo 'No build step needed — zero npm dependencies.'"
+    startCommand: "node server.js"
+    envVars:
+      - key: FORCE_HTTPS
+        value: "1"

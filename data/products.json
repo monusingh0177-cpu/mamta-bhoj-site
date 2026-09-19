@@ -1,0 +1,42 @@
+[
+  {
+    "id": 1,
+    "name": "Fresh Chakki Atta",
+    "description": "100% whole wheat, naturally stone-ground — rich in fibre and protein, for soft rotis that stay fresh for longer.",
+    "tags": [
+      "Rich in Fibre",
+      "High Protein",
+      "Stone-Ground"
+    ],
+    "image": "/uploads/products/chakki-atta.jpg",
+    "icon": "wheat",
+    "featured": true,
+    "sortOrder": 1
+  },
+  {
+    "id": 2,
+    "name": "Maida",
+    "description": "Finely refined flour milled for a smooth, elastic dough — suited to parathas, naan and everyday baking.",
+    "tags": [
+      "Fine Texture",
+      "Bakery Grade"
+    ],
+    "image": null,
+    "icon": "circle",
+    "featured": false,
+    "sortOrder": 2
+  },
+  {
+    "id": 3,
+    "name": "Sooji / Rava",
+    "description": "Evenly milled semolina with a consistent grain size — for a perfect upma, kesari or crisp dosa batter.",
+    "tags": [
+      "Even Grain",
+      "Multi-Use"
+    ],
+    "image": null,
+    "icon": "grid",
+    "featured": false,
+    "sortOrder": 3
+  }
+]

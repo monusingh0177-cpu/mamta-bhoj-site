@@ -1,0 +1,6 @@
+[
+  { "id": 1, "caption": "Wheat Sourcing", "image": null, "icon": "field", "sortOrder": 1 },
+  { "id": 2, "caption": "Storage Silos", "image": null, "icon": "silo", "sortOrder": 2 },
+  { "id": 3, "caption": "Stone Grinding", "image": null, "icon": "chakki", "sortOrder": 3 },
+  { "id": 4, "caption": "Hygienic Packing", "image": null, "icon": "pack", "sortOrder": 4 }
+]
