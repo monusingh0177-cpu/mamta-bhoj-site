@@ -75,6 +75,18 @@
     var timer = null;
     var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+    // If a slide's real photo hasn't been added yet at public/images/hero/,
+    // fall back to a plain brand-navy panel (see .img-missing in style.css)
+    // instead of showing the browser's broken-image icon.
+    carousel.querySelectorAll('.hero-carousel-art img').forEach(function (img) {
+      img.addEventListener('error', function () {
+        img.closest('.hero-carousel-slide').classList.add('img-missing');
+      });
+      if (img.complete && img.naturalWidth === 0) {
+        img.closest('.hero-carousel-slide').classList.add('img-missing');
+      }
+    });
+
     function showSlide(index) {
       current = (index + slides.length) % slides.length;
       slides.forEach(function (slide, i) {

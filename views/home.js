@@ -16,25 +16,29 @@ function renderHome(content, products) {
 
   const slides = [
     {
-      art: 'milling', eyebrow: 'Modern Milling',
+      image: 'hero-milling.jpg', alt: 'Modern flour-milling machinery in a clean, food-grade production environment',
+      eyebrow: 'Modern Milling',
       title: 'Advanced Milling for Pure &amp; Consistent Quality',
       body: 'Clean processing, hygienic environment.',
       cta: 'Our Process', href: '/quality',
     },
     {
-      art: 'grain', eyebrow: 'The Journey',
+      image: 'hero-wheat-to-flour.jpg', alt: 'Raw wheat grain alongside freshly milled flour',
+      eyebrow: 'The Journey',
       title: 'From Wheat to Flour',
       body: 'Raw wheat, naturally stone-ground into atta, maida &amp; sooji.',
       cta: 'See Our Range', href: '/products',
     },
     {
-      art: 'quality', eyebrow: 'Quality &amp; Hygiene',
+      image: 'hero-quality-hygiene.jpg', alt: 'Clean, hygienic food-processing environment',
+      eyebrow: 'Quality &amp; Hygiene',
       title: 'Quality You Can Trust',
       body: 'Checked &amp; packed under ISO 9001:2015 &amp; FSSAI conditions.',
       cta: 'Our Standards', href: '/quality',
     },
     {
-      art: 'kitchen', eyebrow: 'Ready for Your Kitchen',
+      image: 'hero-kitchen.jpg', alt: 'Premium flour and wheat grain, ready for the kitchen',
+      eyebrow: 'Ready for Your Kitchen',
       title: 'From Our Mill to Your Kitchen',
       body: 'Sealed fresh, dispatched close to when you order.',
       cta: 'Explore Products', href: '/products',
@@ -71,7 +75,7 @@ function renderHome(content, products) {
         ${slides
           .map(
             (s, i) => `<div class="hero-carousel-slide${i === 0 ? ' is-active' : ''}" data-slide-index="${i}" aria-hidden="${i === 0 ? 'false' : 'true'}">
-              <div class="hero-carousel-art">${icons.heroSlideArt(s.art)}</div>
+              <div class="hero-carousel-art" data-expected="${s.image}"><img src="/images/hero/${s.image}" alt="${escapeHtml(s.alt)}" ${i === 0 ? '' : 'loading="lazy"'}></div>
               <div class="hero-carousel-scrim" aria-hidden="true"></div>
               <div class="hero-carousel-copy">
                 <span class="eyebrow">${s.eyebrow}</span>
