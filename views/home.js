@@ -14,34 +14,26 @@ function renderHome(content, products) {
     { key: 'food', label: 'Food', sub: 'Everyday Goodness' },
   ];
 
+  // Each slide's headline/description/branding is baked into its photo
+  // (see public/images/hero/README.md) — only the pieces that genuinely
+  // must be real, interactive HTML remain here: the slide's accessible
+  // label (for the dots) and its clickable CTA.
   const slides = [
     {
-      image: 'hero-milling.jpg', alt: 'Modern flour-milling machinery in a clean, food-grade production environment',
-      eyebrow: 'Modern Milling',
-      title: 'Advanced Milling for Pure &amp; Consistent Quality',
-      body: 'Clean processing, hygienic environment.',
-      cta: 'Our Process', href: '/quality',
+      image: 'hero-milling.jpg', alt: 'Advanced Milling for Pure & Consistent Quality — modern flour-milling machinery in a clean, food-grade production environment',
+      eyebrow: 'Modern Milling', cta: 'Our Process', href: '/quality',
     },
     {
-      image: 'hero-wheat-to-flour.jpg', alt: 'Raw wheat grain alongside freshly milled flour',
-      eyebrow: 'The Journey',
-      title: 'From Wheat to Flour',
-      body: 'Raw wheat, naturally stone-ground into atta, maida &amp; sooji.',
-      cta: 'See Our Range', href: '/products',
+      image: 'hero-wheat-to-flour.jpg', alt: 'From Wheat to Flour — raw wheat grain alongside freshly milled flour',
+      eyebrow: 'From Wheat to Flour', cta: 'See Our Range', href: '/products',
     },
     {
-      image: 'hero-quality-hygiene.jpg', alt: 'Clean, hygienic food-processing environment',
-      eyebrow: 'Quality &amp; Hygiene',
-      title: 'Quality You Can Trust',
-      body: 'Checked &amp; packed under ISO 9001:2015 &amp; FSSAI conditions.',
-      cta: 'Our Standards', href: '/quality',
+      image: 'hero-quality-hygiene.jpg', alt: 'Quality You Can Trust — clean, hygienic food-processing environment',
+      eyebrow: 'Quality &amp; Hygiene', cta: 'Our Standards', href: '/quality',
     },
     {
-      image: 'hero-kitchen.jpg', alt: 'Premium flour and wheat grain, ready for the kitchen',
-      eyebrow: 'Ready for Your Kitchen',
-      title: 'From Our Mill to Your Kitchen',
-      body: 'Sealed fresh, dispatched close to when you order.',
-      cta: 'Explore Products', href: '/products',
+      image: 'hero-kitchen.jpg', alt: 'From Our Mill to Your Kitchen — premium flour and wheat grain',
+      eyebrow: 'Ready for Your Kitchen', cta: 'Explore Products', href: '/products',
     },
   ];
 
@@ -70,26 +62,18 @@ function renderHome(content, products) {
       <p class="hero-script-tagline">${icons.wheatEar('var(--wheat-gold)', 2)}<span>From Our Fields to Your Family</span></p>
     </div>
     <div class="hero-carousel" data-carousel aria-roledescription="carousel" aria-label="Mamta Bhoj mill and product highlights" data-reveal>
-      <div class="hero-carousel-badge" aria-hidden="true">${icons.trust.leaf}<span>GOOD GRAINS<br>BETTER FOOD<br>BRIGHTER TOMORROW</span></div>
       <div class="hero-carousel-track">
         ${slides
           .map(
             (s, i) => `<div class="hero-carousel-slide${i === 0 ? ' is-active' : ''}" data-slide-index="${i}" aria-hidden="${i === 0 ? 'false' : 'true'}">
               <div class="hero-carousel-art" data-expected="${s.image}"><img src="/images/hero/${s.image}" alt="${escapeHtml(s.alt)}" ${i === 0 ? '' : 'loading="lazy"'}></div>
-              <div class="hero-carousel-scrim" aria-hidden="true"></div>
-              <div class="hero-carousel-copy">
-                <span class="eyebrow">${s.eyebrow}</span>
-                <h3>${s.title}</h3>
-                <p>${s.body}</p>
-                <a href="${s.href}" class="btn btn-ghost btn-sm">${s.cta} ${arrowIcon()}</a>
-              </div>
+              <a href="${s.href}" class="hero-carousel-cta">${s.cta} ${arrowIcon()}</a>
             </div>`
           )
           .join('')}
       </div>
       <button type="button" class="hero-carousel-arrow hero-carousel-arrow--prev" aria-label="Previous slide">${arrowIcon('left')}</button>
       <button type="button" class="hero-carousel-arrow hero-carousel-arrow--next" aria-label="Next slide">${arrowIcon()}</button>
-      <div class="hero-carousel-ribbon" aria-hidden="true">Pure by Nature<br>Trusted by Families</div>
       <div class="hero-carousel-dots" role="tablist" aria-label="Choose a slide">
         ${slides
           .map(
