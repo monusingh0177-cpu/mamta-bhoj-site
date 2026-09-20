@@ -24,6 +24,11 @@ npm-debug.log*
 data/enquiries.json
 data/newsletter.json
 
+# Design references / mockups supplied during development — not consumed by
+# the running app, just a visual brief to build from, so they don't belong
+# in the deployed repo.
+/reference/
+
 # OS / editor junk
 .DS_Store
 Thumbs.db

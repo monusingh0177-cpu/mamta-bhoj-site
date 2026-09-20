@@ -7,6 +7,40 @@ function renderHome(content, products) {
   const sorted = products.slice().sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
   const featured = products.find((p) => p.featured) || products[0];
 
+  const flowSteps = [
+    { key: 'wheat', label: 'Wheat', sub: 'Pure Grain' },
+    { key: 'mill', label: 'Mill', sub: 'Clean & Grind' },
+    { key: 'flour', label: 'Flour', sub: 'Wholesome Nutrition' },
+    { key: 'food', label: 'Food', sub: 'Everyday Goodness' },
+  ];
+
+  const slides = [
+    {
+      art: 'milling', eyebrow: 'Modern Milling',
+      title: 'Advanced Milling for Pure &amp; Consistent Quality',
+      body: 'Clean processing, hygienic environment.',
+      cta: 'Our Process', href: '/quality',
+    },
+    {
+      art: 'grain', eyebrow: 'The Journey',
+      title: 'From Wheat to Flour',
+      body: 'Raw wheat, naturally stone-ground into atta, maida &amp; sooji.',
+      cta: 'See Our Range', href: '/products',
+    },
+    {
+      art: 'quality', eyebrow: 'Quality &amp; Hygiene',
+      title: 'Quality You Can Trust',
+      body: 'Checked &amp; packed under ISO 9001:2015 &amp; FSSAI conditions.',
+      cta: 'Our Standards', href: '/quality',
+    },
+    {
+      art: 'kitchen', eyebrow: 'Ready for Your Kitchen',
+      title: 'From Our Mill to Your Kitchen',
+      body: 'Sealed fresh, dispatched close to when you order.',
+      cta: 'Explore Products', href: '/products',
+    },
+  ];
+
   return `
 <section class="hero-band"><div class="hero wrap">
   <div class="hero-grid">
@@ -15,17 +49,51 @@ function renderHome(content, products) {
       <h1>${escapeHtml(content.hero_title)}<br><em>${escapeHtml(content.hero_title_accent)}</em></h1>
       <p class="lead">${escapeHtml(content.hero_lead)}</p>
       <div class="hero-cta">
-        <a href="/products" class="btn btn-primary">Explore Products</a>
+        <a href="/products" class="btn btn-primary">Explore Products ${arrowIcon()}</a>
         <a href="/contact" class="btn btn-ghost">Get in Touch</a>
       </div>
-      <ul class="hero-flow" aria-label="From wheat to your family's table">
-        <li>Wheat</li><li aria-hidden="true">${arrowIcon()}</li>
-        <li>Mill</li><li aria-hidden="true">${arrowIcon()}</li>
-        <li>Flour</li><li aria-hidden="true">${arrowIcon()}</li>
-        <li>Food</li>
-      </ul>
+      <div class="hero-flow" aria-label="Our journey: from wheat to your family's table">
+        ${flowSteps
+          .map(
+            (s, i) => `${i > 0 ? `<span class="hero-flow-arrow" aria-hidden="true">${arrowIcon()}</span>` : ''}
+            <div class="hero-flow-step">
+              <div class="hero-flow-icon">${icons.heroFlowIcons[s.key]}</div>
+              <div><strong>${s.label.toUpperCase()}</strong><span>${escapeHtml(s.sub)}</span></div>
+            </div>`
+          )
+          .join('')}
+      </div>
+      <p class="hero-script-tagline">${icons.wheatEar('var(--wheat-gold)', 2)}<span>From Our Fields to Your Family</span></p>
     </div>
-    <div class="hero-mill-visual" data-reveal>${icons.heroMillVisual()}</div>
+    <div class="hero-carousel" data-carousel aria-roledescription="carousel" aria-label="Mamta Bhoj mill and product highlights" data-reveal>
+      <div class="hero-carousel-badge" aria-hidden="true">${icons.trust.leaf}<span>GOOD GRAINS<br>BETTER FOOD<br>BRIGHTER TOMORROW</span></div>
+      <div class="hero-carousel-track">
+        ${slides
+          .map(
+            (s, i) => `<div class="hero-carousel-slide${i === 0 ? ' is-active' : ''}" data-slide-index="${i}" aria-hidden="${i === 0 ? 'false' : 'true'}">
+              <div class="hero-carousel-art">${icons.heroSlideArt(s.art)}</div>
+              <div class="hero-carousel-scrim" aria-hidden="true"></div>
+              <div class="hero-carousel-copy">
+                <span class="eyebrow">${s.eyebrow}</span>
+                <h3>${s.title}</h3>
+                <p>${s.body}</p>
+                <a href="${s.href}" class="btn btn-ghost btn-sm">${s.cta} ${arrowIcon()}</a>
+              </div>
+            </div>`
+          )
+          .join('')}
+      </div>
+      <button type="button" class="hero-carousel-arrow hero-carousel-arrow--prev" aria-label="Previous slide">${arrowIcon('left')}</button>
+      <button type="button" class="hero-carousel-arrow hero-carousel-arrow--next" aria-label="Next slide">${arrowIcon()}</button>
+      <div class="hero-carousel-ribbon" aria-hidden="true">Pure by Nature<br>Trusted by Families</div>
+      <div class="hero-carousel-dots" role="tablist" aria-label="Choose a slide">
+        ${slides
+          .map(
+            (s, i) => `<button type="button" class="hero-carousel-dot${i === 0 ? ' is-active' : ''}" data-slide-goto="${i}" role="tab" aria-selected="${i === 0 ? 'true' : 'false'}" aria-label="Slide ${i + 1}: ${s.eyebrow}"></button>`
+          )
+          .join('')}
+      </div>
+    </div>
   </div>
 </div></section>
 
@@ -99,7 +167,10 @@ ${ctaBand(content)}
 `;
 }
 
-function arrowIcon() {
+function arrowIcon(direction) {
+  if (direction === 'left') {
+    return '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M11 6l-6 6 6 6"/></svg>';
+  }
   return '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>';
 }
 

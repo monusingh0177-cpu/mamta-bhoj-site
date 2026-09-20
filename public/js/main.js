@@ -63,4 +63,65 @@
       });
     }
   }
+
+  // Hero carousel — plain vanilla JS, no slider library.
+  var carousel = document.querySelector('[data-carousel]');
+  if (carousel) {
+    var slides = Array.prototype.slice.call(carousel.querySelectorAll('.hero-carousel-slide'));
+    var dots = Array.prototype.slice.call(carousel.querySelectorAll('.hero-carousel-dot'));
+    var prevBtn = carousel.querySelector('.hero-carousel-arrow--prev');
+    var nextBtn = carousel.querySelector('.hero-carousel-arrow--next');
+    var current = 0;
+    var timer = null;
+    var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    function showSlide(index) {
+      current = (index + slides.length) % slides.length;
+      slides.forEach(function (slide, i) {
+        var active = i === current;
+        slide.classList.toggle('is-active', active);
+        slide.setAttribute('aria-hidden', active ? 'false' : 'true');
+      });
+      dots.forEach(function (dot, i) {
+        var active = i === current;
+        dot.classList.toggle('is-active', active);
+        dot.setAttribute('aria-selected', active ? 'true' : 'false');
+      });
+    }
+
+    var isHovering = false;
+    var isFocused = false;
+
+    function stopAuto() {
+      if (timer) { clearInterval(timer); timer = null; }
+    }
+    // Clicking a dot/arrow doesn't re-fire mouseenter (the pointer was
+    // already inside the carousel), so startAuto must itself respect an
+    // in-progress hover/focus rather than unconditionally restarting —
+    // otherwise a click while the mouse rests on the carousel would resume
+    // auto-advance right under the user's cursor.
+    function startAuto() {
+      if (reduceMotion || slides.length < 2 || isHovering || isFocused) return;
+      stopAuto();
+      timer = setInterval(function () { showSlide(current + 1); }, 5500);
+    }
+
+    if (nextBtn) nextBtn.addEventListener('click', function () { showSlide(current + 1); startAuto(); });
+    if (prevBtn) prevBtn.addEventListener('click', function () { showSlide(current - 1); startAuto(); });
+    dots.forEach(function (dot, i) {
+      dot.addEventListener('click', function () { showSlide(i); startAuto(); });
+    });
+
+    carousel.addEventListener('mouseenter', function () { isHovering = true; stopAuto(); });
+    carousel.addEventListener('mouseleave', function () { isHovering = false; startAuto(); });
+    carousel.addEventListener('focusin', function () { isFocused = true; stopAuto(); });
+    carousel.addEventListener('focusout', function () {
+      setTimeout(function () {
+        if (!carousel.contains(document.activeElement)) { isFocused = false; startAuto(); }
+      }, 0);
+    });
+
+    showSlide(0);
+    startAuto();
+  }
 })();
