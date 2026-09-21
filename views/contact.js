@@ -9,6 +9,8 @@ function renderContact(content, query) {
   } else if (query && query.error === '1') {
     alertHtml = `<div class="alert alert-error">Please fill in your name, phone number and message before sending.</div>`;
   }
+  const productPrefill = (query && query.product ? String(query.product) : '').trim();
+  const prefillMessage = productPrefill ? `Product Enquiry: ${productPrefill} – 5 kg` : '';
   return `
 <section class="page-hero wrap" data-reveal>
   <span class="eyebrow">Get In Touch</span>
@@ -34,12 +36,13 @@ function renderContact(content, query) {
         <label for="f-type">Enquiry Type</label>
         <select id="f-type" name="type">
           <option>General Enquiry</option>
+          <option${productPrefill ? ' selected' : ''}>Product Enquiry</option>
           <option>Dealership</option>
           <option>Bulk / Wholesale Order</option>
           <option>Other</option>
         </select>
       </div>
-      <div class="field"><label for="f-msg">Message</label><textarea id="f-msg" name="message" rows="4" placeholder="Tell us what you need..." required></textarea></div>
+      <div class="field"><label for="f-msg">Message</label><textarea id="f-msg" name="message" rows="4" placeholder="Tell us what you need..." required>${escapeHtml(prefillMessage)}</textarea></div>
       <button type="submit" class="btn btn-primary" data-loading-text="Sending…" style="width:100%;justify-content:center;">Send Enquiry</button>
     </form>
   </div>

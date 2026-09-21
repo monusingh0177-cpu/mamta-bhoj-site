@@ -1,14 +1,20 @@
 'use strict';
 const store = require('../lib/store');
 const { layout } = require('../lib/render');
-const { parseForm, sendHtml, redirect } = require('../lib/http-utils');
+const { parseForm, sendHtml, redirect, slugify } = require('../lib/http-utils');
 const { renderHome } = require('../views/home');
 const { renderAbout } = require('../views/about');
 const { renderProducts } = require('../views/products');
+const { renderProductDetail, detailsFor } = require('../views/product-detail');
 const { renderQuality } = require('../views/quality');
 const { renderFAQ } = require('../views/faq');
 const { renderContact } = require('../views/contact');
 const { Router } = require('../lib/router');
+
+function requestOrigin(req) {
+  const proto = process.env.FORCE_HTTPS === '1' ? 'https' : 'http';
+  return `${proto}://${req.headers.host}`;
+}
 
 const router = new Router();
 
@@ -68,6 +74,48 @@ router.get('/products', async (req, res, params, query) => {
       products,
       nlStatus: nlStatusFromQuery(query),
       bodyHtml: renderProducts(products, content),
+    })
+  );
+});
+
+router.get('/products/:slug', async (req, res, params, query) => {
+  const content = store.getContent();
+  const products = store.listCollection('products');
+  const product = products.find((p) => slugify(p.name) === params.slug);
+
+  if (!product) {
+    sendHtml(
+      res,
+      404,
+      layout({
+        title: 'Product Not Found',
+        description: 'This product could not be found.',
+        active: 'products',
+        content,
+        products,
+        bodyHtml: `<section class="wrap" data-reveal style="padding-block:60px;text-align:center;">
+          <span class="eyebrow" style="justify-content:center;">Products</span>
+          <h1 style="margin-top:.4em;">We couldn't find that product</h1>
+          <p style="margin-top:.7em;">It may have been renamed or is no longer listed. Browse our full range instead.</p>
+          <a href="/products" class="btn btn-primary" style="margin-top:1.4em;">View All Products</a>
+        </section>`,
+      })
+    );
+    return;
+  }
+
+  const seo = detailsFor(product);
+  sendHtml(
+    res,
+    200,
+    layout({
+      title: seo.seoTitle || product.name,
+      description: seo.seoDescription || product.description,
+      active: 'products',
+      content,
+      products,
+      canonical: `${requestOrigin(req)}/products/${params.slug}`,
+      bodyHtml: renderProductDetail(product, products, content),
     })
   );
 });

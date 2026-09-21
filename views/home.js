@@ -1,5 +1,5 @@
 'use strict';
-const { escapeHtml } = require('../lib/http-utils');
+const { escapeHtml, slugify } = require('../lib/http-utils');
 const icons = require('../lib/icons');
 const { whyGrid, promoStrip, ctaBand, wheatDividerBand, journeySection } = require('../lib/render');
 
@@ -202,7 +202,7 @@ function productCard(p) {
       <h3>${escapeHtml(p.name)}</h3>
       <p>${escapeHtml(p.description)}</p>
       <div class="product-tags">${tags}</div>
-      <a href="/products" class="know-more">Know More ${arrowIcon()}</a>
+      <a href="/products/${slugify(p.name)}" class="know-more">Know More ${arrowIcon()}</a>
     </div>
   </div>`;
 }
