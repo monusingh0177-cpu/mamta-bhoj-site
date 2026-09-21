@@ -24,12 +24,14 @@ const MIME = {
   '.gif': 'image/gif',
   '.svg': 'image/svg+xml',
   '.ico': 'image/x-icon',
+  '.pdf': 'application/pdf',
 };
 
 function tryServeStatic(req, res, pathname) {
-  // Only ever serve files that live under /css, /js, /images or /uploads —
-  // never let a request path escape the public/ (or persistent uploads) directory.
-  if (!/^\/(css|js|images|uploads)\//.test(pathname)) return false;
+  // Only ever serve files that live under /css, /js, /images, /documents or
+  // /uploads — never let a request path escape the public/ (or persistent
+  // uploads) directory.
+  if (!/^\/(css|js|images|documents|uploads)\//.test(pathname)) return false;
   // Uploaded photos are served from UPLOADS_DIR, which is redirected to a
   // mounted persistent disk when PERSIST_DIR is set (see lib/persist-paths.js)
   // — everything else (css/js/images) always ships from the deployed code

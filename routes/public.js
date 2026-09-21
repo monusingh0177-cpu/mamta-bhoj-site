@@ -9,6 +9,7 @@ const { renderProductDetail, detailsFor } = require('../views/product-detail');
 const { renderQuality } = require('../views/quality');
 const { renderFAQ } = require('../views/faq');
 const { renderContact } = require('../views/contact');
+const { renderCertifications } = require('../views/certifications');
 const { sendEnquiryEmail } = require('../lib/mailer');
 const { Router } = require('../lib/router');
 
@@ -154,6 +155,24 @@ router.get('/faq', async (req, res, params, query) => {
       products,
       nlStatus: nlStatusFromQuery(query),
       bodyHtml: renderFAQ(content),
+    })
+  );
+});
+
+router.get('/certifications', async (req, res, params, query) => {
+  const content = store.getContent();
+  const products = store.listCollection('products');
+  sendHtml(
+    res,
+    200,
+    layout({
+      title: 'Certifications & Compliance',
+      description: 'ISO 9001:2015 and FSSAI State Licence certification details for Devmam Flourish Foods LLP (Mamta Bhoj), with links to the official certificate and licence documents.',
+      active: 'certifications',
+      content,
+      products,
+      canonical: `${requestOrigin(req)}/certifications`,
+      bodyHtml: renderCertifications(content),
     })
   );
 });

@@ -280,6 +280,22 @@ header{position:sticky;top:0;z-index:50;background:color-mix(in srgb, var(--crea
 .location-card-copy{font-size:.88rem;color:var(--ink-soft);margin-bottom:1em;}
 .location-card-actions{display:flex;gap:10px;flex-wrap:wrap;}
 .location-card-note{font-size:.76rem;color:var(--ink-soft);margin:.8em 0 0;}
+/* ---- Certifications & Compliance page ---- */
+.cert-grid{display:grid;grid-template-columns:1fr 1fr;gap:24px;}
+@media (max-width:800px){.cert-grid{grid-template-columns:1fr;}}
+.cert-card{background:var(--surface);border:1px solid var(--cream-line);border-radius:8px;padding:clamp(20px,4vw,28px);box-shadow:var(--shadow);display:flex;flex-direction:column;}
+.cert-card-icon{width:44px;height:44px;border-radius:50%;background:color-mix(in srgb, var(--red) 12%, transparent);color:var(--red);display:flex;align-items:center;justify-content:center;margin-bottom:12px;}
+.cert-card-icon svg{width:22px;height:22px;}
+.cert-card h2{font-size:1.15rem;margin-bottom:.15em;}
+.cert-card-sub{font-size:.84rem;color:var(--ink-soft);margin-bottom:1em;}
+.cert-meta-row{display:flex;justify-content:space-between;align-items:baseline;gap:12px;font-size:.88rem;padding:.5em 0;border-bottom:1px solid var(--cream-line);}
+.cert-meta-row span{color:var(--ink-soft);}
+.cert-meta-row strong{color:var(--ink);text-align:right;}
+.cert-card-scope{font-size:.84rem;color:var(--ink-soft);margin:1em 0;}
+.cert-card-note{font-size:.82rem;color:var(--ink-soft);margin-bottom:1.2em;}
+.cert-card-note a{color:var(--red);}
+.cert-card .btn{margin-top:auto;align-self:flex-start;}
+.cert-page-disclaimer{margin-top:24px;font-size:.78rem;color:var(--ink-soft);text-align:center;}
 .form-panel{background:var(--surface);border:1px solid var(--cream-line);border-radius:8px;padding:clamp(20px,4vw,30px);box-shadow:var(--shadow);}
 .field{margin-bottom:15px;}
 .field label{display:block;font-size:.76rem;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);margin-bottom:5px;}
