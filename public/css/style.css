@@ -394,6 +394,13 @@ footer .wheat-divider-band{background:var(--brand-navy-dark);padding-top:18px;}
 .quality-checklist{list-style:none;margin:1.2em 0 0;padding:0;display:flex;flex-direction:column;gap:11px;}
 .quality-checklist li{display:flex;gap:10px;font-size:.92rem;color:var(--ink);}
 .quality-checklist svg{width:18px;height:18px;color:var(--wheat-gold-dark);flex-shrink:0;margin-top:2px;}
+/* ---- quality page: representative process-overview visual ----
+   No object-fit/aspect-ratio cropping here on purpose — this is a
+   multi-panel infographic, so the full image must always stay visible;
+   it simply scales to the container width at its own aspect ratio. */
+.quality-process-visual{border-radius:12px;overflow:hidden;border:1px solid var(--cream-line);box-shadow:var(--shadow);background:var(--cream-soft);}
+.quality-process-visual img{width:100%;height:auto;display:block;}
+.quality-process-disclaimer{margin-top:.9em;font-size:.78rem;color:var(--ink-soft);text-align:center;}
 
 /* ---- About page: story timeline ---- */
 .story-timeline{display:grid;grid-template-columns:repeat(4,1fr);gap:22px;position:relative;}

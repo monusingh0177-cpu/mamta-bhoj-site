@@ -51,6 +51,18 @@ ${wheatDividerBand()}
 </section>
 
 <section class="wrap" data-reveal>
+  <div class="section-head section-head--center">
+    <span class="eyebrow">Our Process</span>
+    <h2>From Grain to Flour — Our Process</h2>
+    <p>An illustrative view of the journey from carefully handled grain through processing, quality checks and hygienic packing.</p>
+  </div>
+  <div class="quality-process-visual">
+    <img src="/images/quality/mamta-bhoj-quality-process-overview.png" alt="Illustrative overview of the Mamta Bhoj flour milling process from wheat receiving and cleaning through milling, quality checking and hygienic packing" loading="lazy">
+  </div>
+  <p class="quality-process-disclaimer">A representative illustration of our milling process — not an exact depiction of our facility's machinery or layout.</p>
+</section>
+
+<section class="wrap" data-reveal>
   <div class="section-head">
     <span class="eyebrow">From Our Mill</span>
     <h2>A glimpse of the process</h2>
