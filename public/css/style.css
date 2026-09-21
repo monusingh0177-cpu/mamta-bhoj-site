@@ -211,7 +211,14 @@ header{position:sticky;top:0;z-index:50;background:color-mix(in srgb, var(--crea
 @media (max-width:600px){.product-grid{grid-template-columns:1fr;}}
 .product-card{background:var(--surface);border:1px solid var(--cream-line);border-radius:6px;display:flex;flex-direction:column;box-shadow:var(--shadow);overflow:hidden;}
 .product-card.featured{border-color:var(--red);}
-.product-photo{width:100%;aspect-ratio:4/3;object-fit:cover;background:var(--cream-soft);}
+/* Product pack photography sits on a fixed light backdrop regardless of
+   site theme (incl. dark mode) — matching the near-white background baked
+   into the pack mockups themselves, like standard FMCG product tiles. */
+.product-photo-frame{width:100%;aspect-ratio:4/3;background:linear-gradient(180deg,#ffffff 0%,#f6f5f2 100%);border-bottom:1px solid var(--cream-line);display:flex;align-items:center;justify-content:center;padding:22px;box-sizing:border-box;overflow:hidden;}
+/* min-width/min-height:0 override the flex item's default min-size:auto —
+   without it, a near-square photo's intrinsic size stretches this flex
+   container taller than its aspect-ratio, breaking the equal-height rows. */
+.product-photo{max-width:100%;max-height:100%;min-width:0;min-height:0;width:auto;height:auto;object-fit:contain;filter:drop-shadow(0 14px 20px rgba(20,30,50,.16));}
 .pc-body{padding:20px;display:flex;flex-direction:column;gap:10px;flex:1;}
 .product-icon{width:48px;height:48px;border-radius:50%;background:color-mix(in srgb, var(--red) 12%, transparent);display:flex;align-items:center;justify-content:center;color:var(--red);}
 .product-icon svg{width:24px;height:24px;}

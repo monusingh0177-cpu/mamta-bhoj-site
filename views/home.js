@@ -193,7 +193,7 @@ function arrowIcon(direction) {
 function productCard(p) {
   const tags = (Array.isArray(p.tags) ? p.tags : []).map((t) => `<span class="tag">${escapeHtml(t)}</span>`).join('');
   const visual = p.image
-    ? `<img class="product-photo" src="${escapeHtml(p.image)}" alt="${escapeHtml(p.name)}" loading="lazy">`
+    ? `<div class="product-photo-frame"><img class="product-photo" src="${escapeHtml(p.image)}" alt="${escapeHtml(p.name)} pack" loading="lazy"></div>`
     : `<div class="product-icon" style="margin:20px 0 0 20px;">${icons.productIcons[p.icon] || icons.productIcons.wheat}</div>`;
   return `<div class="product-card${p.featured ? ' featured' : ''}" data-reveal-item>
     ${p.image ? visual : ''}

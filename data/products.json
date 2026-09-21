@@ -8,7 +8,7 @@
       "High Protein",
       "Stone-Ground"
     ],
-    "image": "/uploads/products/chakki-atta.jpg",
+    "image": "/images/products/mamta-bhoj-chakki-atta.jpg",
     "icon": "wheat",
     "featured": true,
     "sortOrder": 1
@@ -21,7 +21,7 @@
       "Fine Texture",
       "Bakery Grade"
     ],
-    "image": null,
+    "image": "/images/products/mamta-bhoj-maida.jpg",
     "icon": "circle",
     "featured": false,
     "sortOrder": 2
@@ -34,7 +34,7 @@
       "Even Grain",
       "Multi-Use"
     ],
-    "image": null,
+    "image": "/images/products/mamta-bhoj-sooji-rava.jpg",
     "icon": "grid",
     "featured": false,
     "sortOrder": 3
@@ -61,7 +61,7 @@
       "Gram Flour",
       "Fine Texture"
     ],
-    "image": null,
+    "image": "/images/products/mamta-bhoj-besan.jpg",
     "icon": "sack",
     "featured": false,
     "sortOrder": 5
