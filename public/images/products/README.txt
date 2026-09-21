@@ -1,3 +1,2 @@
-Mamta Bhoj product pack mockups for website listings.
-Products: Chakki Atta, Maida, Sooji/Rava, Tandoori Atta, Besan.
-These are design mockups, not final regulatory packaging artwork. Verify all legal/product label details before commercial printing.
+Replacement Tandoori Atta product image for the Mamta Bhoj website.
+This is a visual packaging mockup and should be treated as design artwork, not as final regulatory packaging artwork.
