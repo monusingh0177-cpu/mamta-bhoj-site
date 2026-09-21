@@ -29,6 +29,7 @@ tr.unread{background:color-mix(in srgb, var(--gold) 10%, transparent);}
 .badge{display:inline-block;padding:.25em .7em;border-radius:20px;font-size:.72rem;font-weight:600;}
 .badge-new{background:color-mix(in srgb, var(--red) 16%, transparent);color:var(--red);}
 .badge-read{background:var(--cream-line);color:var(--ink-soft);}
+.admin-meta{font-size:.78rem;color:var(--ink-soft);}
 .image-picker{display:flex;align-items:center;gap:14px;flex-wrap:wrap;}
 .image-picker img{width:88px;height:88px;object-fit:cover;border-radius:6px;border:1px solid var(--cream-line);background:var(--cream);}
 .help{font-size:.78rem;color:var(--ink-soft);margin-top:6px;}

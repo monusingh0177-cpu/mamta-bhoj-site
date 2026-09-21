@@ -186,9 +186,10 @@ function enquiriesList(enquiries) {
     .map(
       (e) => `<tr class="${e.read ? '' : 'unread'}">
         <td>${e.read ? '<span class="badge badge-read">Read</span>' : '<span class="badge badge-new">New</span>'}</td>
-        <td><strong>${escapeHtml(e.name)}</strong><br><a href="tel:${escapeHtml(e.phone)}">${escapeHtml(e.phone)}</a></td>
+        <td><strong>${escapeHtml(e.name)}</strong><br><a href="tel:${escapeHtml(e.phone)}">${escapeHtml(e.phone)}</a>${e.cityState ? `<br><span class="admin-meta">${escapeHtml(e.cityState)}</span>` : ''}</td>
         <td>${escapeHtml(e.type || 'General Enquiry')}</td>
-        <td style="max-width:320px;">${escapeHtml(e.message)}</td>
+        <td>${escapeHtml(e.productInterest || '—')}${e.monthlyRequirement ? `<br><span class="admin-meta">${escapeHtml(e.monthlyRequirement)}</span>` : ''}</td>
+        <td style="max-width:280px;">${escapeHtml(e.message || '—')}</td>
         <td>${escapeHtml(new Date(e.createdAt).toLocaleString('en-IN'))}</td>
         <td class="row-actions">
           ${e.read ? '' : `<form method="POST" action="/admin/enquiries/${e.id}/read"><button class="btn btn-ghost btn-sm" type="submit">Mark Read</button></form>`}
@@ -199,8 +200,8 @@ function enquiriesList(enquiries) {
     .join('');
   return `<div class="admin-card table-scroll">
     <table>
-      <thead><tr><th>Status</th><th>Contact</th><th>Type</th><th>Message</th><th>Received</th><th>Actions</th></tr></thead>
-      <tbody>${rows || '<tr><td colspan="6">No enquiries yet.</td></tr>'}</tbody>
+      <thead><tr><th>Status</th><th>Contact</th><th>Type</th><th>Product / Qty</th><th>Message</th><th>Received</th><th>Actions</th></tr></thead>
+      <tbody>${rows || '<tr><td colspan="7">No enquiries yet.</td></tr>'}</tbody>
     </table>
   </div>`;
 }

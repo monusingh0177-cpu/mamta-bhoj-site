@@ -283,6 +283,7 @@ header{position:sticky;top:0;z-index:50;background:color-mix(in srgb, var(--crea
 .form-panel{background:var(--surface);border:1px solid var(--cream-line);border-radius:8px;padding:clamp(20px,4vw,30px);box-shadow:var(--shadow);}
 .field{margin-bottom:15px;}
 .field label{display:block;font-size:.76rem;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);margin-bottom:5px;}
+.field-optional{text-transform:none;font-weight:400;letter-spacing:0;}
 .field input,.field textarea,.field select{width:100%;border:1.5px solid var(--cream-line);border-radius:4px;background:var(--cream);padding:.7em .8em;font-size:.94rem;color:var(--ink);}
 .field input:focus,.field textarea:focus,.field select:focus{border-color:var(--red);}
 .field-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;}

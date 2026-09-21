@@ -9,15 +9,22 @@ const MAPS_QUERY = 'Devmam Flourish Foods LLP, NH34, Chaubepur, Kanpur Nagar, Ut
 const MAPS_SEARCH_URL = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(MAPS_QUERY)}`;
 const MAPS_DIRECTIONS_URL = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(MAPS_QUERY)}`;
 
-function renderContact(content, query) {
+const ENQUIRY_TYPES = ['Dealership', 'Distributorship', 'Wholesale / Bulk Purchase', 'Retailer', 'Institutional / HoReCa', 'General Product Enquiry'];
+const MONTHLY_REQUIREMENTS = ['Less than 100 kg', '100–500 kg', '500 kg–1 Ton', '1–5 Tons', '5+ Tons'];
+
+function renderContact(content, query, products) {
   let alertHtml = '';
   if (query && query.sent === '1') {
-    alertHtml = `<div class="alert alert-success">Thanks — your enquiry has been received. Our team will get back to you within one business day.</div>`;
+    alertHtml = `<div class="alert alert-success">Thank you. Your enquiry has been received. Our team will get back to you shortly.</div>`;
   } else if (query && query.error === '1') {
-    alertHtml = `<div class="alert alert-error">Please fill in your name, phone number and message before sending.</div>`;
+    alertHtml = `<div class="alert alert-error">Please fill in your name, phone number, enquiry type and product interest before sending.</div>`;
   }
+
+  const productOptions = (products || []).slice().sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0)).map((p) => p.name).concat(['All Products']);
   const productPrefill = (query && query.product ? String(query.product) : '').trim();
-  const prefillMessage = productPrefill ? `Product Enquiry: ${productPrefill} – 5 kg` : '';
+  const packPrefill = (query && query.pack ? String(query.pack) : '').trim();
+  const prefillMessage = productPrefill ? `Enquiry regarding Mamta Bhoj ${productPrefill}${packPrefill ? ` (${packPrefill} pack)` : ''}.` : '';
+
   return `
 <section class="page-hero wrap" data-reveal>
   <span class="eyebrow">Get In Touch</span>
@@ -47,17 +54,30 @@ function renderContact(content, query) {
         <div class="field"><label for="f-name">Full Name</label><input type="text" id="f-name" name="name" placeholder="Your name" required></div>
         <div class="field"><label for="f-phone">Phone Number</label><input type="tel" id="f-phone" name="phone" placeholder="98xxxxxxxx" required></div>
       </div>
-      <div class="field">
-        <label for="f-type">Enquiry Type</label>
-        <select id="f-type" name="type">
-          <option>General Enquiry</option>
-          <option${productPrefill ? ' selected' : ''}>Product Enquiry</option>
-          <option>Dealership</option>
-          <option>Bulk / Wholesale Order</option>
-          <option>Other</option>
-        </select>
+      <div class="field-row">
+        <div class="field">
+          <label for="f-type">Enquiry Type</label>
+          <select id="f-type" name="type" required>
+            ${ENQUIRY_TYPES.map((t) => `<option${productPrefill && t === 'General Product Enquiry' ? ' selected' : ''}>${escapeHtml(t)}</option>`).join('')}
+          </select>
+        </div>
+        <div class="field">
+          <label for="f-product">Product Interest</label>
+          <select id="f-product" name="productInterest" required>
+            ${productOptions.map((p) => `<option${p === productPrefill ? ' selected' : ''}>${escapeHtml(p)}</option>`).join('')}
+          </select>
+        </div>
       </div>
-      <div class="field"><label for="f-msg">Message</label><textarea id="f-msg" name="message" rows="4" placeholder="Tell us what you need..." required>${escapeHtml(prefillMessage)}</textarea></div>
+      <div class="field-row">
+        <div class="field"><label for="f-qty">Estimated Monthly Requirement <span class="field-optional">(optional)</span></label>
+          <select id="f-qty" name="monthlyRequirement">
+            <option value="">Select a range</option>
+            ${MONTHLY_REQUIREMENTS.map((r) => `<option>${escapeHtml(r)}</option>`).join('')}
+          </select>
+        </div>
+        <div class="field"><label for="f-city">City / State <span class="field-optional">(optional)</span></label><input type="text" id="f-city" name="cityState" placeholder="e.g. Kanpur, Uttar Pradesh"></div>
+      </div>
+      <div class="field"><label for="f-msg">Message <span class="field-optional">(optional)</span></label><textarea id="f-msg" name="message" rows="3" placeholder="Tell us what you need...">${escapeHtml(prefillMessage)}</textarea></div>
       <button type="submit" class="btn btn-primary" data-loading-text="Sending…" style="width:100%;justify-content:center;">Send Enquiry</button>
     </form>
   </div>

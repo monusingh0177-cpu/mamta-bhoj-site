@@ -13,8 +13,26 @@ services:
     name: mamta-bhoj-site
     runtime: node
     plan: free
-    buildCommand: "echo 'No build step needed — zero npm dependencies.'"
+    buildCommand: "npm install"
     startCommand: "node server.js"
     envVars:
       - key: FORCE_HTTPS
         value: "1"
+      # Enquiry-email settings (see lib/mailer.js). ENQUIRY_TO_EMAIL has a
+      # safe default below; the SMTP_* values are `sync: false` so Render
+      # prompts for them in the dashboard instead of storing them here —
+      # fill them in with the mailbox's real SMTP credentials after the
+      # service is created. Until they're set, enquiries still save
+      # normally, they just aren't emailed (see the mailer's own log line).
+      - key: ENQUIRY_TO_EMAIL
+        value: info@devmamflourishfoods.com
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        sync: false
+      - key: SMTP_SECURE
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false

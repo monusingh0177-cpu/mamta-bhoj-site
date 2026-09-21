@@ -10,5 +10,7 @@
     "start": "node server.js",
     "dev": "node --watch server.js"
   },
-  "dependencies": {}
+  "dependencies": {
+    "nodemailer": "^10.0.10"
+  }
 }

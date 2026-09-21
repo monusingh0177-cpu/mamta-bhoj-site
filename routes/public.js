@@ -9,6 +9,7 @@ const { renderProductDetail, detailsFor } = require('../views/product-detail');
 const { renderQuality } = require('../views/quality');
 const { renderFAQ } = require('../views/faq');
 const { renderContact } = require('../views/contact');
+const { sendEnquiryEmail } = require('../lib/mailer');
 const { Router } = require('../lib/router');
 
 function requestOrigin(req) {
@@ -170,7 +171,7 @@ router.get('/contact', async (req, res, params, query) => {
       content,
       products,
       nlStatus: nlStatusFromQuery(query),
-      bodyHtml: renderContact(content, query),
+      bodyHtml: renderContact(content, query, products),
     })
   );
 });
@@ -179,21 +180,32 @@ router.post('/contact', async (req, res) => {
   const body = await parseForm(req);
   const name = (body.name || '').toString().trim();
   const phone = (body.phone || '').toString().trim();
+  const type = (body.type || '').toString().trim();
+  const productInterest = (body.productInterest || '').toString().trim();
+  const monthlyRequirement = (body.monthlyRequirement || '').toString().trim();
+  const cityState = (body.cityState || '').toString().trim();
   const message = (body.message || '').toString().trim();
-  const type = (body.type || 'General Enquiry').toString().trim();
 
-  if (!name || !phone || !message) {
+  if (!name || !phone || !type || !productInterest) {
     return redirect(res, '/contact?error=1');
   }
 
-  store.insertRow('enquiries', {
+  const enquiry = store.insertRow('enquiries', {
     name,
     phone,
     type,
+    productInterest,
+    monthlyRequirement,
+    cityState,
     message,
     read: false,
     createdAt: new Date().toISOString(),
   });
+
+  // The enquiry is already safely stored above regardless of what happens
+  // next — sendEnquiryEmail never throws, so a mail failure can't turn a
+  // successful submission into an error for the visitor.
+  await sendEnquiryEmail(enquiry);
 
   redirect(res, '/contact?sent=1');
 });

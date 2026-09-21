@@ -104,7 +104,7 @@ function detailsFor(product) {
 function renderProductDetail(product, allProducts, content) {
   const details = detailsFor(product);
   const brandedName = `Mamta Bhoj ${product.name}`;
-  const enquiryHref = `/contact?product=${encodeURIComponent(brandedName)}`;
+  const enquiryHref = `/contact?product=${encodeURIComponent(product.name)}&pack=${encodeURIComponent(PACK_SIZE)}`;
 
   const related = allProducts
     .filter((p) => p.id !== product.id)
