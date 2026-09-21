@@ -367,6 +367,14 @@ footer .wheat-divider-band{background:var(--brand-navy-dark);padding-top:18px;}
 .wheat-ear-lg svg{width:100%;height:auto;display:block;}
 @media (max-width:600px){.wheat-feature-art{height:180px;}.wheat-ear-lg{width:52px;}.wheat-ear-lg--alt{width:38px;}}
 
+/* ---- homepage: representative facility-overview visual ----
+   Same no-crop treatment as the Quality page's process visual — this is
+   a multi-panel collage, so it must stay fully visible rather than being
+   cropped to a fixed aspect ratio. */
+.facility-visual{border-radius:12px;overflow:hidden;border:1px solid var(--cream-line);box-shadow:var(--shadow);background:var(--cream-soft);}
+.facility-visual img{width:100%;height:auto;display:block;}
+.facility-visual-disclaimer{margin-top:.9em;font-size:.78rem;color:var(--ink-soft);text-align:center;}
+
 /* ---- "From Wheat to Flour" journey section ---- */
 .journey-section{position:relative;}
 .journey-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;}

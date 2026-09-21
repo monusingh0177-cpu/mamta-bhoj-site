@@ -177,6 +177,18 @@ ${wheatDividerBand()}
 
 ${journeySection(content, { link: true })}
 
+<section class="wrap" data-reveal>
+  <div class="section-head section-head--center">
+    <span class="eyebrow">Infrastructure</span>
+    <h2>Our Facility</h2>
+    <p>A representative view of the modern environment, grain handling, processing and hygienic packing that define the Mamta Bhoj approach.</p>
+  </div>
+  <div class="facility-visual">
+    <img src="/images/facility/mamta-bhoj-facility-overview.png" width="1536" height="1024" alt="Representative Mamta Bhoj facility visual showing a modern flour processing environment, grain storage, milling equipment and hygienic packing" loading="lazy">
+  </div>
+  <p class="facility-visual-disclaimer">Representative visual for illustrative purposes.</p>
+</section>
+
 ${whyGrid(icons, 'Freshness you can taste, standards you can trust')}
 
 ${ctaBand(content)}
