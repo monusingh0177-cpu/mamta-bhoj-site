@@ -7,6 +7,15 @@ function renderHome(content, products) {
   const sorted = products.slice().sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
   const featured = products.find((p) => p.featured) || products[0];
 
+  // AI-generated representative visuals of a flour-mill facility — not
+  // photographs of the actual Devmam Flourish Foods factory.
+  const aboutSlides = [
+    { image: 'about-mill-exterior.jpg', alt: 'Representative AI-generated visual of a flour-mill exterior', eyebrow: 'Mill Exterior' },
+    { image: 'about-mill-silos.jpg', alt: 'Representative AI-generated visual of grain storage silos', eyebrow: 'Grain Silos' },
+    { image: 'about-mill-facility.jpg', alt: 'Representative AI-generated visual of a flour processing facility', eyebrow: 'Processing Facility' },
+    { image: 'about-mill-entrance.jpg', alt: 'Representative AI-generated visual of a flour-mill entrance', eyebrow: 'Mill Entrance' },
+  ];
+
   const flowSteps = [
     { key: 'wheat', label: 'Wheat', sub: 'Pure Grain' },
     { key: 'mill', label: 'Mill', sub: 'Clean & Grind' },
@@ -66,14 +75,14 @@ function renderHome(content, products) {
         ${slides
           .map(
             (s, i) => `<div class="hero-carousel-slide${i === 0 ? ' is-active' : ''}" data-slide-index="${i}" aria-hidden="${i === 0 ? 'false' : 'true'}">
-              <div class="hero-carousel-art" data-expected="${s.image}"><img src="/images/hero/${s.image}" alt="${escapeHtml(s.alt)}" ${i === 0 ? '' : 'loading="lazy"'}></div>
+              <div class="hero-carousel-art" data-expected="${s.image}"><img data-carousel-img src="/images/hero/${s.image}" alt="${escapeHtml(s.alt)}" ${i === 0 ? '' : 'loading="lazy"'}></div>
               <a href="${s.href}" class="hero-carousel-cta">${s.cta} ${arrowIcon()}</a>
             </div>`
           )
           .join('')}
       </div>
-      <button type="button" class="hero-carousel-arrow hero-carousel-arrow--prev" aria-label="Previous slide">${arrowIcon('left')}</button>
-      <button type="button" class="hero-carousel-arrow hero-carousel-arrow--next" aria-label="Next slide">${arrowIcon()}</button>
+      <button type="button" class="hero-carousel-arrow hero-carousel-arrow--prev" data-carousel-prev aria-label="Previous slide">${arrowIcon('left')}</button>
+      <button type="button" class="hero-carousel-arrow hero-carousel-arrow--next" data-carousel-next aria-label="Next slide">${arrowIcon()}</button>
       <div class="hero-carousel-dots" role="tablist" aria-label="Choose a slide">
         ${slides
           .map(
@@ -101,7 +110,26 @@ ${promoStrip(icons)}
 </div></section>
 
 <section class="wrap"><div class="home-about" data-reveal>
-  <div class="about-art about-art--framed">${icons.aboutArt()}<span class="wheat-corner">${icons.wheatEar('var(--wheat-gold)', 5)}</span></div>
+  <div class="about-carousel" data-carousel data-carousel-interval="5500" aria-roledescription="carousel" aria-label="Our mill facility">
+    <div class="about-carousel-track">
+      ${aboutSlides
+        .map(
+          (s, i) => `<div class="about-carousel-slide${i === 0 ? ' is-active' : ''}" data-slide-index="${i}" aria-hidden="${i === 0 ? 'false' : 'true'}">
+            <div class="about-carousel-art" data-expected="${s.image}"><img data-carousel-img src="/images/about-mill/${s.image}" alt="${escapeHtml(s.alt)}" ${i === 0 ? '' : 'loading="lazy"'}></div>
+          </div>`
+        )
+        .join('')}
+    </div>
+    <button type="button" class="about-carousel-arrow about-carousel-arrow--prev" data-carousel-prev aria-label="Previous slide">${arrowIcon('left')}</button>
+    <button type="button" class="about-carousel-arrow about-carousel-arrow--next" data-carousel-next aria-label="Next slide">${arrowIcon()}</button>
+    <div class="about-carousel-dots" role="tablist" aria-label="Choose a slide">
+      ${aboutSlides
+        .map(
+          (s, i) => `<button type="button" class="about-carousel-dot${i === 0 ? ' is-active' : ''}" data-slide-goto="${i}" role="tab" aria-selected="${i === 0 ? 'true' : 'false'}" aria-label="Slide ${i + 1}: ${s.eyebrow}"></button>`
+        )
+        .join('')}
+    </div>
+  </div>
   <div>
     <span class="eyebrow">Who We Are</span>
     <h2 style="margin-top:.4em;font-size:clamp(1.4rem,2.6vw,1.9rem);">${escapeHtml(content.about_title)}</h2>

@@ -64,26 +64,32 @@
     }
   }
 
-  // Hero carousel — plain vanilla JS, no slider library.
-  var carousel = document.querySelector('[data-carousel]');
-  if (carousel) {
-    var slides = Array.prototype.slice.call(carousel.querySelectorAll('.hero-carousel-slide'));
-    var dots = Array.prototype.slice.call(carousel.querySelectorAll('.hero-carousel-dot'));
-    var prevBtn = carousel.querySelector('.hero-carousel-arrow--prev');
-    var nextBtn = carousel.querySelector('.hero-carousel-arrow--next');
+  // Carousels — plain vanilla JS, no slider library. Handles every
+  // [data-carousel] on the page (hero, about-mill, ...) independently,
+  // targeting slides/dots/arrows/images by data-* hooks so each carousel
+  // is free to use its own class names for styling.
+  var carousels = Array.prototype.slice.call(document.querySelectorAll('[data-carousel]'));
+  carousels.forEach(function (carousel) {
+    var slides = Array.prototype.slice.call(carousel.querySelectorAll('[data-slide-index]'));
+    var dots = Array.prototype.slice.call(carousel.querySelectorAll('[data-slide-goto]'));
+    var prevBtn = carousel.querySelector('[data-carousel-prev]');
+    var nextBtn = carousel.querySelector('[data-carousel-next]');
+    var interval = parseInt(carousel.getAttribute('data-carousel-interval'), 10) || 5500;
     var current = 0;
     var timer = null;
     var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-    // If a slide's real photo hasn't been added yet at public/images/hero/,
-    // fall back to a plain brand-navy panel (see .img-missing in style.css)
-    // instead of showing the browser's broken-image icon.
-    carousel.querySelectorAll('.hero-carousel-art img').forEach(function (img) {
+    // If a slide's real photo hasn't been added yet, fall back to a plain
+    // brand-navy panel (see .img-missing in style.css) instead of showing
+    // the browser's broken-image icon.
+    carousel.querySelectorAll('[data-carousel-img]').forEach(function (img) {
       img.addEventListener('error', function () {
-        img.closest('.hero-carousel-slide').classList.add('img-missing');
+        var slide = img.closest('[data-slide-index]');
+        if (slide) slide.classList.add('img-missing');
       });
       if (img.complete && img.naturalWidth === 0) {
-        img.closest('.hero-carousel-slide').classList.add('img-missing');
+        var slide = img.closest('[data-slide-index]');
+        if (slide) slide.classList.add('img-missing');
       }
     });
 
@@ -115,7 +121,7 @@
     function startAuto() {
       if (reduceMotion || slides.length < 2 || isHovering || isFocused) return;
       stopAuto();
-      timer = setInterval(function () { showSlide(current + 1); }, 5500);
+      timer = setInterval(function () { showSlide(current + 1); }, interval);
     }
 
     if (nextBtn) nextBtn.addEventListener('click', function () { showSlide(current + 1); startAuto(); });
@@ -133,7 +139,7 @@
       }, 0);
     });
 
-    showSlide(0);
+    if (slides.length) showSlide(0);
     startAuto();
-  }
+  });
 })();
