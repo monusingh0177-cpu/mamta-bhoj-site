@@ -2,6 +2,13 @@
 const { escapeHtml } = require('../lib/http-utils');
 const icons = require('../lib/icons');
 
+// Google Maps search/directions by address only — there is no verified
+// Google Business Profile for Devmam Flourish Foods LLP yet, so this
+// deliberately avoids an embedded map or any invented lat/long pin.
+const MAPS_QUERY = 'Devmam Flourish Foods LLP, NH34, Chaubepur, Kanpur Nagar, Uttar Pradesh 209203';
+const MAPS_SEARCH_URL = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(MAPS_QUERY)}`;
+const MAPS_DIRECTIONS_URL = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(MAPS_QUERY)}`;
+
 function renderContact(content, query) {
   let alertHtml = '';
   if (query && query.sent === '1') {
@@ -21,7 +28,15 @@ function renderContact(content, query) {
   <div class="contact-grid">
     <div class="contact-info">
       <div class="contact-art" aria-hidden="true">${icons.aboutArt()}</div>
-      <div class="contact-row">${icons.trust.pin}<div><strong>Mill Address</strong><span>${escapeHtml(content.address)}</span></div></div>
+      <div class="location-card">
+        <div class="contact-row" style="margin-bottom:12px;">${icons.trust.pin}<div><strong>Visit Our Facility</strong><span>${escapeHtml(content.address)}</span></div></div>
+        <p class="location-card-copy">Devmam Flourish Foods LLP operates from Chaubepur, Kanpur Nagar, Uttar Pradesh, serving the Mamta Bhoj brand and its customers from our flour-milling facility.</p>
+        <div class="location-card-actions">
+          <a href="${MAPS_SEARCH_URL}" target="_blank" rel="noopener noreferrer" class="btn btn-primary btn-sm">Open in Google Maps</a>
+          <a href="${MAPS_DIRECTIONS_URL}" target="_blank" rel="noopener noreferrer" class="btn btn-ghost btn-sm">Get Directions</a>
+        </div>
+        <p class="location-card-note">Search our facility location in Google Maps.</p>
+      </div>
       <div class="contact-row">${icons.trust.phone}<div><strong>Phone</strong><a href="tel:${escapeHtml((content.phone || '').replace(/\s+/g, ''))}">${escapeHtml(content.phone)}</a></div></div>
       <div class="contact-row">${icons.trust.mail}<div><strong>Email</strong><a href="mailto:${escapeHtml(content.email)}">${escapeHtml(content.email)}</a></div></div>
       <div class="contact-row">${icons.trust.fssai}<div><strong>FSSAI Licence No.</strong><span>${escapeHtml(content.fssai)}</span></div></div>

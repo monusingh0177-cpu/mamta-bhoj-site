@@ -275,6 +275,11 @@ header{position:sticky;top:0;z-index:50;background:color-mix(in srgb, var(--crea
 .contact-row strong{display:block;font-size:.74rem;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);margin-bottom:.2em;}
 .contact-row span,.contact-row a{font-size:.98rem;color:var(--ink);text-decoration:none;font-weight:500;}
 .contact-row a:hover{color:var(--red);}
+/* ---- Contact page: premium facility-location card ---- */
+.location-card{background:var(--surface);border:1px solid var(--cream-line);border-radius:8px;padding:18px;box-shadow:var(--shadow);}
+.location-card-copy{font-size:.88rem;color:var(--ink-soft);margin-bottom:1em;}
+.location-card-actions{display:flex;gap:10px;flex-wrap:wrap;}
+.location-card-note{font-size:.76rem;color:var(--ink-soft);margin:.8em 0 0;}
 .form-panel{background:var(--surface);border:1px solid var(--cream-line);border-radius:8px;padding:clamp(20px,4vw,30px);box-shadow:var(--shadow);}
 .field{margin-bottom:15px;}
 .field label{display:block;font-size:.76rem;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);margin-bottom:5px;}
