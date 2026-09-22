@@ -3,6 +3,16 @@ const { escapeHtml, slugify } = require('../lib/http-utils');
 const icons = require('../lib/icons');
 const { whyGrid, promoStrip, ctaBand, wheatDividerBand, journeySection } = require('../lib/render');
 
+// Generic descriptions of the B2B enquiry categories only — no eligibility
+// criteria, exclusivity, guaranteed supply or commercial terms implied.
+const PARTNER_TYPES = [
+  { title: 'Dealership', body: 'For businesses interested in representing and selling Mamta Bhoj products in their market.' },
+  { title: 'Distributorship', body: 'For distribution partners looking to build a business relationship around Mamta Bhoj food products.' },
+  { title: 'Wholesale / Bulk Purchase', body: 'For wholesalers and buyers with recurring or larger-volume product requirements.' },
+  { title: 'Retailer', body: 'For retail businesses interested in stocking Mamta Bhoj products.' },
+  { title: 'Institutional / HoReCa', body: 'For hotels, restaurants, caterers and other institutional buyers with product requirements.' },
+];
+
 function renderHome(content, products) {
   const sorted = products.slice().sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
   const featured = products.find((p) => p.featured) || products[0];
@@ -190,6 +200,30 @@ ${journeySection(content, { link: true })}
 </section>
 
 ${whyGrid(icons, 'Freshness you can taste, standards you can trust')}
+
+<section class="wrap" data-reveal>
+  <div class="section-head section-head--center">
+    <span class="eyebrow">Grow With Mamta Bhoj</span>
+    <h2>Partner With Us</h2>
+    <p>Whether you are a distributor, wholesaler, retailer or institutional buyer, connect with us to discuss your product requirements and explore a suitable business relationship.</p>
+  </div>
+  <div class="partner-grid">
+    ${PARTNER_TYPES.map(
+      (p, i) => `<div class="why-card" data-reveal-item>
+        <div class="process-num">${String(i + 1).padStart(2, '0')}</div>
+        <h4>${escapeHtml(p.title)}</h4>
+        <p>${escapeHtml(p.body)}</p>
+      </div>`
+    ).join('')}
+  </div>
+  <div class="partner-cta">
+    <p>Tell us about your business and product requirements, and our team can review your enquiry.</p>
+    <div class="hero-cta" style="justify-content:center;">
+      <a href="/contact?type=${encodeURIComponent('Dealership')}" class="btn btn-primary">Become a Partner ${arrowIcon()}</a>
+      <a href="/contact?type=${encodeURIComponent('Wholesale / Bulk Purchase')}" class="btn btn-ghost">Discuss Bulk Requirements</a>
+    </div>
+  </div>
+</section>
 
 ${ctaBand(content)}
 `;

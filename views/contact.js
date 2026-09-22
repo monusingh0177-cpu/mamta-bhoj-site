@@ -25,6 +25,13 @@ function renderContact(content, query, products) {
   const packPrefill = (query && query.pack ? String(query.pack) : '').trim();
   const prefillMessage = productPrefill ? `Enquiry regarding Mamta Bhoj ${productPrefill}${packPrefill ? ` (${packPrefill} pack)` : ''}.` : '';
 
+  // ?type=<Enquiry Type> preselects the Enquiry Type dropdown directly (used
+  // by the homepage's "Become a Partner" / "Discuss Bulk Requirements"
+  // CTAs). Falls back to the existing product-prefill behaviour (defaulting
+  // to "General Product Enquiry") when no explicit type is given.
+  const typeParam = (query && query.type ? String(query.type) : '').trim();
+  const selectedType = ENQUIRY_TYPES.includes(typeParam) ? typeParam : productPrefill ? 'General Product Enquiry' : '';
+
   return `
 <section class="page-hero wrap" data-reveal>
   <span class="eyebrow">Get In Touch</span>
@@ -58,7 +65,7 @@ function renderContact(content, query, products) {
         <div class="field">
           <label for="f-type">Enquiry Type</label>
           <select id="f-type" name="type" required>
-            ${ENQUIRY_TYPES.map((t) => `<option${productPrefill && t === 'General Product Enquiry' ? ' selected' : ''}>${escapeHtml(t)}</option>`).join('')}
+            ${ENQUIRY_TYPES.map((t) => `<option${t === selectedType ? ' selected' : ''}>${escapeHtml(t)}</option>`).join('')}
           </select>
         </div>
         <div class="field">

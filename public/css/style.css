@@ -254,6 +254,12 @@ header{position:sticky;top:0;z-index:50;background:color-mix(in srgb, var(--crea
 .why-card svg{width:22px;height:22px;color:var(--gold);}
 .why-card h4{font-size:.94rem;}
 .why-card p{font-size:.84rem;}
+/* ---- homepage: Partner With Us (reuses .why-card + .process-num) ---- */
+.partner-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:8px;}
+@media (max-width:900px){.partner-grid{grid-template-columns:1fr 1fr;}}
+@media (max-width:600px){.partner-grid{grid-template-columns:1fr;}}
+.partner-cta{text-align:center;margin-top:32px;}
+.partner-cta p{margin-bottom:1em;color:var(--ink-soft);font-size:.94rem;}
 .faq-list{max-width:760px;margin:0 auto;display:flex;flex-direction:column;gap:10px;}
 .faq-item{background:var(--surface);border:1px solid var(--cream-line);border-radius:6px;padding:2px 18px;}
 .faq-item summary{list-style:none;cursor:pointer;padding:16px 0;font-weight:600;font-size:.96rem;color:var(--ink);display:flex;align-items:center;justify-content:space-between;gap:12px;}
