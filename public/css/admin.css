@@ -2,6 +2,8 @@ body.admin{background:var(--cream-soft);}
 .admin-shell{display:flex;min-height:100vh;}
 .admin-sidebar{width:220px;flex-shrink:0;background:var(--surface);border-right:1px solid var(--cream-line);padding:24px 0;}
 .admin-sidebar .brand{padding:0 20px 20px;display:flex;gap:10px;align-items:center;border-bottom:1px solid var(--cream-line);margin-bottom:12px;}
+.admin-logo{height:44px;width:auto;display:block;flex-shrink:0;filter:drop-shadow(0 1px 2px rgba(60,30,5,.2));}
+.admin-logo--login{height:64px;}
 .admin-nav{list-style:none;margin:0;padding:0;}
 .admin-nav a{display:block;padding:11px 20px;font-size:.92rem;font-weight:500;color:var(--ink-soft);text-decoration:none;border-left:3px solid transparent;}
 .admin-nav a:hover{color:var(--ink);background:var(--cream-line);}
