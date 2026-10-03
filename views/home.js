@@ -57,7 +57,10 @@ function renderHome(content, products) {
   ];
 
   return `
-<section class="hero-band"><div class="hero wrap">
+<section class="hero-band">
+<div class="hero-deco hero-deco--wheat" aria-hidden="true">${[6, 8, 9, 8, 6].map((n) => `<span>${icons.wheatEar('var(--hero-wheat)', n)}</span>`).join('')}</div>
+<div class="hero-deco hero-deco--scenery" aria-hidden="true">${icons.aboutArt()}</div>
+<div class="hero wrap">
   <div class="hero-grid">
     <div data-reveal>
       <span class="eyebrow">${escapeHtml(content.hero_eyebrow)}</span>
@@ -66,17 +69,6 @@ function renderHome(content, products) {
       <div class="hero-cta">
         <a href="/products" class="btn btn-primary">Explore Products ${arrowIcon()}</a>
         <a href="/contact" class="btn btn-ghost">Get in Touch</a>
-      </div>
-      <div class="hero-flow" aria-label="Our journey: from wheat to your family's table">
-        ${flowSteps
-          .map(
-            (s, i) => `${i > 0 ? `<span class="hero-flow-arrow" aria-hidden="true">${arrowIcon()}</span>` : ''}
-            <div class="hero-flow-step">
-              <div class="hero-flow-icon">${icons.heroFlowIcons[s.key]}</div>
-              <div><strong>${s.label.toUpperCase()}</strong><span>${escapeHtml(s.sub)}</span></div>
-            </div>`
-          )
-          .join('')}
       </div>
       <p class="hero-script-tagline">${icons.wheatEar('var(--wheat-gold)', 2)}<span>From Our Fields to Your Family</span></p>
     </div>
@@ -102,7 +94,20 @@ function renderHome(content, products) {
       </div>
     </div>
   </div>
-</div></section>
+  <div class="hero-flow" aria-label="Our journey: from wheat to your family's table">
+    ${flowSteps
+      .map(
+        (s, i) => `${i > 0 ? `<span class="hero-flow-arrow" aria-hidden="true">${arrowIcon()}</span>` : ''}
+        <div class="hero-flow-step">
+          <div class="hero-flow-icon">${icons.heroFlowIcons[s.key]}</div>
+          <div><strong>${s.label.toUpperCase()}</strong><span>${escapeHtml(s.sub)}</span></div>
+        </div>`
+      )
+      .join('')}
+  </div>
+</div>
+${heroWave()}
+</section>
 
 ${promoStrip(icons)}
 
@@ -234,6 +239,18 @@ function arrowIcon(direction) {
     return '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M11 6l-6 6 6 6"/></svg>';
   }
   return '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>';
+}
+
+// Layered curved divider closing the hero (approved reference design):
+// saffron back wave, lighter mid wave, then the page's own cream surface so
+// the next section continues seamlessly. Colours are theme tokens, so it
+// follows dark mode too. Purely decorative.
+function heroWave() {
+  return `<svg class="hero-wave" viewBox="0 0 1440 130" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+    <path d="M0 58 C 300 128 760 4 1440 46 V130 H0 Z" fill="var(--saffron)"/>
+    <path d="M0 84 C 380 136 900 36 1440 78 V130 H0 Z" fill="var(--wave-mid)"/>
+    <path d="M0 104 C 420 140 1000 70 1440 102 V130 H0 Z" fill="var(--cream)"/>
+  </svg>`;
 }
 
 function productCard(p) {
