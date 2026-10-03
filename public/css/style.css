@@ -23,30 +23,14 @@
   /* hero / page-hero band gradient stops, decorative wheat and wave layers */
   --hero-a:#fffaf2; --hero-b:#fbdcb6; --hero-c:#ee9b4f;
   --hero-wheat:#fde7c2; --wave-mid:#f7c38c;
-  /* fixed brand tokens (legacy "navy" names): deliberately NOT redefined in
-     the dark-mode blocks below — photo frames, journey-card headers and the
-     CTA band keep this exact orange/brown in both light and dark theme. */
+  /* fixed brand tokens (legacy "navy" names) for photo frames, journey-card
+     headers and the CTA band. */
   --brand-navy:#c2541a; --brand-navy-dark:#6b2e0a; --brand-gold:#e7b552;
-}
-@media (prefers-color-scheme: dark){
-  :root:not([data-theme="light"]){
-    --red:#f5a05a;--red-dark:#f8b77f;--on-red:#2a1405;--btn-a:#f5a05a;--btn-b:#ec8c40;
-    --saffron:#f08a2c;--saffron-light:#2a1a0c;
-    --cream:#120f0c;--cream-soft:#1b1612;--cream-line:#3a2c20;
-    --wheat-gold:#d9ac4c;--wheat-gold-dark:#e0b95e;--wheat-gold-light:#2a2213;--gold:var(--wheat-gold);
-    --stone:#1d1712;--ink:#eef1fb;--ink-soft:#c3bdb5;--surface:#1b1612;--danger:#f97066;
-    --hero-a:#16110d;--hero-b:#2a1a0e;--hero-c:#5c3112;--hero-wheat:#8a5a24;--wave-mid:#3d2513;
-    --shadow:0 1px 2px rgba(0,0,0,.4),0 12px 28px -14px rgba(0,0,0,.65);
-  }
-}
-:root[data-theme="dark"]{
-  --red:#f5a05a;--red-dark:#f8b77f;--on-red:#2a1405;--btn-a:#f5a05a;--btn-b:#ec8c40;
-  --saffron:#f08a2c;--saffron-light:#2a1a0c;
-  --cream:#120f0c;--cream-soft:#1b1612;--cream-line:#3a2c20;
-  --wheat-gold:#d9ac4c;--wheat-gold-dark:#e0b95e;--wheat-gold-light:#2a2213;--gold:var(--wheat-gold);
-  --stone:#1d1712;--ink:#eef1fb;--ink-soft:#c3bdb5;--surface:#1b1612;--danger:#f97066;
-  --hero-a:#16110d;--hero-b:#2a1a0e;--hero-c:#5c3112;--hero-wheat:#8a5a24;--wave-mid:#3d2513;
-  --shadow:0 1px 2px rgba(0,0,0,.4),0 12px 28px -14px rgba(0,0,0,.65);
+  /* The site always renders the approved light (orange-and-white) design,
+     regardless of the visitor's OS dark-mode setting: there is deliberately
+     no dark palette (the navy logo is unreadable on a dark header), and
+     color-scheme:light keeps native form controls and scrollbars light too. */
+  color-scheme:light;
 }
 *{box-sizing:border-box;}
 html,body{margin:0;padding:0;}
