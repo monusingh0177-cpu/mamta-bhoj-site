@@ -77,7 +77,7 @@ function renderHome(content, products) {
         ${slides
           .map(
             (s, i) => `<div class="hero-carousel-slide${i === 0 ? ' is-active' : ''}" data-slide-index="${i}" aria-hidden="${i === 0 ? 'false' : 'true'}">
-              <div class="hero-carousel-art" data-expected="${s.image}"><img data-carousel-img src="/images/hero/${s.image}" alt="${escapeHtml(s.alt)}" ${i === 0 ? '' : 'loading="lazy"'}></div>
+              <div class="hero-carousel-art" data-expected="${s.image}"><img data-carousel-img src="/images/hero/${s.image}" alt="${escapeHtml(s.alt)}" ${i === 0 ? 'fetchpriority="high"' : 'loading="lazy"'}></div>
               <a href="${s.href}" class="hero-carousel-cta">${s.cta} ${arrowIcon()}</a>
             </div>`
           )
@@ -130,7 +130,7 @@ ${promoStrip(icons)}
       ${aboutSlides
         .map(
           (s, i) => `<div class="about-carousel-slide${i === 0 ? ' is-active' : ''}" data-slide-index="${i}" aria-hidden="${i === 0 ? 'false' : 'true'}">
-            <div class="about-carousel-art" data-expected="${s.image}"><img data-carousel-img src="/images/about-mill/${s.image}" alt="${escapeHtml(s.alt)}" ${i === 0 ? '' : 'loading="lazy"'}></div>
+            <div class="about-carousel-art" data-expected="${s.image}"><img data-carousel-img src="/images/about-mill/${s.image}" alt="${escapeHtml(s.alt)}" loading="lazy" decoding="async"></div>
           </div>`
         )
         .join('')}
@@ -199,7 +199,7 @@ ${journeySection(content, { link: true })}
     <p>A representative view of the modern environment, grain handling, processing and hygienic packing that define the Mamta Bhoj approach.</p>
   </div>
   <div class="facility-visual">
-    <img src="/images/facility/mamta-bhoj-facility-overview.png" width="1536" height="1024" alt="Representative Mamta Bhoj facility visual showing a modern flour processing environment, grain storage, milling equipment and hygienic packing" loading="lazy">
+    <img src="/images/facility/mamta-bhoj-facility-overview.jpg" width="1536" height="1024" alt="Representative Mamta Bhoj facility visual showing a modern flour processing environment, grain storage, milling equipment and hygienic packing" loading="lazy" decoding="async">
   </div>
   <p class="facility-visual-disclaimer">Representative visual for illustrative purposes.</p>
 </section>
