@@ -7,18 +7,20 @@ const { renderAbout } = require('../views/about');
 const { renderProducts } = require('../views/products');
 const { renderProductDetail, detailsFor } = require('../views/product-detail');
 const { renderQuality } = require('../views/quality');
-const { renderFAQ } = require('../views/faq');
+const { renderFAQ, faqItems } = require('../views/faq');
 const { renderContact } = require('../views/contact');
 const { renderCertifications } = require('../views/certifications');
 const { sendEnquiryEmail } = require('../lib/mailer');
 const { Router } = require('../lib/router');
-
-function requestOrigin(req) {
-  const proto = process.env.FORCE_HTTPS === '1' ? 'https' : 'http';
-  return `${proto}://${req.headers.host}`;
-}
+const seo = require('../lib/seo');
 
 const router = new Router();
+
+function productsDescription(products) {
+  const names = products.slice().sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0)).map((p) => p.name);
+  const list = names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : names[0] || 'flour';
+  return `Explore the Mamta Bhoj range: ${list}, milled at our Chaubepur, Kanpur facility.`;
+}
 
 function nlStatusFromQuery(query) {
   if (query && query.nl === 'sent') return 'sent';
@@ -33,8 +35,10 @@ router.get('/', async (req, res, params, query) => {
     res,
     200,
     layout({
-      title: 'Home',
-      description: 'Fresh, naturally stone-ground chakki atta, maida & sooji from Devmam Flourish Foods LLP, Chaubepur, Kanpur.',
+      title: 'Mamta Bhoj | Fresh Stone-Ground Chakki Atta, Maida & Sooji',
+      description: 'Fresh, naturally stone-ground chakki atta, maida & sooji from Devmam Flourish Foods LLP, Chaubepur, Kanpur. Explore the Mamta Bhoj range.',
+      canonicalPath: '/',
+      jsonLd: [seo.organizationLd(content), seo.websiteLd()],
       active: 'home',
       content,
       products,
@@ -51,8 +55,9 @@ router.get('/about', async (req, res, params, query) => {
     res,
     200,
     layout({
-      title: 'Our Story',
-      description: 'About Devmam Flourish Foods LLP and the Mamta Bhoj flour range.',
+      title: 'Our Story | Devmam Flourish Foods LLP - Mamta Bhoj',
+      description: 'Learn about Devmam Flourish Foods LLP, the Chaubepur, Kanpur flour-milling unit behind the Mamta Bhoj range of stone-ground atta, maida and sooji.',
+      canonicalPath: '/about',
       active: 'about',
       content,
       products,
@@ -69,8 +74,9 @@ router.get('/products', async (req, res, params, query) => {
     res,
     200,
     layout({
-      title: 'Products',
-      description: 'Chakki Atta, Maida and Sooji from Mamta Bhoj.',
+      title: 'Our Products | Mamta Bhoj Atta, Maida, Sooji & Besan',
+      description: productsDescription(products),
+      canonicalPath: '/products',
       active: 'products',
       content,
       products,
@@ -90,8 +96,9 @@ router.get('/products/:slug', async (req, res, params, query) => {
       res,
       404,
       layout({
-        title: 'Product Not Found',
+        title: 'Product Not Found | Mamta Bhoj',
         description: 'This product could not be found.',
+        noindex: true,
         active: 'products',
         content,
         products,
@@ -106,17 +113,29 @@ router.get('/products/:slug', async (req, res, params, query) => {
     return;
   }
 
-  const seo = detailsFor(product);
+  const details = detailsFor(product);
+  const pagePath = seo.productPath(product);
+  const productTitle = details.seoTitle ? details.seoTitle.replace(' | ', ' - ') : product.name;
   sendHtml(
     res,
     200,
     layout({
-      title: seo.seoTitle || product.name,
-      description: seo.seoDescription || product.description,
+      title: `${productTitle} | Mamta Bhoj`,
+      description: details.seoDescription || product.description,
+      canonicalPath: pagePath,
+      ogImage: product.image ? { path: product.image } : null,
+      ogImageAlt: product.image ? `Mamta Bhoj ${product.name} pack` : null,
+      jsonLd: [
+        seo.productLd(product),
+        seo.breadcrumbLd([
+          { name: 'Home', path: '/' },
+          { name: 'Products', path: '/products' },
+          { name: product.name, path: pagePath },
+        ]),
+      ],
       active: 'products',
       content,
       products,
-      canonical: `${requestOrigin(req)}/products/${params.slug}`,
       bodyHtml: renderProductDetail(product, products, content),
     })
   );
@@ -130,8 +149,11 @@ router.get('/quality', async (req, res, params, query) => {
     res,
     200,
     layout({
-      title: 'Quality & Process',
-      description: 'How Mamta Bhoj mills fresh, naturally stone-ground flour.',
+      title: 'Quality & Process | Stone-Ground Milling at Mamta Bhoj',
+      description: 'See how Mamta Bhoj flour is made: sourcing, cleaning, stone grinding, quality checks and hygienic packing at our Chaubepur, Kanpur mill.',
+      canonicalPath: '/quality',
+      ogImage: { path: '/images/quality/mamta-bhoj-quality-process-overview.jpg', width: 1536, height: 1024 },
+      ogImageAlt: 'Illustrative overview of the Mamta Bhoj flour milling process',
       active: 'quality',
       content,
       products,
@@ -148,8 +170,10 @@ router.get('/faq', async (req, res, params, query) => {
     res,
     200,
     layout({
-      title: 'FAQs',
-      description: 'Frequently asked questions about Mamta Bhoj atta, maida and sooji.',
+      title: 'FAQs | Mamta Bhoj Atta, Maida & Sooji',
+      description: 'Answers on freshness, stone-grinding, FSSAI and ISO certification, storage, dealership and bulk orders for Mamta Bhoj atta, maida and sooji.',
+      canonicalPath: '/faq',
+      jsonLd: seo.faqLd(faqItems(content)),
       active: 'faq',
       content,
       products,
@@ -166,12 +190,12 @@ router.get('/certifications', async (req, res, params, query) => {
     res,
     200,
     layout({
-      title: 'Certifications & Compliance',
-      description: 'ISO 9001:2015 and FSSAI State Licence certification details for Devmam Flourish Foods LLP (Mamta Bhoj), with links to the official certificate and licence documents.',
+      title: 'ISO 9001:2015 & FSSAI Certifications | Mamta Bhoj',
+      description: 'ISO 9001:2015 and FSSAI State Licence details for Devmam Flourish Foods LLP (Mamta Bhoj), with links to the official certificate and licence documents.',
       active: 'certifications',
       content,
       products,
-      canonical: `${requestOrigin(req)}/certifications`,
+      canonicalPath: '/certifications',
       bodyHtml: renderCertifications(content),
     })
   );
@@ -184,8 +208,10 @@ router.get('/contact', async (req, res, params, query) => {
     res,
     200,
     layout({
-      title: 'Contact',
-      description: 'Get in touch with Devmam Flourish Foods LLP for dealership and bulk enquiries.',
+      title: 'Contact & Dealership Enquiries | Mamta Bhoj',
+      description: 'Contact Devmam Flourish Foods LLP in Chaubepur, Kanpur for Mamta Bhoj dealership, distributor, wholesale and bulk enquiries.',
+      canonicalPath: '/contact',
+      jsonLd: seo.organizationLd(content),
       active: 'contact',
       content,
       products,
@@ -244,6 +270,16 @@ router.post('/newsletter', async (req, res) => {
   });
 
   redirect(res, back + '?nl=sent');
+});
+
+router.get('/robots.txt', async (req, res) => {
+  res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'public, max-age=3600' });
+  res.end(seo.buildRobotsTxt());
+});
+
+router.get('/sitemap.xml', async (req, res) => {
+  res.writeHead(200, { 'Content-Type': 'application/xml; charset=utf-8', 'Cache-Control': 'public, max-age=3600' });
+  res.end(seo.buildSitemapXml(store.listCollection('products')));
 });
 
 module.exports = router;

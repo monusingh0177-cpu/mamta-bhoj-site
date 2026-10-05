@@ -7,8 +7,8 @@ function arrowIcon() {
   return '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>';
 }
 
-function renderFAQ(content) {
-  const faqs = [
+function faqItems(content) {
+  return [
     ['Is Mamta Bhoj atta freshly milled?', 'Yes. We mill in small, frequent batches at our Chaubepur facility rather than holding large pre-milled stock, so what reaches you is milled close to your order.'],
     ['What does "naturally stone-ground" mean?', 'Our atta is ground the traditional chakki way instead of high-speed roller milling. This keeps more of the wheat’s natural fibre, bran and nutrients intact.'],
     ['Is Mamta Bhoj FSSAI licensed and ISO certified?', `Yes — our facility is FSSAI licensed (Licence No. ${content.fssai || ''}) and ISO 9001:2015 certified. Both are printed on every pack.`],
@@ -18,6 +18,10 @@ function renderFAQ(content) {
     ['Where is Mamta Bhoj made?', `All our products are milled and packed at our facility at ${content.address || ''}.`],
     ['How can I get in touch with your team?', `Call us at ${content.phone || ''}, email ${content.email || ''}, or use the enquiry form on our Contact page.`],
   ];
+}
+
+function renderFAQ(content) {
+  const faqs = faqItems(content);
   const faqHtml = faqs
     .map(
       ([q, a]) =>
@@ -36,4 +40,4 @@ ${ctaBand(content)}
 `;
 }
 
-module.exports = { renderFAQ };
+module.exports = { renderFAQ, faqItems };
