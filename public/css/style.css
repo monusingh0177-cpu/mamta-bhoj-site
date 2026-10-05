@@ -332,9 +332,7 @@ section:has(> .breadcrumb) + section::after{content:"";position:absolute;z-index
 .contact-row a:hover{color:var(--red);}
 /* ---- Contact page: premium facility-location card ---- */
 .location-card{background:var(--surface);border:1px solid var(--cream-line);border-radius:8px;padding:18px;box-shadow:var(--shadow);}
-.location-card-copy{font-size:.88rem;color:var(--ink-soft);margin-bottom:1em;}
-.location-card-actions{display:flex;gap:10px;flex-wrap:wrap;}
-.location-card-note{font-size:.76rem;color:var(--ink-soft);margin:.8em 0 0;}
+.location-card-copy{font-size:.88rem;color:var(--ink-soft);margin:0;}
 /* ---- Certifications & Compliance page ---- */
 .cert-grid{display:grid;grid-template-columns:1fr 1fr;gap:24px;}
 @media (max-width:800px){.cert-grid{grid-template-columns:1fr;}}
@@ -542,8 +540,9 @@ footer .wheat-divider-band{background:var(--stone);padding-top:18px;}
 @media (max-width:600px){.faq-corner-ear{display:none;}}
 
 /* ---- Contact: small decorative facility art above the info column ---- */
-.contact-art{border-radius:8px;overflow:hidden;border:1px solid var(--cream-line);margin-bottom:18px;max-height:160px;}
-.contact-art svg{display:block;width:100%;height:auto;}
+/* full facility photo at its natural 764:508 ratio — never clipped or stretched */
+.contact-art{border-radius:8px;overflow:hidden;border:1px solid var(--cream-line);margin-bottom:18px;box-shadow:var(--shadow);}
+.contact-art img{display:block;width:100%;height:auto;aspect-ratio:764/508;object-fit:cover;}
 
 /* ---- micro-interactions & UX polish ---- */
 .promo-card,.why-card,.product-card,.trust-item,.form-panel,.journey-card,.gallery-tile,.quality-spotlight-art{transition:transform .18s ease,box-shadow .18s ease,border-color .18s ease;}
