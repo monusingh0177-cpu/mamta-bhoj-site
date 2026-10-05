@@ -65,11 +65,17 @@ const server = http.createServer(async (req, res) => {
 
     if (tryServeStatic(req, res, pathname)) return;
 
+    // Admin/login pages are private: keep them out of search results even if
+    // a crawler ignores robots.txt (the admin layout also carries a noindex meta).
+    if (pathname === '/admin' || pathname.startsWith('/admin/')) {
+      res.setHeader('X-Robots-Tag', 'noindex, nofollow');
+    }
+
     const match = router.match(req.method, pathname);
     if (!match) {
       res.writeHead(404, { 'Content-Type': 'text/html; charset=utf-8' });
       res.end(
-        '<!doctype html><meta charset="utf-8"><title>Not Found</title><body style="font-family:sans-serif;padding:60px;text-align:center;"><h1>404</h1><p>Page not found. <a href="/">Go home</a></p></body>'
+        '<!doctype html><meta charset="utf-8"><meta name="robots" content="noindex"><title>Not Found</title><body style="font-family:sans-serif;padding:60px;text-align:center;"><h1>404</h1><p>Page not found. <a href="/">Go home</a></p></body>'
       );
       return;
     }
@@ -80,7 +86,7 @@ const server = http.createServer(async (req, res) => {
     if (!res.headersSent) {
       res.writeHead(500, { 'Content-Type': 'text/html; charset=utf-8' });
       res.end(
-        '<!doctype html><meta charset="utf-8"><title>Server Error</title><body style="font-family:sans-serif;padding:60px;text-align:center;"><h1>Something went wrong</h1><p>Please try again in a moment.</p></body>'
+        '<!doctype html><meta charset="utf-8"><meta name="robots" content="noindex"><title>Server Error</title><body style="font-family:sans-serif;padding:60px;text-align:center;"><h1>Something went wrong</h1><p>Please try again in a moment.</p></body>'
       );
     }
   }

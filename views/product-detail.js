@@ -113,7 +113,7 @@ function renderProductDetail(product, allProducts, content) {
     .slice(0, 4);
 
   const heroVisual = product.image
-    ? `<div class="product-photo-frame product-hero-frame"><img class="product-photo" src="${escapeHtml(product.image)}" alt="${escapeHtml(brandedName)} pack, ${escapeHtml(PACK_SIZE)}" loading="lazy"></div>`
+    ? `<div class="product-photo-frame product-hero-frame"><img class="product-photo" src="${escapeHtml(product.image)}" alt="${escapeHtml(brandedName)} pack, ${escapeHtml(PACK_SIZE)}" fetchpriority="high" decoding="async"></div>`
     : `<div class="product-photo-frame product-hero-frame"><div class="product-icon">${icons.productIcons[product.icon] || icons.productIcons.wheat}</div></div>`;
 
   return `

@@ -256,7 +256,7 @@ function heroWave() {
 function productCard(p) {
   const tags = (Array.isArray(p.tags) ? p.tags : []).map((t) => `<span class="tag">${escapeHtml(t)}</span>`).join('');
   const visual = p.image
-    ? `<div class="product-photo-frame"><img class="product-photo" src="${escapeHtml(p.image)}" alt="${escapeHtml(p.name)} pack" loading="lazy"></div>`
+    ? `<div class="product-photo-frame"><img class="product-photo" src="${escapeHtml(p.image)}" alt="Mamta Bhoj ${escapeHtml(p.name)} pack" loading="lazy"></div>`
     : `<div class="product-icon" style="margin:20px 0 0 20px;">${icons.productIcons[p.icon] || icons.productIcons.wheat}</div>`;
   return `<div class="product-card${p.featured ? ' featured' : ''}" data-reveal-item>
     ${p.image ? visual : ''}
@@ -274,7 +274,7 @@ function packagingShowcase(product) {
   if (!product.image) return '';
   return `<section class="wrap" data-reveal>
     <div class="pack-grid">
-      <div class="pack-photo"><img src="${escapeHtml(product.image)}" alt="${escapeHtml(product.name)} pack" loading="lazy"></div>
+      <div class="pack-photo"><img src="${escapeHtml(product.image)}" alt="Mamta Bhoj ${escapeHtml(product.name)} pack" loading="lazy"></div>
       <div>
         <span class="eyebrow">As It Reaches Your Kitchen</span>
         <h2 style="margin-top:.4em;font-size:clamp(1.4rem,2.6vw,1.9rem);">Packed for freshness, labelled for trust</h2>
