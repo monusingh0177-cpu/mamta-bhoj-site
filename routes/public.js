@@ -12,16 +12,22 @@ const { renderContact } = require('../views/contact');
 const { renderCertifications } = require('../views/certifications');
 const { renderB2B, b2bFaqs } = require('../views/b2b');
 const { findGuide, renderGuide, renderGuidesIndex, GUIDES } = require('../views/guides');
+const { B2B_PAGES, renderB2BPage } = require('../views/b2b-pages');
 const { sendEnquiryEmail } = require('../lib/mailer');
 const { Router } = require('../lib/router');
 const seo = require('../lib/seo');
-const { withBusinessAddress } = require('../lib/business');
+const { withBusinessAddress, withCleanProductCopy } = require('../lib/business');
 
 const router = new Router();
 
 // Public pages always show the authoritative business address (lib/business.js).
 function siteContent() {
   return withBusinessAddress(store.getContent());
+}
+
+// Public pages show product copy with unsupported phrases removed (lib/business.js).
+function siteProducts() {
+  return withCleanProductCopy(store.listCollection('products'));
 }
 
 function productsDescription(products) {
@@ -38,7 +44,7 @@ function nlStatusFromQuery(query) {
 
 router.get('/', async (req, res, params, query) => {
   const content = siteContent();
-  const products = store.listCollection('products');
+  const products = siteProducts();
   sendHtml(
     res,
     200,
@@ -51,14 +57,14 @@ router.get('/', async (req, res, params, query) => {
       content,
       products,
       nlStatus: nlStatusFromQuery(query),
-      bodyHtml: renderHome(content, products),
+      bodyHtml: renderHome(content, products, GUIDES),
     })
   );
 });
 
 router.get('/about', async (req, res, params, query) => {
   const content = siteContent();
-  const products = store.listCollection('products');
+  const products = siteProducts();
   sendHtml(
     res,
     200,
@@ -78,7 +84,7 @@ router.get('/about', async (req, res, params, query) => {
 
 router.get('/products', async (req, res, params, query) => {
   const content = siteContent();
-  const products = store.listCollection('products');
+  const products = siteProducts();
   sendHtml(
     res,
     200,
@@ -98,7 +104,7 @@ router.get('/products', async (req, res, params, query) => {
 
 router.get('/products/:slug', async (req, res, params, query) => {
   const content = siteContent();
-  const products = store.listCollection('products');
+  const products = siteProducts();
   const product = products.find((p) => slugify(p.name) === params.slug);
 
   // Legacy slug (e.g. /products/chakki-atta) -> permanent redirect to the real page.
@@ -152,6 +158,7 @@ router.get('/products/:slug', async (req, res, params, query) => {
           { name: 'Products', path: '/products' },
           { name: product.name, path: pagePath },
         ]),
+        ...(details.faqs && details.faqs.length ? [seo.faqLd(details.faqs)] : []),
       ],
       active: 'products',
       content,
@@ -164,7 +171,7 @@ router.get('/products/:slug', async (req, res, params, query) => {
 router.get('/quality', async (req, res, params, query) => {
   const content = siteContent();
   const gallery = store.listCollection('gallery');
-  const products = store.listCollection('products');
+  const products = siteProducts();
   sendHtml(
     res,
     200,
@@ -185,7 +192,7 @@ router.get('/quality', async (req, res, params, query) => {
 
 router.get('/faq', async (req, res, params, query) => {
   const content = siteContent();
-  const products = store.listCollection('products');
+  const products = siteProducts();
   sendHtml(
     res,
     200,
@@ -205,7 +212,7 @@ router.get('/faq', async (req, res, params, query) => {
 
 router.get('/certifications', async (req, res, params, query) => {
   const content = siteContent();
-  const products = store.listCollection('products');
+  const products = siteProducts();
   sendHtml(
     res,
     200,
@@ -223,7 +230,7 @@ router.get('/certifications', async (req, res, params, query) => {
 
 router.get(seo.MANUFACTURER_PATH, async (req, res, params, query) => {
   const content = siteContent();
-  const products = store.listCollection('products');
+  const products = siteProducts();
   sendHtml(
     res,
     200,
@@ -250,9 +257,39 @@ router.get(seo.MANUFACTURER_PATH, async (req, res, params, query) => {
   );
 });
 
+B2B_PAGES.forEach((page) => {
+  const pagePath = `/${page.slug}`;
+  router.get(pagePath, async (req, res, params, query) => {
+    const content = siteContent();
+    const products = siteProducts();
+    sendHtml(
+      res,
+      200,
+      layout({
+        title: page.title,
+        description: page.description,
+        canonicalPath: pagePath,
+        jsonLd: [
+          seo.pageLd('WebPage', page.h1, pagePath, { about: seo.orgRefLd() }),
+          seo.breadcrumbLd([
+            { name: 'Home', path: '/' },
+            { name: page.eyebrow, path: pagePath },
+          ]),
+          seo.faqLd(page.faqs),
+        ],
+        active: 'b2b',
+        content,
+        products,
+        nlStatus: nlStatusFromQuery(query),
+        bodyHtml: renderB2BPage(page, content, products),
+      })
+    );
+  });
+});
+
 router.get('/guides', async (req, res, params, query) => {
   const content = siteContent();
-  const products = store.listCollection('products');
+  const products = siteProducts();
   sendHtml(
     res,
     200,
@@ -283,7 +320,7 @@ router.get('/guides', async (req, res, params, query) => {
 
 router.get('/guides/:slug', async (req, res, params, query) => {
   const content = siteContent();
-  const products = store.listCollection('products');
+  const products = siteProducts();
   const guide = findGuide(params.slug);
 
   if (!guide) {
@@ -336,7 +373,7 @@ router.get('/guides/:slug', async (req, res, params, query) => {
 
 router.get('/contact', async (req, res, params, query) => {
   const content = siteContent();
-  const products = store.listCollection('products');
+  const products = siteProducts();
   sendHtml(
     res,
     200,

@@ -6,6 +6,7 @@ const { ctaBand, wheatDividerBand } = require('../lib/render');
 const { detailsFor } = require('./product-detail');
 const { GUIDES } = require('./guides');
 const { BUSINESS_ADDRESS, packSizesText } = require('../lib/business');
+const { B2B_LINKS } = require('./links');
 
 // Content for /flour-manufacturer-kanpur. Everything here is drawn from facts
 // already published elsewhere on the site (About, Quality, Certifications,
@@ -179,6 +180,23 @@ ${wheatDividerBand()}
     <h2>Frequently asked questions</h2>
   </div>
   <div class="faq-list">${faqHtml}</div>
+</section>
+
+<section class="wrap" data-reveal>
+  <div class="section-head">
+    <span class="eyebrow">Ways To Buy</span>
+    <h2>Supply options for businesses</h2>
+    <p>Pick the page closest to your business to see how we work with buyers like you.</p>
+  </div>
+  <div class="guide-grid">
+    ${B2B_LINKS.map(
+      (l) => `<a href="/${l.slug}" class="why-card guide-card" data-reveal-item>
+      <h3 style="font-size:1.08rem;line-height:1.35;">${escapeHtml(l.cardTitle)}</h3>
+      <p>${escapeHtml(l.cardText)}</p>
+      <span class="know-more">Read how it works ${arrowIcon()}</span>
+    </a>`
+    ).join('')}
+  </div>
 </section>
 
 <section class="wrap" data-reveal>

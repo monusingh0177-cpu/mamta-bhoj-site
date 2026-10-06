@@ -2,6 +2,7 @@
 const { escapeHtml, slugify } = require('../lib/http-utils');
 const icons = require('../lib/icons');
 const { whyGrid, promoStrip, ctaBand, wheatDividerBand, journeySection } = require('../lib/render');
+const { B2B_LINKS } = require('./links');
 
 // Generic descriptions of the B2B enquiry categories only — no eligibility
 // criteria, exclusivity, guaranteed supply or commercial terms implied.
@@ -13,7 +14,7 @@ const PARTNER_TYPES = [
   { title: 'Institutional / HoReCa', body: 'For hotels, restaurants, caterers and other institutional buyers with product requirements.' },
 ];
 
-function renderHome(content, products) {
+function renderHome(content, products, guides) {
   const sorted = products.slice().sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
   const featured = products.find((p) => p.featured) || products[0];
 
@@ -232,6 +233,33 @@ ${whyGrid(icons, 'Freshness you can taste, standards you can trust')}
     </div>
     <p class="partner-more">Learn more about <a class="inline-link" href="/flour-manufacturer-kanpur">our flour-milling unit in Kanpur</a>, or browse our <a class="inline-link" href="/guides">flour guides</a>.</p>
   </div>
+</section>
+
+<section class="wrap" data-reveal>
+  <div class="section-head section-head--center">
+    <span class="eyebrow">Supply For Businesses</span>
+    <h2>Flour for dealers, kitchens and bakeries</h2>
+    <p>Mamta Bhoj is milled at our unit in Kanpur, Uttar Pradesh. Businesses from any part of India are welcome to enquire; supply for each location is confirmed directly with our team.</p>
+  </div>
+  <div class="guide-grid">
+    ${B2B_LINKS.map(
+      (l) => `<a href="/${l.slug}" class="why-card guide-card" data-reveal-item>
+      <h3 style="font-size:1.08rem;line-height:1.35;">${escapeHtml(l.cardTitle)}</h3>
+      <p>${escapeHtml(l.cardText)}</p>
+      <span class="know-more">Read how it works ${arrowIcon()}</span>
+    </a>`
+    ).join('')}
+  </div>
+  ${
+    guides && guides.length
+      ? `<div class="section-head" style="margin-top:2.4em;"><span class="eyebrow">Learn Before You Buy</span><h3 style="font-size:1.25rem;margin-top:.3em;">Flour guides</h3></div>
+  <ul class="guide-links">${['chakki-atta-vs-roller-milled-atta', 'what-is-maida', 'what-is-besan', 'how-to-choose-flour-supplier']
+    .map((s) => guides.find((g) => g.slug === s))
+    .filter(Boolean)
+    .map((g) => `<li><a href="/guides/${g.slug}">${escapeHtml(g.h1)}</a></li>`)
+    .join('')}</ul>`
+      : ''
+  }
 </section>
 
 ${ctaBand(content)}

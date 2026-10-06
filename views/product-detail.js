@@ -3,7 +3,9 @@ const { escapeHtml, slugify } = require('../lib/http-utils');
 const icons = require('../lib/icons');
 const { ctaBand, wheatDividerBand } = require('../lib/render');
 const { productCard } = require('./home');
-const { guidesForProduct } = require('./guides');
+const { findGuide } = require('./guides');
+const { PRODUCT_EXTRA } = require('./product-content');
+const { b2bMeta, enquiryHref: contactHref } = require('./links');
 const seo = require('../lib/seo');
 const { packSizesText, packSizesShort } = require('../lib/business');
 
@@ -104,7 +106,9 @@ const PRODUCT_DETAILS = {
 // Owner-confirmed pack sizes (single source: lib/business.js).
 
 function detailsFor(product) {
-  return PRODUCT_DETAILS[slugify(product.name)] || { highlights: [], overview: [product.description], bestFor: [] };
+  const slug = slugify(product.name);
+  const base = PRODUCT_DETAILS[slug] || { highlights: [], overview: [product.description], bestFor: [] };
+  return Object.assign({}, base, PRODUCT_EXTRA[slug] || {});
 }
 
 function renderProductDetail(product, allProducts, content) {
@@ -149,6 +153,15 @@ function renderProductDetail(product, allProducts, content) {
 
 ${wheatDividerBand()}
 
+${
+  details.whatIs
+    ? `<section class="wrap" data-reveal>
+  <div class="section-head"><span class="eyebrow">The Basics</span><h2>${escapeHtml(details.whatIs.h2)}</h2></div>
+  ${details.whatIs.paras.map((p) => `<p style="max-width:70ch;margin-top:.8em;">${p}</p>`).join('')}
+</section>`
+    : ''
+}
+
 <section class="wrap" data-reveal>
   <div class="section-head"><span class="eyebrow">Highlights</span><h2>Why Choose ${escapeHtml(brandedName)}</h2></div>
   <ul class="pack-list">
@@ -170,7 +183,27 @@ ${
     : ''
 }
 
-${businessSection(product, brandedName)}
+${
+  details.customers && details.customers.length
+    ? `<section class="wrap" data-reveal>
+  <div class="section-head"><span class="eyebrow">Who It Suits</span><h2>Who buys ${escapeHtml(brandedName)}</h2></div>
+  <ul class="pack-list">
+    ${details.customers.map((c) => `<li>${icons.trust.check}<span>${escapeHtml(c)}</span></li>`).join('')}
+  </ul>
+</section>`
+    : ''
+}
+
+${
+  details.faqs && details.faqs.length
+    ? `<section class="wrap" data-reveal>
+  <div class="section-head"><span class="eyebrow">Common Questions</span><h2>${escapeHtml(product.name)} questions</h2></div>
+  <div class="faq-list">${details.faqs.map(([q, a]) => `<details class="faq-item"><summary>${escapeHtml(q)}${arrowIcon()}</summary><p>${escapeHtml(a)}</p></details>`).join('')}</div>
+</section>`
+    : ''
+}
+
+${businessSection(product, brandedName, details)}
 
 ${wheatDividerBand()}
 
@@ -198,13 +231,18 @@ const MANUFACTURER_ANCHORS = {
   besan: 'the company that mills Mamta Bhoj flours',
 };
 
-function businessSection(product, brandedName) {
+function businessSection(product, brandedName, details) {
   const slug = slugify(product.name);
   const anchor = MANUFACTURER_ANCHORS[slug] || 'about Devmam Flourish Foods';
-  const guides = guidesForProduct(slug);
+  const guides = ((details && details.guides) || []).map(findGuide).filter(Boolean);
+  const b2b = ((details && details.b2b) || []).filter(([s]) => b2bMeta(s));
+  const enq = (details && details.enquiry) || { type: 'Wholesale / Bulk Purchase', label: 'send a bulk or wholesale enquiry' };
+  const b2bText = b2b.length
+    ? ` See ${b2b.map(([s, t]) => `<a class="inline-link" href="/${s}">${escapeHtml(t)}</a>`).join(' and ')} for how we work with businesses, or`
+    : ' You can';
   return `<section class="wrap" data-reveal>
   <div class="section-head"><span class="eyebrow">For Businesses</span><h2>Buying ${escapeHtml(brandedName)} for your business?</h2></div>
-  <p style="max-width:70ch;">Dealers, distributors, wholesalers and food businesses can read more about <a class="inline-link" href="${seo.MANUFACTURER_PATH}">${escapeHtml(anchor)}</a>, or <a class="inline-link" href="/contact">contact our team</a> with their requirement.</p>
+  <p style="max-width:70ch;">Dealers, distributors, wholesalers and food businesses can read more about <a class="inline-link" href="${seo.MANUFACTURER_PATH}">${escapeHtml(anchor)}</a>.${b2bText} <a class="inline-link" href="${contactHref(enq.type, product.name)}">${escapeHtml(enq.label)}</a> for ${escapeHtml(brandedName)} directly.</p>
   ${
     guides.length
       ? `<p style="max-width:70ch;margin-top:1em;"><strong>Related reading</strong></p>
