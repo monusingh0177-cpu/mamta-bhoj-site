@@ -66,7 +66,7 @@ router.get('/about', async (req, res, params, query) => {
       title: 'Our Story | Devmam Flourish Foods LLP - Mamta Bhoj',
       description: 'Learn about Devmam Flourish Foods LLP, the Chaubepur, Kanpur flour-milling unit behind the Mamta Bhoj range of stone-ground atta, maida and sooji.',
       canonicalPath: '/about',
-      jsonLd: [seo.pageLd('AboutPage', 'Our Story', '/about', { about: { '@id': `${seo.SITE_ORIGIN}/#organization` } }), seo.organizationLd(content)],
+      jsonLd: [seo.pageLd('AboutPage', 'Our Story', '/about', { about: seo.orgRefLd() }), seo.organizationLd(content)],
       active: 'about',
       content,
       products,
@@ -231,10 +231,10 @@ router.get(seo.MANUFACTURER_PATH, async (req, res, params, query) => {
       title: 'Flour Manufacturer in Kanpur | Devmam Flourish Foods LLP',
       description: 'Devmam Flourish Foods LLP mills Mamta Bhoj chakki atta, maida, sooji, tandoori atta and besan in Chaubepur, Kanpur. Enquire about dealership and bulk supply.',
       canonicalPath: seo.MANUFACTURER_PATH,
-      // Organization is fully defined on the home and contact pages; here it is
-      // referenced by @id so the page does not repeat a second address form.
+      // The full Organization (with address) lives on the home, About and Contact
+      // pages; here the page only carries a small inline reference to it.
       jsonLd: [
-        seo.pageLd('WebPage', 'Flour Manufacturer & Bulk Flour Supplier in Kanpur', seo.MANUFACTURER_PATH, { about: { '@id': `${seo.SITE_ORIGIN}/#organization` } }),
+        seo.pageLd('WebPage', 'Flour Manufacturer & Bulk Flour Supplier in Kanpur', seo.MANUFACTURER_PATH, { about: seo.orgRefLd() }),
         seo.breadcrumbLd([
           { name: 'Home', path: '/' },
           { name: 'Flour Manufacturer in Kanpur', path: seo.MANUFACTURER_PATH },
@@ -344,7 +344,7 @@ router.get('/contact', async (req, res, params, query) => {
       title: 'Contact & Dealership Enquiries | Mamta Bhoj',
       description: 'Contact Devmam Flourish Foods LLP in Chaubepur, Kanpur for Mamta Bhoj dealership, distributor, wholesale and bulk enquiries.',
       canonicalPath: '/contact',
-      jsonLd: [seo.pageLd('ContactPage', 'Contact', '/contact', { mainEntity: { '@id': `${seo.SITE_ORIGIN}/#organization` } }), seo.organizationLd(content)],
+      jsonLd: [seo.pageLd('ContactPage', 'Contact', '/contact', { mainEntity: seo.orgRefLd() }), seo.organizationLd(content)],
       active: 'contact',
       content,
       products,

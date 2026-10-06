@@ -88,7 +88,7 @@ function renderB2B(content, products) {
         <h3><a href="/products/${slug}">Mamta Bhoj ${escapeHtml(p.name)}</a></h3>
         <p>${escapeHtml(PRODUCT_USE[slug] || p.description)}</p>
         ${tags ? `<div class="product-tags">${tags}</div>` : ''}
-        <a href="/products/${slug}" class="know-more">View product details ${arrowIcon()}</a>
+        <a href="/products/${slug}" class="know-more">View ${escapeHtml(p.name)} details ${arrowIcon()}</a>
       </div>`;
     })
     .join('');

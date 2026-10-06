@@ -149,7 +149,10 @@ ${promoStrip(icons)}
     <span class="eyebrow">Who We Are</span>
     <h2 style="margin-top:.4em;font-size:clamp(1.4rem,2.6vw,1.9rem);">${escapeHtml(content.about_title)}</h2>
     <p style="margin-top:.6em;">${escapeHtml(content.about_body1)}</p>
-    <a href="/about" class="btn btn-ghost" style="margin-top:1.2em;">Know More About Us</a>
+    <div class="hero-cta" style="margin-top:1.2em;">
+      <a href="/about" class="btn btn-ghost">Know More About Us</a>
+      <a href="/flour-manufacturer-kanpur" class="btn btn-ghost">Our Flour Mill in Kanpur</a>
+    </div>
   </div>
 </div></section>
 
@@ -266,7 +269,7 @@ function productCard(p) {
       <h3>${escapeHtml(p.name)}</h3>
       <p>${escapeHtml(p.description)}</p>
       <div class="product-tags">${tags}</div>
-      <a href="/products/${slugify(p.name)}" class="know-more">Know More ${arrowIcon()}</a>
+      <a href="/products/${slugify(p.name)}" class="know-more">Explore ${escapeHtml(p.name)} ${arrowIcon()}</a>
     </div>
   </div>`;
 }

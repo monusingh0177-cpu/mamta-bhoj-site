@@ -28,7 +28,16 @@ const MIME = {
   '.pdf': 'application/pdf',
 };
 
+// Root-level icon URLs that crawlers and browsers request by convention; they
+// are served from the images folder (nothing else outside the whitelist below
+// is ever served from the project root).
+const ROOT_ALIASES = {
+  '/favicon.ico': '/images/favicon.ico',
+  '/apple-touch-icon.png': '/images/apple-touch-icon.png',
+};
+
 function tryServeStatic(req, res, pathname) {
+  pathname = ROOT_ALIASES[pathname] || pathname;
   // Only ever serve files that live under /css, /js, /images, /documents or
   // /uploads — never let a request path escape the public/ (or persistent
   // uploads) directory.
@@ -48,10 +57,17 @@ function tryServeStatic(req, res, pathname) {
   if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) return false;
 
   const ext = path.extname(filePath).toLowerCase();
-  res.writeHead(200, {
+  const headers = {
     'Content-Type': MIME[ext] || 'application/octet-stream',
     'Cache-Control': pathname.startsWith('/uploads/') ? 'public, max-age=3600' : 'public, max-age=86400',
-  });
+  };
+  if (req.method === 'HEAD') {
+    headers['Content-Length'] = fs.statSync(filePath).size;
+    res.writeHead(200, headers);
+    res.end();
+    return true;
+  }
+  res.writeHead(200, headers);
   fs.createReadStream(filePath).pipe(res);
   return true;
 }
@@ -73,6 +89,10 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    // HEAD is answered by the matching GET route; Node sends the headers and
+    // omits the body automatically for HEAD responses.
+    const routeMethod = req.method === 'HEAD' ? 'GET' : req.method;
+
     const parsed = url.parse(req.url, true);
     const pathname = decodeURIComponent(parsed.pathname);
 
@@ -86,16 +106,16 @@ const server = http.createServer(async (req, res) => {
 
     // Trailing-slash variants (/about/) 301 to the slash-less canonical page,
     // but only when that page really exists, so unknown URLs still 404.
-    if (pathname.length > 1 && pathname.endsWith('/') && (req.method === 'GET' || req.method === 'HEAD')) {
+    if (pathname.length > 1 && pathname.endsWith('/') && routeMethod === 'GET') {
       const bare = pathname.replace(/\/+$/, '');
-      if (bare && router.match(req.method, bare)) {
+      if (bare && router.match(routeMethod, bare)) {
         res.writeHead(301, { Location: bare + (parsed.search || '') });
         res.end();
         return;
       }
     }
 
-    const match = router.match(req.method, pathname);
+    const match = router.match(routeMethod, pathname);
     if (!match) {
       res.writeHead(404, { 'Content-Type': 'text/html; charset=utf-8' });
       res.end(
