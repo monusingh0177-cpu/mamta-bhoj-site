@@ -5,12 +5,12 @@ const seo = require('../lib/seo');
 const { ctaBand, wheatDividerBand } = require('../lib/render');
 const { detailsFor } = require('./product-detail');
 const { GUIDES } = require('./guides');
-const { BUSINESS_ADDRESS } = require('../lib/business');
+const { BUSINESS_ADDRESS, packSizesText } = require('../lib/business');
 
 // Content for /flour-manufacturer-kanpur. Everything here is drawn from facts
 // already published elsewhere on the site (About, Quality, Certifications,
 // FAQs, product pages) or supplied by the business. Unknowns — pricing,
-// minimum order quantity, pack formats, delivery areas, capacity — are
+// minimum order quantity, delivery areas, capacity — are
 // deliberately NOT stated; the copy points buyers to an enquiry instead.
 
 // Same authoritative address used site-wide (lib/business.js).
@@ -45,7 +45,7 @@ function b2bFaqs(content) {
       'Does Devmam Flourish Foods LLP make its own flour?',
       `Yes. Our products are milled and packed at our own facility in Chaubepur, Kanpur Nagar, Uttar Pradesh. Devmam Flourish Foods LLP is the company, and Mamta Bhoj is the brand name its products are sold under.`,
     ],
-    ['Which products do you make?', `The Mamta Bhoj range currently includes ${names}.`],
+    ['Which products do you make?', `The Mamta Bhoj range currently includes ${names}. Each product is available in ${packSizesText()} packs.`],
     [
       'Can I enquire about bulk or wholesale supply?',
       'Yes. Use the enquiry form on our Contact page and choose "Wholesale / Bulk Purchase" as the enquiry type, and tell us which products you need.',
@@ -60,7 +60,7 @@ function b2bFaqs(content) {
     ],
     [
       'Are prices, minimum order quantities and delivery areas listed on the website?',
-      'No. Pricing, pack formats, minimum quantities and delivery depend on the product and your requirement, so they are not published here. Please send an enquiry and our team will get back to you.',
+      'No. Pricing, minimum order quantities and delivery depend on the product and your requirement, so they are not published here. Please send an enquiry and our team will get back to you.',
     ],
     [
       'Which certifications do you hold?',
@@ -128,7 +128,7 @@ ${wheatDividerBand()}
   <div class="section-head">
     <span class="eyebrow">What We Make</span>
     <h2>The Mamta Bhoj product range</h2>
-    <p>Five flours, each with its own page covering what it is for. Each product page also has a direct enquiry link.</p>
+    <p>Five flours, each with its own page covering what it is for. Available Pack Sizes: ${escapeHtml(packSizesText())}. Each product page also has a direct enquiry link.</p>
   </div>
   <div class="partner-grid">${productCards}</div>
 </section>
@@ -156,7 +156,7 @@ ${wheatDividerBand()}
   </ul>
   <div class="prose">
     <h2>What to include, and what happens next</h2>
-    <p>Tell us which products you are interested in, your approximate monthly requirement and your city and state. Our team responds within one business day. Pricing, pack formats, minimum quantities and delivery depend on the product and your requirement, so we do not publish them here; please ask and we will discuss them directly.</p>
+    <p>Tell us which products you are interested in, your approximate monthly requirement and your city and state. Our team responds within one business day. Pricing, minimum quantities and delivery depend on the product and your requirement, so we do not publish them here; please ask and we will discuss them directly.</p>
   </div>
 </section>
 
