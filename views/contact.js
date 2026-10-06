@@ -15,8 +15,7 @@ function renderContact(content, query, products) {
 
   const productOptions = (products || []).slice().sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0)).map((p) => p.name).concat(['All Products']);
   const productPrefill = (query && query.product ? String(query.product) : '').trim();
-  const packPrefill = (query && query.pack ? String(query.pack) : '').trim();
-  const prefillMessage = productPrefill ? `Enquiry regarding Mamta Bhoj ${productPrefill}${packPrefill ? ` (${packPrefill} pack)` : ''}.` : '';
+  const prefillMessage = productPrefill ? `Enquiry regarding Mamta Bhoj ${productPrefill}.` : '';
 
   // ?type=<Enquiry Type> preselects the Enquiry Type dropdown directly (used
   // by the homepage's "Become a Partner" / "Discuss Bulk Requirements"

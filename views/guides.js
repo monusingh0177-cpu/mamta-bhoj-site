@@ -3,6 +3,8 @@ const { escapeHtml, slugify } = require('../lib/http-utils');
 const seo = require('../lib/seo');
 const { ctaBand, wheatDividerBand } = require('../lib/render');
 const { productCard } = require('./home');
+const { MORE_GUIDES } = require('./guides-more');
+const { B2BLINK, b2bMeta } = require('./links');
 
 // Lightweight content hub. Each guide is original, general-purpose
 // information about the products Mamta Bhoj makes. Rules followed here:
@@ -18,7 +20,7 @@ const PROD = (slug, text) => `<a class="inline-link" href="/products/${slug}">${
 const GUIDE = (slug, text) => `<a class="inline-link" href="/guides/${slug}">${text}</a>`;
 const CONTACT = (text) => `<a class="inline-link" href="/contact">${text}</a>`;
 
-const GUIDES = [
+const CORE_GUIDES = [
   {
     slug: 'maida-vs-atta',
     title: 'Maida vs Atta: Differences and Uses | Mamta Bhoj Guides',
@@ -30,7 +32,8 @@ const GUIDES = [
     intro:
       'Maida and atta both come from wheat, which is why they are often mixed up. What separates them is which parts of the wheat grain end up in the flour, and that choice shapes the colour, the texture and the dishes each flour suits.',
     products: ['fresh-chakki-atta', 'maida', 'tandoori-atta'],
-    related: ['tandoori-atta-guide', 'how-flour-is-made'],
+    related: ['what-is-maida', 'tandoori-atta-guide', 'chakki-atta-vs-roller-milled-atta'],
+    business: ['institutional-flour-supplier', 'bulk-flour-supplier-india'],
     sections: [
       {
         h2: 'What is atta?',
@@ -69,7 +72,7 @@ const GUIDES = [
       {
         h2: 'If you buy flour for a food business',
         body: [
-          `Bakeries, caterers and restaurants usually care about two things: using the right flour for each product, and getting the same behaviour in the dough from one delivery to the next. When you enquire about bulk supply, it helps to say what you will make with the flour. You can read more about us as a ${MFR('flour manufacturer in Kanpur')} or ${CONTACT('send your requirement to our team')}.`,
+          `Bakeries, caterers and restaurants usually care about two things: using the right flour for each product, and getting the same behaviour in the dough from one delivery to the next. When you enquire about bulk supply, it helps to say what you will make with the flour. You can read more about us as a ${MFR('flour manufacturer in Kanpur')} or ${CONTACT('send your requirement to our team')}. For regular supply, see how we handle ${B2BLINK('institutional-flour-supplier', 'supply for kitchens and bakeries')}.`,
         ],
       },
     ],
@@ -103,7 +106,8 @@ const GUIDES = [
     intro:
       'If you have ever wondered whether sooji and rava are different things, the short answer is no. They are two names for semolina, and which one you hear depends mostly on where you are in India.',
     products: ['sooji-rava', 'maida'],
-    related: ['maida-vs-atta', 'how-flour-is-made'],
+    related: ['maida-vs-atta', 'what-is-besan', 'how-flour-is-made'],
+    business: ['wholesale-flour-supplier', 'institutional-flour-supplier'],
     sections: [
       {
         h2: 'The short answer',
@@ -142,9 +146,33 @@ const GUIDES = [
         ],
       },
       {
+        h2: 'How sooji is made',
+        body: [
+          `Semolina comes from the same milling process as other wheat flours. After the wheat is cleaned and conditioned, the inner part of the grain is reduced in stages and the output is sifted by size. The coarser granules are kept as sooji or rava, while the finer particles go on to become flour. Because sieving decides the grain size, careful sieving is what gives an even product.`,
+        ],
+      },
+      {
+        h2: 'Choosing a grain size for your dish',
+        body: [`Names and grades vary between sellers, so judge by the grain you can see and feel rather than by the label alone.`],
+        subs: [
+          {
+            h3: 'Finer semolina',
+            body: [`Cooks reach for a finer grain when they want a smooth, soft result, as in halwa, kesari and some batters.`],
+          },
+          {
+            h3: 'Medium grain',
+            body: [`A medium grain suits everyday upma and idli, where the granules should stay separate but cook through quickly.`],
+          },
+          {
+            h3: 'Coarser semolina',
+            body: [`A coarser grain keeps a pronounced bite, which some regional dishes and snacks prefer.`],
+          },
+        ],
+      },
+      {
         h2: 'If you buy semolina for a food business',
         body: [
-          `Canteens, caterers and snack makers cook at volume, so a consistent grain size from batch to batch matters for repeatable results. If you need a particular grade, say so when you enquire. You can learn more about us as a ${MFR('flour manufacturer in Kanpur')} or ${CONTACT('contact our team')} directly.`,
+          `Canteens, caterers and snack makers cook at volume, so a consistent grain size from batch to batch matters for repeatable results. If you need a particular grade, say so when you enquire. You can learn more about us as a ${MFR('flour manufacturer in Kanpur')} or ${CONTACT('contact our team')} directly. Dealers and retailers can start with our page on ${B2BLINK('wholesale-flour-supplier', 'wholesale supply')}.`,
         ],
       },
     ],
@@ -156,6 +184,10 @@ const GUIDES = [
       ],
       ['Can I use sooji in place of rava in a recipe?', 'Yes, as they are the same product. Pay attention to the grain size the recipe asks for.'],
       ['Is sooji the same as maida?', 'No. Sooji is granular semolina and maida is a fine refined flour, so they behave differently in cooking.'],
+      [
+        'Which grain size should I choose?',
+        'Choose by the dish: finer grains for smooth halwa and batters, medium grains for everyday upma and idli, and coarser grains where you want more bite.',
+      ],
     ],
   },
   {
@@ -169,7 +201,8 @@ const GUIDES = [
     intro:
       'Walk into a restaurant kitchen that cooks in a tandoor and you will often find a different atta from the one used for home-style rotis. Tandoori atta is that flour: a coarser grind made with tandoor-style breads in mind.',
     products: ['tandoori-atta', 'fresh-chakki-atta'],
-    related: ['maida-vs-atta', 'how-flour-is-made'],
+    related: ['chakki-atta-vs-roller-milled-atta', 'maida-vs-atta', 'how-flour-is-made'],
+    business: ['institutional-flour-supplier', 'wholesale-flour-supplier'],
     sections: [
       {
         h2: 'What is tandoori atta?',
@@ -206,7 +239,7 @@ const GUIDES = [
       {
         h2: 'For restaurants and caterers',
         body: [
-          `Kitchens that cook tandoor breads every day need dough that behaves the same from one delivery to the next. If that is you, explain your requirement when you enquire. You can read more about us as a ${MFR('flour manufacturer in Kanpur')} or ${CONTACT('contact our team')} with your needs. For everyday rotis, the usual choice is ${PROD('fresh-chakki-atta', 'Chakki Atta')}, and the ${GUIDE('maida-vs-atta', 'maida vs atta guide')} explains how refined flour differs.`,
+          `Kitchens that cook tandoor breads every day need dough that behaves the same from one delivery to the next. If that is you, explain your requirement when you enquire. You can read more about us as a ${MFR('flour manufacturer in Kanpur')} or ${CONTACT('contact our team')} with your needs, or read about ${B2BLINK('institutional-flour-supplier', 'institutional supply for restaurants and caterers')}. For everyday rotis, the usual choice is ${PROD('fresh-chakki-atta', 'Chakki Atta')}, and the ${GUIDE('maida-vs-atta', 'maida vs atta guide')} explains how refined flour differs.`,
         ],
       },
     ],
@@ -236,7 +269,8 @@ const GUIDES = [
     intro:
       'Flour looks simple, but a lot happens between a field of wheat and a sealed pack on the shelf. This guide walks through the usual steps, then shows how our own process at Chaubepur fits in.',
     products: ['fresh-chakki-atta', 'maida', 'besan'],
-    related: ['maida-vs-atta', 'sooji-vs-rava'],
+    related: ['chakki-atta-vs-roller-milled-atta', 'what-is-maida', 'how-to-choose-flour-supplier', 'what-is-besan'],
+    business: ['bulk-flour-supplier-india', 'wholesale-flour-supplier'],
     sections: [
       {
         h2: 'The wheat grain in brief',
@@ -266,7 +300,7 @@ const GUIDES = [
       {
         h2: 'How we mill at Chaubepur',
         body: [
-          `At our unit in Chaubepur, Kanpur Nagar, our atta follows the traditional route: wheat is sourced and checked, cleaned, naturally stone-ground, quality-checked and packed in a hygienic setting. The ${seoLink('/quality', 'Quality & Process page')} shows each stage, and the ${seoLink('/certifications', 'certifications page')} lists our ISO 9001:2015 certificate and FSSAI licence. You can try ${PROD('fresh-chakki-atta', 'Fresh Chakki Atta')} as the clearest example, or read more about us as a ${MFR('flour manufacturer in Kanpur')}.`,
+          `At our unit in Chaubepur, Kanpur Nagar, our atta follows the traditional route: wheat is sourced and checked, cleaned, naturally stone-ground, quality-checked and packed in a hygienic setting. The ${seoLink('/quality', 'Quality & Process page')} shows each stage, and the ${seoLink('/certifications', 'certifications page')} lists our ISO 9001:2015 certificate and FSSAI licence. You can try ${PROD('fresh-chakki-atta', 'Fresh Chakki Atta')} as the clearest example, or read more about us as a ${MFR('flour manufacturer in Kanpur')}. If you are sourcing flour in volume, our page on ${B2BLINK('bulk-flour-supplier-india', 'bulk flour supply')} explains how to enquire.`,
           `Not every flour starts as wheat. ${PROD('besan', 'Besan')} is gram flour, and ours is milled from cleaned chana dal, following the same logic of cleaning first, then milling and packing. For how a specific product in our range is milled, ${CONTACT('ask our team')}.`,
         ],
       },
@@ -295,6 +329,9 @@ const GUIDES = [
 function seoLink(href, text) {
   return `<a class="inline-link" href="${href}">${text}</a>`;
 }
+
+// Core guides (this file) + Phase-2 guides (views/guides-more.js), in sitemap order.
+const GUIDES = CORE_GUIDES.concat(MORE_GUIDES);
 
 // Fail loudly at start-up if the sitemap's guide list and this file drift apart.
 if (GUIDES.map((g) => g.slug).join() !== seo.GUIDE_SLUGS.join()) {
@@ -326,6 +363,11 @@ function sectionHtml(s) {
   if (s.list) parts.push(`<ul class="prose-list">${s.list.map((li) => `<li>${escapeHtml(li)}</li>`).join('')}</ul>`);
   if (s.steps) parts.push(`<ol class="prose-steps">${s.steps.map(([t, d]) => `<li><strong>${escapeHtml(t)}.</strong> ${escapeHtml(d)}</li>`).join('')}</ol>`);
   if (s.table) parts.push(tableHtml(s.table));
+  (s.subs || []).forEach((sub) => {
+    parts.push(`<h3>${escapeHtml(sub.h3)}</h3>`);
+    (sub.body || []).forEach((p) => parts.push(`<p>${p}</p>`));
+    if (sub.list) parts.push(`<ul class="prose-list">${sub.list.map((li) => `<li>${escapeHtml(li)}</li>`).join('')}</ul>`);
+  });
   return parts.join('\n');
 }
 
@@ -376,6 +418,7 @@ ${
   <ul class="guide-links">
     ${relatedGuides.map((g) => `<li><a href="/guides/${g.slug}">${escapeHtml(g.h1)}</a></li>`).join('')}
     <li><a href="/guides">All guides</a></li>
+    ${(guide.business || []).map(b2bMeta).filter(Boolean).map((b) => `<li><a href="/${b.slug}">${escapeHtml(b.name)}</a></li>`).join('')}
     <li><a href="${seo.MANUFACTURER_PATH}">About Devmam Flourish Foods, flour manufacturer in Kanpur</a></li>
   </ul>
 </section>
@@ -391,7 +434,7 @@ function renderGuidesIndex(content) {
 <section class="page-hero wrap" data-reveal>
   <span class="eyebrow">Guides</span>
   <h1>Flour guides from Mamta Bhoj</h1>
-  <p>Short, practical explainers on atta, maida, sooji and how flour is made, for home cooks and food businesses.</p>
+  <p>Practical explainers on atta, maida, sooji, besan and how flour is made, plus a checklist for choosing a flour supplier, for home cooks and food businesses.</p>
 </section>
 <section class="wrap" data-reveal>
   <div class="guide-grid">

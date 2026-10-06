@@ -2,6 +2,7 @@
 const { escapeHtml, slugify } = require('../lib/http-utils');
 const icons = require('../lib/icons');
 const { whyGrid, promoStrip, ctaBand, wheatDividerBand, journeySection } = require('../lib/render');
+const { B2B_LINKS } = require('./links');
 
 // Generic descriptions of the B2B enquiry categories only — no eligibility
 // criteria, exclusivity, guaranteed supply or commercial terms implied.
@@ -13,7 +14,7 @@ const PARTNER_TYPES = [
   { title: 'Institutional / HoReCa', body: 'For hotels, restaurants, caterers and other institutional buyers with product requirements.' },
 ];
 
-function renderHome(content, products) {
+function renderHome(content, products, guides) {
   const sorted = products.slice().sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
   const featured = products.find((p) => p.featured) || products[0];
 
@@ -149,7 +150,10 @@ ${promoStrip(icons)}
     <span class="eyebrow">Who We Are</span>
     <h2 style="margin-top:.4em;font-size:clamp(1.4rem,2.6vw,1.9rem);">${escapeHtml(content.about_title)}</h2>
     <p style="margin-top:.6em;">${escapeHtml(content.about_body1)}</p>
-    <a href="/about" class="btn btn-ghost" style="margin-top:1.2em;">Know More About Us</a>
+    <div class="hero-cta" style="margin-top:1.2em;">
+      <a href="/about" class="btn btn-ghost">Know More About Us</a>
+      <a href="/flour-manufacturer-kanpur" class="btn btn-ghost">Our Flour Mill in Kanpur</a>
+    </div>
   </div>
 </div></section>
 
@@ -231,6 +235,33 @@ ${whyGrid(icons, 'Freshness you can taste, standards you can trust')}
   </div>
 </section>
 
+<section class="wrap" data-reveal>
+  <div class="section-head section-head--center">
+    <span class="eyebrow">Supply For Businesses</span>
+    <h2>Flour for dealers, kitchens and bakeries</h2>
+    <p>Mamta Bhoj is milled at our unit in Kanpur, Uttar Pradesh. Businesses from any part of India are welcome to enquire; supply for each location is confirmed directly with our team.</p>
+  </div>
+  <div class="guide-grid">
+    ${B2B_LINKS.map(
+      (l) => `<a href="/${l.slug}" class="why-card guide-card" data-reveal-item>
+      <h3 style="font-size:1.08rem;line-height:1.35;">${escapeHtml(l.cardTitle)}</h3>
+      <p>${escapeHtml(l.cardText)}</p>
+      <span class="know-more">Read how it works ${arrowIcon()}</span>
+    </a>`
+    ).join('')}
+  </div>
+  ${
+    guides && guides.length
+      ? `<div class="section-head" style="margin-top:2.4em;"><span class="eyebrow">Learn Before You Buy</span><h3 style="font-size:1.25rem;margin-top:.3em;">Flour guides</h3></div>
+  <ul class="guide-links">${['chakki-atta-vs-roller-milled-atta', 'what-is-maida', 'what-is-besan', 'how-to-choose-flour-supplier']
+    .map((s) => guides.find((g) => g.slug === s))
+    .filter(Boolean)
+    .map((g) => `<li><a href="/guides/${g.slug}">${escapeHtml(g.h1)}</a></li>`)
+    .join('')}</ul>`
+      : ''
+  }
+</section>
+
 ${ctaBand(content)}
 `;
 }
@@ -266,7 +297,7 @@ function productCard(p) {
       <h3>${escapeHtml(p.name)}</h3>
       <p>${escapeHtml(p.description)}</p>
       <div class="product-tags">${tags}</div>
-      <a href="/products/${slugify(p.name)}" class="know-more">Know More ${arrowIcon()}</a>
+      <a href="/products/${slugify(p.name)}" class="know-more">Explore ${escapeHtml(p.name)} ${arrowIcon()}</a>
     </div>
   </div>`;
 }
