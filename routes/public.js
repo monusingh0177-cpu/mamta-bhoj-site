@@ -58,6 +58,7 @@ router.get('/about', async (req, res, params, query) => {
       title: 'Our Story | Devmam Flourish Foods LLP - Mamta Bhoj',
       description: 'Learn about Devmam Flourish Foods LLP, the Chaubepur, Kanpur flour-milling unit behind the Mamta Bhoj range of stone-ground atta, maida and sooji.',
       canonicalPath: '/about',
+      jsonLd: [seo.pageLd('AboutPage', 'Our Story', '/about', { about: { '@id': `${seo.SITE_ORIGIN}/#organization` } }), seo.organizationLd(content)],
       active: 'about',
       content,
       products,
@@ -77,6 +78,7 @@ router.get('/products', async (req, res, params, query) => {
       title: 'Our Products | Mamta Bhoj Atta, Maida, Sooji & Besan',
       description: productsDescription(products),
       canonicalPath: '/products',
+      jsonLd: seo.productListLd(products),
       active: 'products',
       content,
       products,
@@ -90,6 +92,16 @@ router.get('/products/:slug', async (req, res, params, query) => {
   const content = store.getContent();
   const products = store.listCollection('products');
   const product = products.find((p) => slugify(p.name) === params.slug);
+
+  // Legacy slug (e.g. /products/chakki-atta) -> permanent redirect to the real page.
+  if (!product && seo.LEGACY_PRODUCT_SLUGS[params.slug]) {
+    const target = products.find((p) => slugify(p.name) === seo.LEGACY_PRODUCT_SLUGS[params.slug]);
+    if (target) {
+      res.writeHead(301, { Location: seo.absoluteUrl(seo.productPath(target)) });
+      res.end();
+      return;
+    }
+  }
 
   if (!product) {
     sendHtml(
@@ -211,7 +223,7 @@ router.get('/contact', async (req, res, params, query) => {
       title: 'Contact & Dealership Enquiries | Mamta Bhoj',
       description: 'Contact Devmam Flourish Foods LLP in Chaubepur, Kanpur for Mamta Bhoj dealership, distributor, wholesale and bulk enquiries.',
       canonicalPath: '/contact',
-      jsonLd: seo.organizationLd(content),
+      jsonLd: [seo.pageLd('ContactPage', 'Contact', '/contact', { mainEntity: { '@id': `${seo.SITE_ORIGIN}/#organization` } }), seo.organizationLd(content)],
       active: 'contact',
       content,
       products,

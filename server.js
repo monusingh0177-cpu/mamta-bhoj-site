@@ -8,6 +8,7 @@ const { Router } = require('./lib/router');
 const publicRoutes = require('./routes/public');
 const adminRoutes = require('./routes/admin');
 const { UPLOADS_DIR, PERSIST_DIR, bootstrap } = require('./lib/persist-paths');
+const { SITE_ORIGIN, CANONICAL_HOST } = require('./lib/seo');
 
 bootstrap();
 
@@ -60,6 +61,18 @@ router.routes = [...publicRoutes.routes, ...adminRoutes.routes];
 
 const server = http.createServer(async (req, res) => {
   try {
+    // One preferred hostname: www.<domain> permanently redirects to the
+    // canonical https apex, preserving path and query. The target host can
+    // never match this rule, so it cannot loop. (http->https is handled by
+    // the reverse proxy; the www rule always lands on https regardless.)
+    const reqHost = String(req.headers['x-forwarded-host'] || req.headers.host || '').split(',')[0].trim().toLowerCase().replace(/:\d+$/, '');
+    if (reqHost === `www.${CANONICAL_HOST}` && req.url.startsWith('/')) {
+      const keepMethod = req.method !== 'GET' && req.method !== 'HEAD';
+      res.writeHead(keepMethod ? 308 : 301, { Location: SITE_ORIGIN + req.url });
+      res.end();
+      return;
+    }
+
     const parsed = url.parse(req.url, true);
     const pathname = decodeURIComponent(parsed.pathname);
 
@@ -69,6 +82,17 @@ const server = http.createServer(async (req, res) => {
     // a crawler ignores robots.txt (the admin layout also carries a noindex meta).
     if (pathname === '/admin' || pathname.startsWith('/admin/')) {
       res.setHeader('X-Robots-Tag', 'noindex, nofollow');
+    }
+
+    // Trailing-slash variants (/about/) 301 to the slash-less canonical page,
+    // but only when that page really exists, so unknown URLs still 404.
+    if (pathname.length > 1 && pathname.endsWith('/') && (req.method === 'GET' || req.method === 'HEAD')) {
+      const bare = pathname.replace(/\/+$/, '');
+      if (bare && router.match(req.method, bare)) {
+        res.writeHead(301, { Location: bare + (parsed.search || '') });
+        res.end();
+        return;
+      }
     }
 
     const match = router.match(req.method, pathname);
