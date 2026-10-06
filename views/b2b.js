@@ -5,6 +5,7 @@ const seo = require('../lib/seo');
 const { ctaBand, wheatDividerBand } = require('../lib/render');
 const { detailsFor } = require('./product-detail');
 const { GUIDES } = require('./guides');
+const { BUSINESS_ADDRESS } = require('../lib/business');
 
 // Content for /flour-manufacturer-kanpur. Everything here is drawn from facts
 // already published elsewhere on the site (About, Quality, Certifications,
@@ -12,8 +13,8 @@ const { GUIDES } = require('./guides');
 // minimum order quantity, pack formats, delivery areas, capacity — are
 // deliberately NOT stated; the copy points buyers to an enquiry instead.
 
-// Facility address as stated on the FSSAI licence (see views/certifications.js).
-const FACILITY_ADDRESS = 'Gata No. 402, Village Malau, Chaubepur, Tehsil Bilhaur, Kanpur Nagar, Uttar Pradesh – 209203';
+// Same authoritative address used site-wide (lib/business.js).
+const FACILITY_ADDRESS = BUSINESS_ADDRESS;
 
 // Use-case copy per product, reworded from each product's own page.
 const PRODUCT_USE = {

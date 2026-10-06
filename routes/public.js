@@ -15,8 +15,14 @@ const { findGuide, renderGuide, renderGuidesIndex, GUIDES } = require('../views/
 const { sendEnquiryEmail } = require('../lib/mailer');
 const { Router } = require('../lib/router');
 const seo = require('../lib/seo');
+const { withBusinessAddress } = require('../lib/business');
 
 const router = new Router();
+
+// Public pages always show the authoritative business address (lib/business.js).
+function siteContent() {
+  return withBusinessAddress(store.getContent());
+}
 
 function productsDescription(products) {
   const names = products.slice().sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0)).map((p) => p.name);
@@ -31,7 +37,7 @@ function nlStatusFromQuery(query) {
 }
 
 router.get('/', async (req, res, params, query) => {
-  const content = store.getContent();
+  const content = siteContent();
   const products = store.listCollection('products');
   sendHtml(
     res,
@@ -51,7 +57,7 @@ router.get('/', async (req, res, params, query) => {
 });
 
 router.get('/about', async (req, res, params, query) => {
-  const content = store.getContent();
+  const content = siteContent();
   const products = store.listCollection('products');
   sendHtml(
     res,
@@ -71,7 +77,7 @@ router.get('/about', async (req, res, params, query) => {
 });
 
 router.get('/products', async (req, res, params, query) => {
-  const content = store.getContent();
+  const content = siteContent();
   const products = store.listCollection('products');
   sendHtml(
     res,
@@ -91,7 +97,7 @@ router.get('/products', async (req, res, params, query) => {
 });
 
 router.get('/products/:slug', async (req, res, params, query) => {
-  const content = store.getContent();
+  const content = siteContent();
   const products = store.listCollection('products');
   const product = products.find((p) => slugify(p.name) === params.slug);
 
@@ -156,7 +162,7 @@ router.get('/products/:slug', async (req, res, params, query) => {
 });
 
 router.get('/quality', async (req, res, params, query) => {
-  const content = store.getContent();
+  const content = siteContent();
   const gallery = store.listCollection('gallery');
   const products = store.listCollection('products');
   sendHtml(
@@ -178,7 +184,7 @@ router.get('/quality', async (req, res, params, query) => {
 });
 
 router.get('/faq', async (req, res, params, query) => {
-  const content = store.getContent();
+  const content = siteContent();
   const products = store.listCollection('products');
   sendHtml(
     res,
@@ -198,7 +204,7 @@ router.get('/faq', async (req, res, params, query) => {
 });
 
 router.get('/certifications', async (req, res, params, query) => {
-  const content = store.getContent();
+  const content = siteContent();
   const products = store.listCollection('products');
   sendHtml(
     res,
@@ -216,7 +222,7 @@ router.get('/certifications', async (req, res, params, query) => {
 });
 
 router.get(seo.MANUFACTURER_PATH, async (req, res, params, query) => {
-  const content = store.getContent();
+  const content = siteContent();
   const products = store.listCollection('products');
   sendHtml(
     res,
@@ -245,7 +251,7 @@ router.get(seo.MANUFACTURER_PATH, async (req, res, params, query) => {
 });
 
 router.get('/guides', async (req, res, params, query) => {
-  const content = store.getContent();
+  const content = siteContent();
   const products = store.listCollection('products');
   sendHtml(
     res,
@@ -276,7 +282,7 @@ router.get('/guides', async (req, res, params, query) => {
 });
 
 router.get('/guides/:slug', async (req, res, params, query) => {
-  const content = store.getContent();
+  const content = siteContent();
   const products = store.listCollection('products');
   const guide = findGuide(params.slug);
 
@@ -329,7 +335,7 @@ router.get('/guides/:slug', async (req, res, params, query) => {
 });
 
 router.get('/contact', async (req, res, params, query) => {
-  const content = store.getContent();
+  const content = siteContent();
   const products = store.listCollection('products');
   sendHtml(
     res,
