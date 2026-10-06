@@ -15,6 +15,7 @@ ${wheatDividerBand()}
   <div class="product-grid">
     ${sorted.map((p) => productCard(p)).join('') || '<p>Products will be listed here shortly.</p>'}
   </div>
+  <p class="products-more">Buying for a shop, bakery or kitchen? Read about Devmam Flourish Foods as a <a class="inline-link" href="/flour-manufacturer-kanpur">flour manufacturer in Kanpur</a>, or see our <a class="inline-link" href="/guides">guides to atta, maida and sooji</a>.</p>
 </section>
 ${ctaBand(content)}
 `;

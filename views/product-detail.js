@@ -3,6 +3,8 @@ const { escapeHtml, slugify } = require('../lib/http-utils');
 const icons = require('../lib/icons');
 const { ctaBand, wheatDividerBand } = require('../lib/render');
 const { productCard } = require('./home');
+const { guidesForProduct } = require('./guides');
+const seo = require('../lib/seo');
 
 // Presentation copy for each product's detail page. Kept separate from
 // data/products.json (the admin-editable source of truth for name,
@@ -164,6 +166,8 @@ ${
     : ''
 }
 
+${businessSection(product, brandedName)}
+
 ${wheatDividerBand()}
 
 ${
@@ -179,6 +183,31 @@ ${
 
 ${ctaBand(content)}
 `;
+}
+
+// Varied, natural phrasing per product (avoids the same anchor text on every page).
+const MANUFACTURER_ANCHORS = {
+  'fresh-chakki-atta': 'our flour-milling unit in Chaubepur, Kanpur',
+  maida: 'Devmam Flourish Foods, the flour manufacturer behind this range',
+  'sooji-rava': 'how and where we mill',
+  'tandoori-atta': 'our Kanpur flour mill',
+  besan: 'the company that mills Mamta Bhoj flours',
+};
+
+function businessSection(product, brandedName) {
+  const slug = slugify(product.name);
+  const anchor = MANUFACTURER_ANCHORS[slug] || 'about Devmam Flourish Foods';
+  const guides = guidesForProduct(slug);
+  return `<section class="wrap" data-reveal>
+  <div class="section-head"><span class="eyebrow">For Businesses</span><h2>Buying ${escapeHtml(brandedName)} for your business?</h2></div>
+  <p style="max-width:70ch;">Dealers, distributors, wholesalers and food businesses can read more about <a class="inline-link" href="${seo.MANUFACTURER_PATH}">${escapeHtml(anchor)}</a>, or <a class="inline-link" href="/contact">contact our team</a> with their requirement.</p>
+  ${
+    guides.length
+      ? `<p style="max-width:70ch;margin-top:1em;"><strong>Related reading</strong></p>
+  <ul class="guide-links">${guides.map((g) => `<li><a href="/guides/${g.slug}">${escapeHtml(g.h1)}</a></li>`).join('')}</ul>`
+      : ''
+  }
+</section>`;
 }
 
 function arrowIcon() {

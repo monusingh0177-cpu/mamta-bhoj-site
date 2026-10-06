@@ -42,6 +42,7 @@ function renderContact(content, query, products) {
       <div class="contact-row">${icons.trust.phone}<div><strong>Phone</strong><a href="tel:${escapeHtml((content.phone || '').replace(/\s+/g, ''))}">${escapeHtml(content.phone)}</a></div></div>
       <div class="contact-row">${icons.trust.mail}<div><strong>Email</strong><a href="mailto:${escapeHtml(content.email)}">${escapeHtml(content.email)}</a></div></div>
       <div class="contact-row">${icons.trust.fssai}<div><strong>FSSAI Licence No.</strong><span>${escapeHtml(content.fssai)}</span></div></div>
+      <p class="contact-more">Before you write, you can browse the <a class="inline-link" href="/products">Mamta Bhoj products</a> or read about us as a <a class="inline-link" href="/flour-manufacturer-kanpur">flour manufacturer in Kanpur</a>.</p>
     </div>
     <form method="POST" action="/contact" class="form-panel">
       ${alertHtml}

@@ -10,6 +10,8 @@ const { renderQuality } = require('../views/quality');
 const { renderFAQ, faqItems } = require('../views/faq');
 const { renderContact } = require('../views/contact');
 const { renderCertifications } = require('../views/certifications');
+const { renderB2B, b2bFaqs } = require('../views/b2b');
+const { findGuide, renderGuide, renderGuidesIndex, GUIDES } = require('../views/guides');
 const { sendEnquiryEmail } = require('../lib/mailer');
 const { Router } = require('../lib/router');
 const seo = require('../lib/seo');
@@ -209,6 +211,119 @@ router.get('/certifications', async (req, res, params, query) => {
       products,
       canonicalPath: '/certifications',
       bodyHtml: renderCertifications(content),
+    })
+  );
+});
+
+router.get(seo.MANUFACTURER_PATH, async (req, res, params, query) => {
+  const content = store.getContent();
+  const products = store.listCollection('products');
+  sendHtml(
+    res,
+    200,
+    layout({
+      title: 'Flour Manufacturer in Kanpur | Devmam Flourish Foods LLP',
+      description: 'Devmam Flourish Foods LLP mills Mamta Bhoj chakki atta, maida, sooji, tandoori atta and besan in Chaubepur, Kanpur. Enquire about dealership and bulk supply.',
+      canonicalPath: seo.MANUFACTURER_PATH,
+      // Organization is fully defined on the home and contact pages; here it is
+      // referenced by @id so the page does not repeat a second address form.
+      jsonLd: [
+        seo.pageLd('WebPage', 'Flour Manufacturer & Bulk Flour Supplier in Kanpur', seo.MANUFACTURER_PATH, { about: { '@id': `${seo.SITE_ORIGIN}/#organization` } }),
+        seo.breadcrumbLd([
+          { name: 'Home', path: '/' },
+          { name: 'Flour Manufacturer in Kanpur', path: seo.MANUFACTURER_PATH },
+        ]),
+        seo.faqLd(b2bFaqs(content)),
+      ],
+      active: 'b2b',
+      content,
+      products,
+      nlStatus: nlStatusFromQuery(query),
+      bodyHtml: renderB2B(content, products),
+    })
+  );
+});
+
+router.get('/guides', async (req, res, params, query) => {
+  const content = store.getContent();
+  const products = store.listCollection('products');
+  sendHtml(
+    res,
+    200,
+    layout({
+      title: 'Flour Guides: Atta, Maida, Sooji & Milling | Mamta Bhoj',
+      description: 'Practical guides from Mamta Bhoj on maida vs atta, sooji vs rava, tandoori atta and how wheat flour is made.',
+      canonicalPath: '/guides',
+      jsonLd: [
+        seo.pageLd('CollectionPage', 'Flour guides from Mamta Bhoj', '/guides', {
+          mainEntity: {
+            '@type': 'ItemList',
+            itemListElement: GUIDES.map((g, i) => ({ '@type': 'ListItem', position: i + 1, url: seo.absoluteUrl(`/guides/${g.slug}`), name: g.h1 })),
+          },
+        }),
+        seo.breadcrumbLd([
+          { name: 'Home', path: '/' },
+          { name: 'Guides', path: '/guides' },
+        ]),
+      ],
+      active: 'guides',
+      content,
+      products,
+      nlStatus: nlStatusFromQuery(query),
+      bodyHtml: renderGuidesIndex(content),
+    })
+  );
+});
+
+router.get('/guides/:slug', async (req, res, params, query) => {
+  const content = store.getContent();
+  const products = store.listCollection('products');
+  const guide = findGuide(params.slug);
+
+  if (!guide) {
+    sendHtml(
+      res,
+      404,
+      layout({
+        title: 'Guide Not Found | Mamta Bhoj',
+        description: 'This guide could not be found.',
+        noindex: true,
+        active: 'guides',
+        content,
+        products,
+        bodyHtml: `<section class="wrap" data-reveal style="padding-block:60px;text-align:center;">
+          <span class="eyebrow" style="justify-content:center;">Guides</span>
+          <h1 style="margin-top:.4em;">We couldn't find that guide</h1>
+          <p style="margin-top:.7em;">Browse all of our flour guides instead.</p>
+          <a href="/guides" class="btn btn-primary" style="margin-top:1.4em;">View All Guides</a>
+        </section>`,
+      })
+    );
+    return;
+  }
+
+  const pagePath = `/guides/${guide.slug}`;
+  sendHtml(
+    res,
+    200,
+    layout({
+      title: guide.title,
+      description: guide.description,
+      canonicalPath: pagePath,
+      jsonLd: [
+        seo.articleLd(guide.h1, guide.description, pagePath),
+        seo.breadcrumbLd([
+          { name: 'Home', path: '/' },
+          { name: 'Guides', path: '/guides' },
+          { name: guide.shortTitle, path: pagePath },
+        ]),
+        seo.faqLd(guide.faqs),
+      ],
+      active: 'guides',
+      content,
+      products,
+      nlStatus: nlStatusFromQuery(query),
+      bodyHtml: renderGuide(guide, products, content),
     })
   );
 });

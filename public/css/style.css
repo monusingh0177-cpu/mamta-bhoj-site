@@ -616,3 +616,39 @@ body{text-rendering:optimizeLegibility;}
 .form-panel{border-top:4px solid var(--saffron);}
 .product-hero-meta{border-radius:999px;background:var(--saffron-light);border-color:color-mix(in srgb, var(--saffron) 30%, transparent);}
 .wheat-feature{background:linear-gradient(180deg,var(--stone) 0%,var(--saffron-light) 100%);}
+
+/* ---- SEO content pages: B2B manufacturer page + guides (reuses existing tokens) ---- */
+.inline-link{color:var(--red);font-weight:600;text-decoration:underline;text-underline-offset:2px;}
+.inline-link:hover{color:var(--red-dark);}
+.prose{max-width:760px;}
+.prose h2{font-size:clamp(1.3rem,2.4vw,1.7rem);margin:1.8em 0 .1em;}
+.prose h2:first-child{margin-top:0;}
+.prose p{margin-top:.8em;max-width:70ch;}
+.prose .note-small,.note-small{font-size:.84rem;}
+.prose-list,.prose-steps{margin:.9em 0 0;padding-left:1.3em;color:var(--ink-soft);line-height:1.65;}
+.prose-list li,.prose-steps li{margin-top:.5em;}
+.prose-steps strong{color:var(--ink);}
+.compare-wrap{overflow-x:auto;margin-top:1.1em;}
+.compare{width:100%;border-collapse:collapse;background:var(--surface);border:1px solid var(--cream-line);font-size:.92rem;}
+.compare th,.compare td{padding:12px 14px;text-align:left;vertical-align:top;border-bottom:1px solid var(--cream-line);color:var(--ink-soft);line-height:1.55;}
+.compare thead th{background:var(--stone);color:var(--ink);font-family:'Poppins',sans-serif;font-size:.85rem;}
+.compare tbody th{color:var(--ink);font-weight:600;width:24%;}
+.guide-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:18px;}
+@media (max-width:700px){.guide-grid{grid-template-columns:1fr;}}
+.guide-card{text-decoration:none;padding:24px 22px;}
+.guide-card h2{font-size:1.08rem;line-height:1.35;}
+.guide-card p{font-size:.92rem;}
+.guide-card:hover{border-color:var(--saffron);}
+.guide-links{list-style:none;margin:.4em 0 0;padding:0;display:flex;flex-direction:column;gap:10px;}
+.guide-links a{color:var(--red);font-weight:600;text-decoration:none;}
+.guide-links a:hover{text-decoration:underline;}
+.b2b-product h3{font-size:1.02rem;}
+.b2b-product h3 a{text-decoration:none;}
+.b2b-product h3 a:hover{color:var(--red);}
+.b2b-product p{font-size:.9rem;}
+.enquiry-links{list-style:none;margin:0 0 8px;padding:0;display:flex;flex-wrap:wrap;gap:10px;}
+.enquiry-links a{display:inline-flex;align-items:center;gap:.5em;padding:.55em 1em;border:1.5px solid var(--red);border-radius:6px;color:var(--red);font-weight:600;font-size:.9rem;text-decoration:none;background:var(--surface);}
+.enquiry-links a:hover{background:var(--red);color:var(--on-red);}
+.b2b-location{max-width:640px;}
+.partner-more,.products-more,.contact-more{font-size:.92rem;margin-top:1.2em;}
+.products-more{margin-top:1.6em;text-align:center;}

@@ -227,6 +227,7 @@ ${whyGrid(icons, 'Freshness you can taste, standards you can trust')}
       <a href="/contact?type=${encodeURIComponent('Dealership')}" class="btn btn-primary">Become a Partner ${arrowIcon()}</a>
       <a href="/contact?type=${encodeURIComponent('Wholesale / Bulk Purchase')}" class="btn btn-ghost">Discuss Bulk Requirements</a>
     </div>
+    <p class="partner-more">Learn more about <a class="inline-link" href="/flour-manufacturer-kanpur">our flour-milling unit in Kanpur</a>, or browse our <a class="inline-link" href="/guides">flour guides</a>.</p>
   </div>
 </section>
 
