@@ -223,7 +223,7 @@ step "Mamta Bhoj safe deployment  ($( [ "$DRY_RUN" -eq 1 ] && echo 'DRY RUN - no
 info "log file: $LOG_FILE (mode 600)"
 if [ "$SKIP_LOCAL_TESTS" -eq 1 ]; then BYPASSED="$BYPASSED --skip-local-tests"; warn "SAFETY VALIDATION BYPASSED: --skip-local-tests means the commit is NOT smoke-tested locally before it goes to the server"; fi
 if [ "$SKIP_POST_CHECK" -eq 1 ]; then BYPASSED="$BYPASSED --skip-post-check"; warn "SAFETY VALIDATION BYPASSED: --skip-post-check means the LIVE site is NOT verified after the restart"; fi
-[ -z "$CONFIG_FILE" ] && CONFIG_FILE="${DEPLOY_CONFIG:-$HOME/.config/mamta-bhoj/deploy.env}"
+[ -z "$CONFIG_FILE" ] && CONFIG_FILE="${DEPLOY_CONFIG:-${HOME:-/nonexistent}/.config/mamta-bhoj/deploy.env}"
 if [ -f "$CONFIG_FILE" ]; then
   # refuse group/world-readable config (it may name servers and restart commands)
   perm="$(stat -c '%a' "$CONFIG_FILE" 2>/dev/null || stat -f '%Lp' "$CONFIG_FILE" 2>/dev/null || echo 600)"
@@ -284,7 +284,7 @@ fi
 [[ "$DEPLOY_HEALTH_URL" =~ ^https?://[^/[:space:]]+/?$ ]] || fail "DEPLOY_HEALTH_URL must look like https://host"
 info "target     : ${DEPLOY_USER:-<DEPLOY_USER not set>}@$PLACE_HOST:$PLACE_PATH (branch $BRANCH)"
 info "restart    : $DISPLAY_RESTART  (via ${DEPLOY_RESTART_SHELL} shell; trusted operator input)"
-info "backup dir : ${DEPLOY_BACKUP_DIR:-~/mamta-bhoj-backups of $DEPLOY_USER on the server (default)}"
+info "backup dir : ${DEPLOY_BACKUP_DIR:-~/mamta-bhoj-backups of ${DEPLOY_USER:-<DEPLOY_USER not set>} on the server (default)}"
 info "verify URL : $DEPLOY_HEALTH_URL"
 
 # ssh command (array). A DEPLOY_SSH override is split on whitespace.
@@ -580,7 +580,7 @@ check_server_ready() {
   rb="$(kv RESTART_BIN_OK)"; bw="$(kv BACKUP_WRITABLE)"; bi="$(kv BACKUP_INSIDE_APP)"
   info "backup dir on server: $(kv BACKUP_DIR)"
   [ "$bi" = "0" ] || die "the backup directory is inside the app checkout; set DEPLOY_BACKUP_DIR outside it. Nothing was changed."
-  [ "$bw" = "1" ] || die "the backup directory ($(kv BACKUP_DIR)) is not writable by $DEPLOY_USER and cannot be created. Set DEPLOY_BACKUP_DIR to a writable path (default is ~/mamta-bhoj-backups). Nothing was changed."
+  [ "$bw" = "1" ] || die "the backup directory ($(kv BACKUP_DIR)) is not writable by ${DEPLOY_USER:-the deploy user} and cannot be created. Set DEPLOY_BACKUP_DIR to a writable path (default is ~/mamta-bhoj-backups). Nothing was changed."
   [ "$rb" = "1" ] || die "the restart command's program ('${PLACE_RESTART%% *}') was not found on the server's PATH (DEPLOY_RESTART_SHELL=$DEPLOY_RESTART_SHELL). Use an absolute path (e.g. /usr/bin/pm2) or fix the login profile. Nothing was changed."
   ok "server readiness: backup dir writable, restart program found"
 }
