@@ -34,3 +34,6 @@ data/newsletter.json
 Thumbs.db
 .vscode/
 .idea/
+
+# Local deployment config (host/user/paths) — never commit
+deploy.env
