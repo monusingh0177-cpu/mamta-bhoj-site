@@ -7,6 +7,7 @@ const { findGuide } = require('./guides');
 const { PRODUCT_EXTRA } = require('./product-content');
 const { b2bMeta, enquiryHref: contactHref } = require('./links');
 const seo = require('../lib/seo');
+const { imgDims } = require('../lib/image-dims');
 const { packSizesText, packSizesShort } = require('../lib/business');
 
 // Presentation copy for each product's detail page. Kept separate from
@@ -29,6 +30,7 @@ const PRODUCT_DETAILS = {
   'fresh-chakki-atta': {
     highlights: [
       'Naturally stone-ground the traditional chakki way',
+      'High protein and rich in fibre, a claim that is lab verified',
       'Milled in small, frequent batches for freshness',
       'Suited to both home and food-service kitchens',
       'Packed under ISO 9001:2015 & FSSAI-compliant conditions',
@@ -38,8 +40,8 @@ const PRODUCT_DETAILS = {
       'It is the everyday choice for soft rotis, chapatis and parathas, suited equally to home kitchens and food-service use where a dependable, traditional atta is needed every day.',
     ],
     bestFor: ['Everyday rotis', 'Chapatis', 'Parathas', 'Home kitchens', 'Food-service use'],
-    seoTitle: `Fresh Chakki Atta | Wheat Flour, ${PACKS_SHORT}`,
-    seoDescription: `Mamta Bhoj Fresh Chakki Atta — naturally stone-ground whole wheat flour in ${PACKS_TEXT} packs, milled for soft, everyday rotis, chapatis and parathas.`,
+    seoTitle: `Fresh Chakki Atta, ${PACKS_SHORT}`,
+    seoDescription: `Mamta Bhoj Fresh Chakki Atta: 100% whole wheat, naturally stone-ground, rich in fibre and protein. ${PACKS_TEXT} packs for rotis, chapatis and parathas.`,
   },
   maida: {
     highlights: [
@@ -53,7 +55,7 @@ const PRODUCT_DETAILS = {
       'It works well for naan and other leavened breads, biscuits and select bakery items, suited to both home cooking and professional food-service kitchens that need a consistent refined flour.',
     ],
     bestFor: ['Bakery products', 'Naan and other breads', 'Biscuits', 'Cakes and selected preparations'],
-    seoTitle: `Maida | Refined Wheat Flour, ${PACKS_SHORT}`,
+    seoTitle: `Maida (Refined Flour), ${PACKS_SHORT}`,
     seoDescription: `Mamta Bhoj Maida, a finely refined wheat flour in ${PACKS_TEXT} packs, suited to naan, bakery items and everyday Indian cooking.`,
   },
   'sooji-rava': {
@@ -68,7 +70,7 @@ const PRODUCT_DETAILS = {
       'It is a versatile pantry staple for upma, dosa batter, halwa and other sweets, snacks, and traditional preparations that call for a good semolina texture.',
     ],
     bestFor: ['Upma', 'Dosa batter', 'Halwa and sweets', 'Snacks'],
-    seoTitle: `Sooji / Rava | Semolina, ${PACKS_SHORT}`,
+    seoTitle: `Sooji / Rava (Semolina), ${PACKS_SHORT}`,
     seoDescription: `Mamta Bhoj Sooji / Rava, evenly milled semolina in ${PACKS_TEXT} packs, suited to upma, halwa, snacks and traditional Indian recipes.`,
   },
   'tandoori-atta': {
@@ -83,7 +85,7 @@ const PRODUCT_DETAILS = {
       'It is positioned for kitchens — home or food-service — that prepare Indian breads in a tandoor, using the same natural, additive-free milling approach as our Chakki Atta.',
     ],
     bestFor: ['Tandoori roti', 'Restaurant-style breads', 'Tandoor cooking', 'Food-service kitchens'],
-    seoTitle: `Tandoori Atta | Wheat Flour, ${PACKS_SHORT}`,
+    seoTitle: `Tandoori Atta, ${PACKS_SHORT}`,
     seoDescription: `Mamta Bhoj Tandoori Atta, a coarser stone-ground wheat flour in ${PACKS_TEXT} packs, suited to tandoori rotis and food-service kitchens.`,
   },
   besan: {
@@ -98,7 +100,7 @@ const PRODUCT_DETAILS = {
       'It is a kitchen staple for pakoras, chilla and kadhi, as well as a range of traditional snacks and sweets that call for a good besan texture.',
     ],
     bestFor: ['Pakoras', 'Chilla', 'Kadhi', 'Besan-based snacks', 'Indian sweets'],
-    seoTitle: `Besan | Gram Flour, ${PACKS_SHORT}`,
+    seoTitle: `Besan (Gram Flour), ${PACKS_SHORT}`,
     seoDescription: `Mamta Bhoj Besan, gram flour finely milled from chana dal, in ${PACKS_TEXT} packs, suited to pakoras, chilla, kadhi and Indian sweets.`,
   },
 };
@@ -123,7 +125,7 @@ function renderProductDetail(product, allProducts, content) {
     .slice(0, 4);
 
   const heroVisual = product.image
-    ? `<div class="product-photo-frame product-hero-frame"><img class="product-photo" src="${escapeHtml(product.image)}" alt="${escapeHtml(brandedName)} pack" fetchpriority="high" decoding="async"></div>`
+    ? `<div class="product-photo-frame product-hero-frame"><img class="product-photo" src="${escapeHtml(product.image)}"${imgDims(product.image)} alt="${escapeHtml(brandedName)} pack" fetchpriority="high" decoding="async"></div>`
     : `<div class="product-photo-frame product-hero-frame"><div class="product-icon">${icons.productIcons[product.icon] || icons.productIcons.wheat}</div></div>`;
 
   return `
@@ -174,6 +176,8 @@ ${
   ${details.overview.map((p) => `<p style="max-width:70ch;margin-top:.8em;">${escapeHtml(p)}</p>`).join('')}
 </section>
 
+${glanceSection(product, details)}
+
 ${
   details.bestFor.length
     ? `<section class="wrap" data-reveal>
@@ -222,6 +226,23 @@ ${ctaBand(content)}
 `;
 }
 
+// "At a glance" fact table: every row is a fact already stated elsewhere on the site
+// (product copy, pack sizes, label/storage statements).
+function glanceSection(product, details) {
+  if (!details.glance || !details.glance.length) return '';
+  const rows = details.glance.concat([
+    ['Available pack sizes', PACKS_TEXT],
+    ['Made at', 'Chaubepur, Kanpur Nagar, Uttar Pradesh'],
+    ['Storage', 'Keep sealed in a cool, dry place away from direct sunlight and moisture'],
+  ]);
+  return `<section class="wrap" data-reveal>
+  <div class="section-head"><span class="eyebrow">At A Glance</span><h2>${escapeHtml(product.name)} at a glance</h2></div>
+  <div class="compare-wrap"><table class="compare">
+    <tbody>${rows.map(([k, v]) => `<tr><th scope="row">${escapeHtml(k)}</th><td>${escapeHtml(v)}</td></tr>`).join('')}</tbody>
+  </table></div>
+</section>`;
+}
+
 // Varied, natural phrasing per product (avoids the same anchor text on every page).
 const MANUFACTURER_ANCHORS = {
   'fresh-chakki-atta': 'our flour-milling unit in Chaubepur, Kanpur',
@@ -238,7 +259,7 @@ function businessSection(product, brandedName, details) {
   const b2b = ((details && details.b2b) || []).filter(([s]) => b2bMeta(s));
   const enq = (details && details.enquiry) || { type: 'Wholesale / Bulk Purchase', label: 'send a bulk or wholesale enquiry' };
   const b2bText = b2b.length
-    ? ` See ${b2b.map(([s, t]) => `<a class="inline-link" href="/${s}">${escapeHtml(t)}</a>`).join(' and ')} for how we work with businesses, or`
+    ? ` See ${b2b.map(([s, t]) => `<a class="inline-link" href="/${s}">${escapeHtml(t)}</a>`).join(', ').replace(/, ([^,]*)$/, ' and $1')} for how we work with businesses, or`
     : ' You can';
   return `<section class="wrap" data-reveal>
   <div class="section-head"><span class="eyebrow">For Businesses</span><h2>Buying ${escapeHtml(brandedName)} for your business?</h2></div>

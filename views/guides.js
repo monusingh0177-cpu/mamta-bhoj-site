@@ -4,7 +4,8 @@ const seo = require('../lib/seo');
 const { ctaBand, wheatDividerBand } = require('../lib/render');
 const { productCard } = require('./home');
 const { MORE_GUIDES } = require('./guides-more');
-const { B2BLINK, b2bMeta } = require('./links');
+const { PHASE3_GUIDES } = require('./guides-phase3');
+const { B2B_LINKS, B2BLINK, b2bMeta, b2bAnchor, enquiryHref } = require('./links');
 
 // Lightweight content hub. Each guide is original, general-purpose
 // information about the products Mamta Bhoj makes. Rules followed here:
@@ -192,7 +193,7 @@ const CORE_GUIDES = [
   },
   {
     slug: 'tandoori-atta-guide',
-    title: 'Tandoori Atta Guide: How It Differs From Regular Atta | Mamta Bhoj',
+    title: 'Tandoori Atta Guide: Uses and Differences | Mamta Bhoj',
     h1: 'What Is Tandoori Atta and How Is It Different From Regular Atta?',
     shortTitle: 'Tandoori Atta guide',
     description:
@@ -260,7 +261,7 @@ const CORE_GUIDES = [
   },
   {
     slug: 'how-flour-is-made',
-    title: 'How Wheat Flour Is Made: From Grain to Packaging | Mamta Bhoj',
+    title: 'How Wheat Flour Is Made: Grain to Packaging | Mamta Bhoj',
     h1: 'How Wheat Flour Is Made: From Wheat Grain to Milling and Packaging',
     shortTitle: 'How flour is made',
     description:
@@ -330,8 +331,31 @@ function seoLink(href, text) {
   return `<a class="inline-link" href="${href}">${text}</a>`;
 }
 
-// Core guides (this file) + Phase-2 guides (views/guides-more.js), in sitemap order.
-const GUIDES = CORE_GUIDES.concat(MORE_GUIDES);
+// Core guides (this file) + Phase-2 guides (views/guides-more.js) + Phase-3 guides
+// (views/guides-phase3.js), in sitemap order.
+const GUIDES = CORE_GUIDES.concat(MORE_GUIDES, PHASE3_GUIDES);
+
+// How the guides are grouped on /guides. Every guide must appear in exactly one group.
+const GUIDE_GROUPS = [
+  {
+    h2: 'Choosing and buying flour',
+    intro: 'Checklists for picking the right flour and the right supplier, for a household or a business.',
+    slugs: ['how-to-choose-atta', 'types-of-flour-in-india', 'how-to-choose-flour-supplier', 'bulk-flour-procurement-guide'],
+  },
+  {
+    h2: 'Understanding each flour',
+    intro: 'How atta, maida, sooji, besan and tandoori atta differ, and what each is used for.',
+    slugs: ['chakki-atta-vs-roller-milled-atta', 'tandoori-atta-guide', 'maida-vs-atta', 'what-is-maida', 'sooji-vs-rava', 'what-is-besan'],
+  },
+  {
+    h2: 'Making and storing flour',
+    intro: 'How wheat becomes flour, and how to keep flour fresh at home and in bulk.',
+    slugs: ['how-flour-is-made', 'how-to-store-flour'],
+  },
+];
+if ([].concat(...GUIDE_GROUPS.map((g) => g.slugs)).sort().join() !== GUIDES.map((g) => g.slug).sort().join()) {
+  throw new Error('views/guides.js GUIDE_GROUPS does not cover every guide exactly once');
+}
 
 // Fail loudly at start-up if the sitemap's guide list and this file drift apart.
 if (GUIDES.map((g) => g.slug).join() !== seo.GUIDE_SLUGS.join()) {
@@ -357,17 +381,19 @@ function tableHtml(t) {
   </table></div>`;
 }
 
-function sectionHtml(s) {
+function sectionHtml(s, fssai) {
+  const sub = (txt) => String(txt).replace(/%FSSAI%/g, escapeHtml(fssai || ''));
   const parts = [`<h2>${escapeHtml(s.h2)}</h2>`];
-  (s.body || []).forEach((p) => parts.push(`<p>${p}</p>`));
+  (s.body || []).forEach((p) => parts.push(`<p>${sub(p)}</p>`));
   if (s.list) parts.push(`<ul class="prose-list">${s.list.map((li) => `<li>${escapeHtml(li)}</li>`).join('')}</ul>`);
   if (s.steps) parts.push(`<ol class="prose-steps">${s.steps.map(([t, d]) => `<li><strong>${escapeHtml(t)}.</strong> ${escapeHtml(d)}</li>`).join('')}</ol>`);
   if (s.table) parts.push(tableHtml(s.table));
-  (s.subs || []).forEach((sub) => {
-    parts.push(`<h3>${escapeHtml(sub.h3)}</h3>`);
-    (sub.body || []).forEach((p) => parts.push(`<p>${p}</p>`));
-    if (sub.list) parts.push(`<ul class="prose-list">${sub.list.map((li) => `<li>${escapeHtml(li)}</li>`).join('')}</ul>`);
+  (s.subs || []).forEach((u) => {
+    parts.push(`<h3>${escapeHtml(u.h3)}</h3>`);
+    (u.body || []).forEach((p) => parts.push(`<p>${sub(p)}</p>`));
+    if (u.list) parts.push(`<ul class="prose-list">${u.list.map((li) => `<li>${escapeHtml(li)}</li>`).join('')}</ul>`);
   });
+  (s.after || []).forEach((p) => parts.push(`<p>${sub(p)}</p>`));
   return parts.join('\n');
 }
 
@@ -375,6 +401,21 @@ function faqHtml(faqs) {
   return faqs
     .map(([q, a]) => `<details class="faq-item"><summary>${escapeHtml(q)}${arrowIcon()}</summary><p>${escapeHtml(a)}</p></details>`)
     .join('');
+}
+
+// "For businesses" panel at the end of every guide: contextual links to the supply
+// pages named by the guide (with varied anchor text), to the manufacturer pages and
+// to the enquiry form, so a reader who is buying can act.
+function businessPanel(guide) {
+  const idx = GUIDES.findIndex((g) => g.slug === guide.slug);
+  const metas = (guide.business || []).map(b2bMeta).filter(Boolean);
+  if (!metas.length) return '';
+  const links = metas.map((b, i) => `<a class="inline-link" href="/${b.slug}">${escapeHtml(b2bAnchor(b.slug, idx + i))}</a>`);
+  const list = links.length > 1 ? `${links.slice(0, -1).join(', ')} and ${links[links.length - 1]}` : links[0];
+  return `<section class="wrap" data-reveal>
+  <div class="section-head"><span class="eyebrow">For Businesses</span><h2>Buying flour for a business?</h2></div>
+  <p style="max-width:70ch;">Read about ${list}. Devmam Flourish Foods LLP mills the Mamta Bhoj range at its unit in Kanpur; see ${MFR('the flour manufacturer in Kanpur')}, or <a class="inline-link" href="${enquiryHref(metas[0].enquiryType)}">send an enquiry</a> with your products, monthly requirement and city.</p>
+</section>`;
 }
 
 function renderGuide(guide, products, content) {
@@ -393,7 +434,7 @@ function renderGuide(guide, products, content) {
   <p>${escapeHtml(guide.intro)}</p>
 </section>
 <article class="wrap" data-reveal><div class="prose">
-  ${guide.sections.map(sectionHtml).join('\n')}
+  ${guide.sections.map((sec) => sectionHtml(sec, content.fssai)).join('\n')}
   <p class="note-small">General information about how these products are commonly made and used. Methods, grades and recipes vary between mills and kitchens.</p>
 </div></article>
 
@@ -413,6 +454,8 @@ ${
     : ''
 }
 
+${businessPanel(guide)}
+
 <section class="wrap" data-reveal>
   <div class="section-head"><span class="eyebrow">Keep Reading</span><h2>More guides</h2></div>
   <ul class="guide-links">
@@ -427,6 +470,19 @@ ${ctaBand(content)}
 }
 
 function renderGuidesIndex(content) {
+  const card = (g) => `<a href="/guides/${g.slug}" class="why-card guide-card" data-reveal-item>
+      <h3>${escapeHtml(g.h1)}</h3>
+      <p>${escapeHtml(g.cardText)}</p>
+      <span class="know-more">Read the guide ${arrowIcon()}</span>
+    </a>`;
+  const groups = GUIDE_GROUPS.map(
+    (grp) => `<section class="wrap" data-reveal>
+  <div class="section-head"><h2>${escapeHtml(grp.h2)}</h2><p>${escapeHtml(grp.intro)}</p></div>
+  <div class="guide-grid">
+    ${grp.slugs.map((slug) => card(GUIDES.find((g) => g.slug === slug))).join('')}
+  </div>
+</section>`
+  ).join('\n');
   return `
 <section class="wrap" data-reveal>
   <nav class="breadcrumb" aria-label="Breadcrumb"><a href="/">Home</a><span aria-hidden="true">/</span><span aria-current="page">Guides</span></nav>
@@ -434,22 +490,15 @@ function renderGuidesIndex(content) {
 <section class="page-hero wrap" data-reveal>
   <span class="eyebrow">Guides</span>
   <h1>Flour guides from Mamta Bhoj</h1>
-  <p>Practical explainers on atta, maida, sooji, besan and how flour is made, plus a checklist for choosing a flour supplier, for home cooks and food businesses.</p>
+  <p>Practical guides on choosing atta, the differences between atta, maida, sooji and besan, storing flour, and buying flour in bulk, for home cooks and food businesses.</p>
 </section>
+${groups}
 <section class="wrap" data-reveal>
-  <div class="guide-grid">
-    ${GUIDES.map(
-      (g) => `<a href="/guides/${g.slug}" class="why-card guide-card" data-reveal-item>
-      <h2>${escapeHtml(g.h1)}</h2>
-      <p>${escapeHtml(g.cardText)}</p>
-      <span class="know-more">Read the guide ${arrowIcon()}</span>
-    </a>`
-    ).join('')}
-  </div>
-  <p class="note-small" style="margin-top:1.6em;">Buying flour for a business? Read about us as a <a class="inline-link" href="${seo.MANUFACTURER_PATH}">flour manufacturer in Kanpur</a> or see the full <a class="inline-link" href="/products">Mamta Bhoj product range</a>.</p>
+  <div class="section-head"><span class="eyebrow">For Businesses</span><h2>Buying flour for a shop, bakery or kitchen?</h2></div>
+  <p style="max-width:70ch;">Start with ${MFR('our flour manufacturer in Kanpur page')} or the overview of <a class="inline-link" href="/flour-manufacturer-india">a flour manufacturer for buyers across India</a>. Then see the supply pages: ${B2B_LINKS.filter((l) => l.slug !== 'flour-manufacturer-india').map((l) => `<a class="inline-link" href="/${l.slug}">${escapeHtml(l.anchors[0])}</a>`).join(', ')}. You can also browse the full <a class="inline-link" href="/products">Mamta Bhoj product range</a>.</p>
 </section>
 ${ctaBand(content)}
 `;
 }
 
-module.exports = { GUIDES, findGuide, guidesForProduct, renderGuide, renderGuidesIndex };
+module.exports = { GUIDES, GUIDE_GROUPS, findGuide, guidesForProduct, renderGuide, renderGuidesIndex };

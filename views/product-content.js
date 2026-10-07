@@ -8,7 +8,10 @@ const { GUIDELINK } = require('./links');
 // confirmed by the owner (pack sizes, Chakki Atta fibre/protein claim).
 // NOT stated: nutrition numbers, shelf life, technical milling specs, prices,
 // MOQ, delivery, certifications beyond ISO 9001:2015 / FSSAI, and no
-// "protein" wording outside Fresh Chakki Atta. Each FAQ answer is plain text
+// "protein" wording outside Fresh Chakki Atta. For Fresh Chakki Atta only, the owner
+// has confirmed the High Protein claim and that the fibre-and-protein claim is lab
+// verified; it is stated as a claim, with no certificate, lab name or figures.
+// Each FAQ answer is plain text
 // so the FAQPage schema can match the visible answer exactly.
 
 const PACKS = packSizesText();
@@ -31,8 +34,8 @@ const PRODUCT_EXTRA = {
     faqs: [
       ['Is Mamta Bhoj Fresh Chakki Atta whole wheat?', 'Yes. It is 100% whole wheat and naturally stone-ground.'],
       [
-        'What are the fibre and protein claims?',
-        'Mamta Bhoj Fresh Chakki Atta is described as rich in fibre and protein. Please refer to the nutrition information printed on the pack for exact values.',
+        'Is Fresh Chakki Atta high in protein and fibre?',
+        'Mamta Bhoj Fresh Chakki Atta is a high-protein whole wheat atta that is rich in fibre, and the fibre and protein claim is lab verified. The nutrition information printed on the pack gives the exact values.',
       ],
       [
         'What can I make with it?',
@@ -45,12 +48,18 @@ const PRODUCT_EXTRA = {
         'Yes. Send a bulk or wholesale enquiry through the Contact page. Pricing and quantities are discussed directly with our team.',
       ],
     ],
+    glance: [
+      ['Made from', '100% whole wheat'],
+      ['Milling', 'Naturally stone-ground (chakki)'],
+      ['Best for', 'Rotis, chapatis and parathas'],
+    ],
     b2b: [
+      ['flour-manufacturer-india#atta', 'our atta manufacturer overview'],
       ['bulk-flour-supplier-india', 'bulk flour supply'],
       ['wholesale-flour-supplier', 'wholesale supply for dealers and retailers'],
     ],
     enquiry: { type: 'Wholesale / Bulk Purchase', label: 'send a bulk or wholesale enquiry' },
-    guides: ['chakki-atta-vs-roller-milled-atta', 'maida-vs-atta', 'how-flour-is-made'],
+    guides: ['how-to-choose-atta', 'chakki-atta-vs-roller-milled-atta', 'how-to-store-flour', 'maida-vs-atta'],
   },
 
   'tandoori-atta': {
@@ -82,12 +91,18 @@ const PRODUCT_EXTRA = {
         'Yes. Use the Contact page and choose Institutional / HoReCa as the enquiry type. Quantities, pricing and delivery are discussed directly.',
       ],
     ],
+    glance: [
+      ['Made from', 'Wheat'],
+      ['Milling', 'Coarser stone-ground grind'],
+      ['Best for', 'Tandoori rotis and thicker parathas'],
+    ],
     b2b: [
       ['institutional-flour-supplier', 'institutional supply for restaurants and caterers'],
+      ['flour-manufacturer-india#atta', 'tandoori atta manufacturer details'],
       ['bulk-flour-supplier-india', 'bulk flour supply'],
     ],
     enquiry: { type: 'Institutional / HoReCa', label: 'send an enquiry for your kitchen' },
-    guides: ['tandoori-atta-guide', 'chakki-atta-vs-roller-milled-atta'],
+    guides: ['tandoori-atta-guide', 'how-to-choose-atta', 'chakki-atta-vs-roller-milled-atta'],
   },
 
   maida: {
@@ -124,12 +139,18 @@ const PRODUCT_EXTRA = {
         'Yes. Send a bulk or institutional enquiry through the Contact page, and our team will discuss prices, quantities and delivery with you directly.',
       ],
     ],
+    glance: [
+      ['Made from', 'Wheat, finely refined'],
+      ['Milling', 'Refined and sifted fine'],
+      ['Best for', 'Naan and other leavened breads, biscuits, bakery items'],
+    ],
     b2b: [
       ['institutional-flour-supplier', 'institutional supply for bakeries and kitchens'],
+      ['flour-manufacturer-india#maida', 'maida manufacturer details'],
       ['bulk-flour-supplier-india', 'bulk flour supply'],
     ],
     enquiry: { type: 'Institutional / HoReCa', label: 'send an enquiry for your bakery or kitchen' },
-    guides: ['what-is-maida', 'maida-vs-atta', 'how-to-choose-flour-supplier'],
+    guides: ['what-is-maida', 'maida-vs-atta', 'types-of-flour-in-india', 'how-to-choose-flour-supplier'],
   },
 
   'sooji-rava': {
@@ -163,12 +184,18 @@ const PRODUCT_EXTRA = {
         'Yes. Send a wholesale or institutional enquiry through the Contact page; terms, including prices, quantities and delivery, are agreed directly with our team.',
       ],
     ],
+    glance: [
+      ['Made from', 'Wheat, as semolina'],
+      ['Milling', 'Evenly milled to a consistent grain size'],
+      ['Best for', 'Upma, halwa, dosa batter and snacks'],
+    ],
     b2b: [
       ['wholesale-flour-supplier', 'wholesale supply for shops and dealers'],
+      ['flour-manufacturer-india#sooji', 'sooji and rava manufacturer details'],
       ['institutional-flour-supplier', 'institutional supply for kitchens'],
     ],
     enquiry: { type: 'Wholesale / Bulk Purchase', label: 'send a wholesale or kitchen enquiry' },
-    guides: ['sooji-vs-rava', 'how-flour-is-made'],
+    guides: ['sooji-vs-rava', 'types-of-flour-in-india', 'how-flour-is-made'],
   },
 
   besan: {
@@ -196,12 +223,18 @@ const PRODUCT_EXTRA = {
         'Yes. Send a wholesale or bulk enquiry through the Contact page. Prices, quantities and delivery depend on your requirement and are discussed directly.',
       ],
     ],
+    glance: [
+      ['Made from', 'Cleaned chana dal (not wheat)'],
+      ['Milling', 'Finely milled'],
+      ['Best for', 'Pakoras, chilla, kadhi, snacks and sweets'],
+    ],
     b2b: [
       ['wholesale-flour-supplier', 'wholesale supply for sweet shops and retailers'],
+      ['flour-manufacturer-india#besan', 'besan manufacturer details'],
       ['bulk-flour-supplier-india', 'bulk flour supply'],
     ],
     enquiry: { type: 'Wholesale / Bulk Purchase', label: 'send a wholesale or bulk enquiry' },
-    guides: ['what-is-besan', 'how-to-choose-flour-supplier'],
+    guides: ['what-is-besan', 'how-to-store-flour', 'types-of-flour-in-india', 'how-to-choose-flour-supplier'],
   },
 };
 

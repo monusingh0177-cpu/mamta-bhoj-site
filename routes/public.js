@@ -1,7 +1,7 @@
 'use strict';
 const store = require('../lib/store');
-const { layout } = require('../lib/render');
-const { parseForm, sendHtml, redirect, slugify } = require('../lib/http-utils');
+const { layout, breadcrumbNav } = require('../lib/render');
+const { parseForm, sendHtml, redirect, slugify, escapeHtml } = require('../lib/http-utils');
 const { renderHome } = require('../views/home');
 const { renderAbout } = require('../views/about');
 const { renderProducts } = require('../views/products');
@@ -19,6 +19,10 @@ const seo = require('../lib/seo');
 const { withBusinessAddress, withCleanProductCopy } = require('../lib/business');
 
 const router = new Router();
+
+// Breadcrumb trail for the top-level pages: the same items feed the visible
+// breadcrumb and the BreadcrumbList schema, so the two can never disagree.
+const crumbs = (name, path) => [{ name: 'Home', path: '/' }, { name, path }];
 
 // Public pages always show the authoritative business address (lib/business.js).
 function siteContent() {
@@ -49,8 +53,8 @@ router.get('/', async (req, res, params, query) => {
     res,
     200,
     layout({
-      title: 'Mamta Bhoj | Fresh Stone-Ground Chakki Atta, Maida & Sooji',
-      description: 'Fresh, naturally stone-ground chakki atta, maida & sooji from Devmam Flourish Foods LLP, Chaubepur, Kanpur. Explore the Mamta Bhoj range.',
+      title: 'Mamta Bhoj | Chakki Atta, Maida, Sooji & Besan, Kanpur',
+      description: 'Mamta Bhoj by Devmam Flourish Foods LLP: naturally stone-ground chakki atta and tandoori atta, plus maida, sooji and besan, milled in Chaubepur, Kanpur.',
       canonicalPath: '/',
       jsonLd: [seo.organizationLd(content), seo.websiteLd()],
       active: 'home',
@@ -70,14 +74,14 @@ router.get('/about', async (req, res, params, query) => {
     200,
     layout({
       title: 'Our Story | Devmam Flourish Foods LLP - Mamta Bhoj',
-      description: 'Learn about Devmam Flourish Foods LLP, the Chaubepur, Kanpur flour-milling unit behind the Mamta Bhoj range of stone-ground atta, maida and sooji.',
+      description: 'Learn about Devmam Flourish Foods LLP, the Chaubepur, Kanpur flour-milling unit behind the Mamta Bhoj range of atta, tandoori atta, maida, sooji and besan.',
       canonicalPath: '/about',
-      jsonLd: [seo.pageLd('AboutPage', 'Our Story', '/about', { about: seo.orgRefLd() }), seo.organizationLd(content)],
+      jsonLd: [seo.pageLd('AboutPage', 'Our Story', '/about', { about: seo.orgRefLd() }), seo.organizationLd(content), seo.breadcrumbLd(crumbs('Our Story', '/about'))],
       active: 'about',
       content,
       products,
       nlStatus: nlStatusFromQuery(query),
-      bodyHtml: renderAbout(content),
+      bodyHtml: breadcrumbNav(crumbs('Our Story', '/about')) + renderAbout(content),
     })
   );
 });
@@ -92,12 +96,12 @@ router.get('/products', async (req, res, params, query) => {
       title: 'Our Products | Mamta Bhoj Atta, Maida, Sooji & Besan',
       description: productsDescription(products),
       canonicalPath: '/products',
-      jsonLd: seo.productListLd(products),
+      jsonLd: [seo.productListLd(products), seo.breadcrumbLd(crumbs('Products', '/products'))],
       active: 'products',
       content,
       products,
       nlStatus: nlStatusFromQuery(query),
-      bodyHtml: renderProducts(products, content),
+      bodyHtml: breadcrumbNav(crumbs('Products', '/products')) + renderProducts(products, content),
     })
   );
 });
@@ -141,7 +145,7 @@ router.get('/products/:slug', async (req, res, params, query) => {
 
   const details = detailsFor(product);
   const pagePath = seo.productPath(product);
-  const productTitle = details.seoTitle ? details.seoTitle.replace(' | ', ' - ') : product.name;
+  const productTitle = details.seoTitle || product.name;
   sendHtml(
     res,
     200,
@@ -179,13 +183,14 @@ router.get('/quality', async (req, res, params, query) => {
       title: 'Quality & Process | Stone-Ground Milling at Mamta Bhoj',
       description: 'See how Mamta Bhoj flour is made: sourcing, cleaning, stone grinding, quality checks and hygienic packing at our Chaubepur, Kanpur mill.',
       canonicalPath: '/quality',
+      jsonLd: [seo.pageLd('WebPage', 'Quality & Process', '/quality', { about: seo.orgRefLd() }), seo.breadcrumbLd(crumbs('Quality & Process', '/quality'))],
       ogImage: { path: '/images/quality/mamta-bhoj-quality-process-overview.jpg', width: 1536, height: 1024 },
       ogImageAlt: 'Illustrative overview of the Mamta Bhoj flour milling process',
       active: 'quality',
       content,
       products,
       nlStatus: nlStatusFromQuery(query),
-      bodyHtml: renderQuality(content, gallery),
+      bodyHtml: breadcrumbNav(crumbs('Quality & Process', '/quality')) + renderQuality(content, gallery),
     })
   );
 });
@@ -200,12 +205,12 @@ router.get('/faq', async (req, res, params, query) => {
       title: 'FAQs | Mamta Bhoj Atta, Maida & Sooji',
       description: 'Answers on freshness, stone-grinding, FSSAI and ISO certification, storage, dealership and bulk orders for Mamta Bhoj atta, maida and sooji.',
       canonicalPath: '/faq',
-      jsonLd: seo.faqLd(faqItems(content)),
+      jsonLd: [seo.faqLd(faqItems(content)), seo.breadcrumbLd(crumbs('FAQs', '/faq'))],
       active: 'faq',
       content,
       products,
       nlStatus: nlStatusFromQuery(query),
-      bodyHtml: renderFAQ(content),
+      bodyHtml: breadcrumbNav(crumbs('FAQs', '/faq')) + renderFAQ(content),
     })
   );
 });
@@ -223,7 +228,8 @@ router.get('/certifications', async (req, res, params, query) => {
       content,
       products,
       canonicalPath: '/certifications',
-      bodyHtml: renderCertifications(content),
+      jsonLd: [seo.pageLd('WebPage', 'Certifications', '/certifications', { about: seo.orgRefLd() }), seo.breadcrumbLd(crumbs('Certifications', '/certifications'))],
+      bodyHtml: breadcrumbNav(crumbs('Certifications', '/certifications')) + renderCertifications(content),
     })
   );
 });
@@ -273,7 +279,7 @@ B2B_PAGES.forEach((page) => {
           seo.pageLd('WebPage', page.h1, pagePath, { about: seo.orgRefLd() }),
           seo.breadcrumbLd([
             { name: 'Home', path: '/' },
-            { name: page.eyebrow, path: pagePath },
+            { name: page.crumb || page.eyebrow, path: pagePath },
           ]),
           seo.faqLd(page.faqs),
         ],
@@ -295,7 +301,7 @@ router.get('/guides', async (req, res, params, query) => {
     200,
     layout({
       title: 'Flour Guides: Atta, Maida, Sooji & Milling | Mamta Bhoj',
-      description: 'Practical guides from Mamta Bhoj on maida vs atta, sooji vs rava, tandoori atta and how wheat flour is made.',
+      description: 'Practical guides from Mamta Bhoj: how to choose atta, types of flour, storing flour, maida vs atta, sooji vs rava and buying flour in bulk.',
       canonicalPath: '/guides',
       jsonLd: [
         seo.pageLd('CollectionPage', 'Flour guides from Mamta Bhoj', '/guides', {
@@ -381,12 +387,12 @@ router.get('/contact', async (req, res, params, query) => {
       title: 'Contact & Dealership Enquiries | Mamta Bhoj',
       description: 'Contact Devmam Flourish Foods LLP in Chaubepur, Kanpur for Mamta Bhoj dealership, distributor, wholesale and bulk enquiries.',
       canonicalPath: '/contact',
-      jsonLd: [seo.pageLd('ContactPage', 'Contact', '/contact', { mainEntity: seo.orgRefLd() }), seo.organizationLd(content)],
+      jsonLd: [seo.pageLd('ContactPage', 'Contact', '/contact', { mainEntity: seo.orgRefLd() }), seo.organizationLd(content), seo.breadcrumbLd(crumbs('Contact', '/contact'))],
       active: 'contact',
       content,
       products,
       nlStatus: nlStatusFromQuery(query),
-      bodyHtml: renderContact(content, query, products),
+      bodyHtml: breadcrumbNav(crumbs('Contact', '/contact')) + renderContact(content, query, products),
     })
   );
 });
@@ -451,5 +457,37 @@ router.get('/sitemap.xml', async (req, res) => {
   res.writeHead(200, { 'Content-Type': 'application/xml; charset=utf-8', 'Cache-Control': 'public, max-age=3600' });
   res.end(seo.buildSitemapXml(store.listCollection('products')));
 });
+
+// Branded 404 for unknown URLs (server.js sends it with a real 404 status). It is
+// noindex and links back into the main sections of the site.
+router.renderNotFound = function renderNotFound() {
+  const content = siteContent();
+  const products = siteProducts();
+  const productLinks = products
+    .slice()
+    .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
+    .map((p) => `<li><a href="${seo.productPath(p)}">${escapeHtml(p.name)}</a></li>`)
+    .join('');
+  return layout({
+    title: 'Page Not Found | Mamta Bhoj',
+    description: 'The page you requested could not be found.',
+    noindex: true,
+    active: '',
+    content,
+    products,
+    bodyHtml: `<section class="page-hero wrap" data-reveal style="text-align:center;">
+      <span class="eyebrow" style="justify-content:center;">Error 404</span>
+      <h1>We couldn't find that page</h1>
+      <p>The address may be mistyped or the page may have moved. These pages may help.</p>
+      <div class="hero-cta" style="justify-content:center;margin-top:1.4em;"><a href="/" class="btn btn-primary">Go to the Home Page</a><a href="/products" class="btn btn-ghost">View Products</a></div>
+    </section>
+    <section class="wrap" data-reveal>
+      <div class="prose">
+        <h2>Popular pages</h2>
+        <ul class="prose-list">${productLinks}<li><a href="/flour-manufacturer-india">Flour manufacturer in India</a></li><li><a href="/guides">Flour guides</a></li><li><a href="/contact">Contact and enquiries</a></li></ul>
+      </div>
+    </section>`,
+  });
+};
 
 module.exports = router;
