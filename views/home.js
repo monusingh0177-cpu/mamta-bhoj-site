@@ -3,7 +3,7 @@ const { escapeHtml, slugify } = require('../lib/http-utils');
 const icons = require('../lib/icons');
 const { whyGrid, promoStrip, ctaBand, wheatDividerBand, journeySection } = require('../lib/render');
 const { B2B_LINKS } = require('./links');
-const { imgDims } = require('../lib/image-dims');
+const { picture } = require('../lib/picture');
 
 // Generic descriptions of the B2B enquiry categories only — no eligibility
 // criteria, exclusivity, guaranteed supply or commercial terms implied.
@@ -79,7 +79,7 @@ function renderHome(content, products, guides) {
         ${slides
           .map(
             (s, i) => `<div class="hero-carousel-slide${i === 0 ? ' is-active' : ''}" data-slide-index="${i}" aria-hidden="${i === 0 ? 'false' : 'true'}">
-              <div class="hero-carousel-art" data-expected="${s.image}"><img data-carousel-img src="/images/hero/${s.image}"${imgDims('/images/hero/' + s.image)} alt="${escapeHtml(s.alt)}" ${i === 0 ? 'fetchpriority="high"' : 'loading="lazy" decoding="async"'}></div>
+              <div class="hero-carousel-art" data-expected="${s.image}">${picture('/images/hero/' + s.image, `data-carousel-img alt="${escapeHtml(s.alt)}" ${i === 0 ? 'fetchpriority="high"' : 'loading="lazy" decoding="async"'}`)}</div>
               <a href="${s.href}" class="hero-carousel-cta">${s.cta} ${arrowIcon()}</a>
             </div>`
           )
@@ -132,7 +132,7 @@ ${promoStrip(icons)}
       ${aboutSlides
         .map(
           (s, i) => `<div class="about-carousel-slide${i === 0 ? ' is-active' : ''}" data-slide-index="${i}" aria-hidden="${i === 0 ? 'false' : 'true'}">
-            <div class="about-carousel-art" data-expected="${s.image}"><img data-carousel-img src="/images/about-mill/${s.image}"${imgDims('/images/about-mill/' + s.image)} alt="${escapeHtml(s.alt)}" loading="lazy" decoding="async"></div>
+            <div class="about-carousel-art" data-expected="${s.image}">${picture('/images/about-mill/' + s.image, `data-carousel-img alt="${escapeHtml(s.alt)}" loading="lazy" decoding="async"`)}</div>
           </div>`
         )
         .join('')}
@@ -204,7 +204,7 @@ ${journeySection(content, { link: true })}
     <p>A representative view of the modern environment, grain handling, processing and hygienic packing that define the Mamta Bhoj approach.</p>
   </div>
   <div class="facility-visual">
-    <img src="/images/facility/mamta-bhoj-facility-overview.jpg" width="1536" height="1024" alt="Representative Mamta Bhoj facility visual showing a modern flour processing environment, grain storage, milling equipment and hygienic packing" loading="lazy" decoding="async">
+    ${picture('/images/facility/mamta-bhoj-facility-overview.jpg', 'alt="Representative Mamta Bhoj facility visual showing a modern flour processing environment, grain storage, milling equipment and hygienic packing" loading="lazy" decoding="async"', { sizes: '(max-width: 1200px) 100vw, 1120px' })}
   </div>
   <p class="facility-visual-disclaimer">Representative visual for illustrative purposes.</p>
 </section>
@@ -289,7 +289,7 @@ function heroWave() {
 function productCard(p) {
   const tags = (Array.isArray(p.tags) ? p.tags : []).map((t) => `<span class="tag">${escapeHtml(t)}</span>`).join('');
   const visual = p.image
-    ? `<div class="product-photo-frame"><img class="product-photo" src="${escapeHtml(p.image)}"${imgDims(p.image)} alt="Mamta Bhoj ${escapeHtml(p.name)} pack" loading="lazy" decoding="async"></div>`
+    ? `<div class="product-photo-frame">${picture(p.image, `class="product-photo" alt="Mamta Bhoj ${escapeHtml(p.name)} pack" loading="lazy" decoding="async"`)}</div>`
     : `<div class="product-icon" style="margin:20px 0 0 20px;">${icons.productIcons[p.icon] || icons.productIcons.wheat}</div>`;
   return `<div class="product-card${p.featured ? ' featured' : ''}" data-reveal-item>
     ${p.image ? visual : ''}
@@ -307,7 +307,7 @@ function packagingShowcase(product) {
   if (!product.image) return '';
   return `<section class="wrap" data-reveal>
     <div class="pack-grid">
-      <div class="pack-photo"><img src="${escapeHtml(product.image)}"${imgDims(product.image)} alt="Mamta Bhoj ${escapeHtml(product.name)} pack" loading="lazy" decoding="async"></div>
+      <div class="pack-photo">${picture(product.image, `alt="Mamta Bhoj ${escapeHtml(product.name)} pack" loading="lazy" decoding="async"`)}</div>
       <div>
         <span class="eyebrow">As It Reaches Your Kitchen</span>
         <h2 style="margin-top:.4em;font-size:clamp(1.4rem,2.6vw,1.9rem);">Packed for freshness, labelled for trust</h2>

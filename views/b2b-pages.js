@@ -4,7 +4,7 @@ const seo = require('../lib/seo');
 const { packSizesText, BUSINESS_ADDRESS } = require('../lib/business');
 const { ctaBand, wheatDividerBand } = require('../lib/render');
 const { findGuide } = require('./guides');
-const { B2B_LINKS, enquiryHref, LINK, B2BLINK, PRODLINK, GUIDELINK, MFRLINK, CONTACTLINK } = require('./links');
+const { B2B_LINKS, b2bAnchor, enquiryHref, LINK, B2BLINK, PRODLINK, GUIDELINK, MFRLINK, CONTACTLINK } = require('./links');
 
 // The five B2B pages. Each has a different job so they do not read as
 // one page repeated with different keywords:
@@ -604,6 +604,8 @@ function findB2BPage(slug) {
   return B2B_PAGES.find((p) => p.slug === slug) || null;
 }
 
+const cap = (t) => t.charAt(0).toUpperCase() + t.slice(1);
+
 function arrowIcon() {
   return '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>';
 }
@@ -665,6 +667,7 @@ function renderB2BPage(page, content, products) {
     if (page.products && page.productsAfter === i) body.push(productsBlock(page, products));
   });
   const otherPages = B2B_LINKS.filter((l) => l.slug !== page.slug);
+  const pageIdx = B2B_LINKS.findIndex((l) => l.slug === page.slug);
   const guideLinks = (page.guides || []).map(findGuide).filter(Boolean);
   return `
 <section class="wrap" data-reveal>
@@ -695,7 +698,7 @@ ${wheatDividerBand()}
 <section class="wrap" data-reveal>
   <div class="section-head"><span class="eyebrow">Keep Exploring</span><h2>Other ways to work with us, and further reading</h2></div>
   <ul class="guide-links">
-    ${otherPages.map((l) => `<li><a href="/${l.slug}">${escapeHtml(l.name)}</a></li>`).join('')}
+    ${otherPages.map((l, i) => `<li><a href="/${l.slug}">${escapeHtml(cap(b2bAnchor(l.slug, pageIdx + i)))}</a></li>`).join('')}
     <li><a href="${seo.MANUFACTURER_PATH}">Devmam Flourish Foods, flour manufacturer in Kanpur</a></li>
     ${guideLinks.map((g) => `<li><a href="/guides/${g.slug}">${escapeHtml(g.h1)}</a></li>`).join('')}
   </ul>

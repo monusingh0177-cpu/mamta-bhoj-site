@@ -461,7 +461,6 @@ ${businessPanel(guide)}
   <ul class="guide-links">
     ${relatedGuides.map((g) => `<li><a href="/guides/${g.slug}">${escapeHtml(g.h1)}</a></li>`).join('')}
     <li><a href="/guides">All guides</a></li>
-    ${(guide.business || []).map(b2bMeta).filter(Boolean).map((b) => `<li><a href="/${b.slug}">${escapeHtml(b.name)}</a></li>`).join('')}
     <li><a href="${seo.MANUFACTURER_PATH}">About Devmam Flourish Foods, flour manufacturer in Kanpur</a></li>
   </ul>
 </section>

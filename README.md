@@ -385,3 +385,48 @@ Safety guarantees:
   scan hits are redacted; the script refuses to run under `set -x`.
 
 Exit codes: `0` ok, `1` stopped (a check or step failed), `2` usage/config error.
+
+---
+
+## 8. SEO verification, IndexNow and images
+
+### Strict SEO check (`npm run seo:hard-check`)
+
+One command that boots an isolated copy of the working tree (own `data/`, sanitised environment)
+and runs `scripts/seo-health-check.sh --hard` against it. Besides the base checks in section 7
+it discovers routes from the sitemap **and** by crawling `<a href>` links (an indexable page
+that is linked but missing from the sitemap fails), builds the indexability matrix
+(`-- --matrix`), audits every JSON-LD graph (one Organization, WebSite and WebPage per page,
+Product only on product pages, Article only on guides, no FAQPage/SearchAction/offers/ratings/
+`sameAs`), checks duplicate and near-duplicate content, anchor-text variety, prohibited claims
+(private label, capacity, extra certifications, reviews, delivery promises, prices), hostname and
+HTTPS consistency, security headers, Brotli/gzip, ETag/304, cache headers, WebP copies, the
+IndexNow key file and a performance smoke test. Exit code 0 only with zero failures; warnings are
+printed. Against the live site: `npm run seo:hard-check -- --base-url https://devmamflourishfoods.com`
+(read-only GET/HEAD).
+
+### IndexNow (`npm run seo:indexnow`)
+
+Bing and other participating engines (not Google) can be told which canonical URLs changed.
+The public ownership key lives in `lib/indexnow.js` and is served at `/<key>.txt`.
+
+```bash
+npm run seo:indexnow                              # dry run: lists what would be sent
+npm run seo:indexnow -- --submit                  # send every sitemap URL once (after a deploy)
+npm run seo:indexnow -- --only-changed --submit   # only pages whose HTML changed since the last submission
+npm run seo:indexnow -- --since <git-ref> --submit
+```
+Run it **after** the site is deployed (it refuses to submit while the key file is not live) and only
+when content really changed. Google is not notified by IndexNow; submit the sitemap in Search Console.
+
+### Images
+
+`scripts/build-webp.sh` writes `.webp` copies next to the large JPEG/PNG images (originals are kept as
+the fallback and for social previews); pages serve them through `<picture>` (`lib/picture.js`).
+Re-run it after adding or replacing an image, then commit the `.webp` files.
+
+### Structured data, sitemap and dates
+
+Each page has one JSON-LD `@graph`. FAQ markup is not emitted (FAQ rich results are retired);
+the FAQs stay as visible HTML. The sitemap has no `<lastmod>` because no verifiable per-page
+modification date is recorded; add one only if a real date source is introduced.

@@ -7,15 +7,17 @@ const { renderAbout } = require('../views/about');
 const { renderProducts } = require('../views/products');
 const { renderProductDetail, detailsFor } = require('../views/product-detail');
 const { renderQuality } = require('../views/quality');
-const { renderFAQ, faqItems } = require('../views/faq');
+const { renderFAQ } = require('../views/faq');
 const { renderContact } = require('../views/contact');
 const { renderCertifications } = require('../views/certifications');
-const { renderB2B, b2bFaqs } = require('../views/b2b');
+const { renderB2B } = require('../views/b2b');
 const { findGuide, renderGuide, renderGuidesIndex, GUIDES } = require('../views/guides');
 const { B2B_PAGES, renderB2BPage } = require('../views/b2b-pages');
 const { sendEnquiryEmail } = require('../lib/mailer');
 const { Router } = require('../lib/router');
 const seo = require('../lib/seo');
+const { INDEXNOW_KEY, INDEXNOW_KEY_PATH } = require('../lib/indexnow');
+const { imgSize } = require('../lib/image-dims');
 const { withBusinessAddress, withCleanProductCopy } = require('../lib/business');
 
 const router = new Router();
@@ -40,6 +42,11 @@ function productsDescription(products) {
   return `Explore the Mamta Bhoj range: ${list}, milled at our Chaubepur, Kanpur facility.`;
 }
 
+// ?sent=1, ?error=1 and ?nl=... are one-off status views of a page, not separate content:
+// keep them out of the index (and give them no canonical) instead of leaving
+// near-duplicate URLs for search engines to sort out.
+const indexing = (query, path) => (query && (query.sent || query.error || query.nl) ? { noindex: true } : { canonicalPath: path });
+
 function nlStatusFromQuery(query) {
   if (query && query.nl === 'sent') return 'sent';
   if (query && query.nl === 'error') return 'error';
@@ -55,8 +62,8 @@ router.get('/', async (req, res, params, query) => {
     layout({
       title: 'Mamta Bhoj | Chakki Atta, Maida, Sooji & Besan, Kanpur',
       description: 'Mamta Bhoj by Devmam Flourish Foods LLP: naturally stone-ground chakki atta and tandoori atta, plus maida, sooji and besan, milled in Chaubepur, Kanpur.',
-      canonicalPath: '/',
-      jsonLd: [seo.organizationLd(content), seo.websiteLd()],
+      ...indexing(query, '/'),
+      jsonLd: seo.pageGraph(content, { name: 'Mamta Bhoj - Devmam Flourish Foods LLP', description: 'Mamta Bhoj by Devmam Flourish Foods LLP: naturally stone-ground chakki atta and tandoori atta, plus maida, sooji and besan, milled in Chaubepur, Kanpur.', path: '/' }),
       active: 'home',
       content,
       products,
@@ -75,8 +82,8 @@ router.get('/about', async (req, res, params, query) => {
     layout({
       title: 'Our Story | Devmam Flourish Foods LLP - Mamta Bhoj',
       description: 'Learn about Devmam Flourish Foods LLP, the Chaubepur, Kanpur flour-milling unit behind the Mamta Bhoj range of atta, tandoori atta, maida, sooji and besan.',
-      canonicalPath: '/about',
-      jsonLd: [seo.pageLd('AboutPage', 'Our Story', '/about', { about: seo.orgRefLd() }), seo.organizationLd(content), seo.breadcrumbLd(crumbs('Our Story', '/about'))],
+      ...indexing(query, '/about'),
+      jsonLd: seo.pageGraph(content, { type: 'AboutPage', name: 'Our Story', path: '/about', breadcrumbs: crumbs('Our Story', '/about'), about: { '@id': seo.ORG_ID } }),
       active: 'about',
       content,
       products,
@@ -95,8 +102,8 @@ router.get('/products', async (req, res, params, query) => {
     layout({
       title: 'Our Products | Mamta Bhoj Atta, Maida, Sooji & Besan',
       description: productsDescription(products),
-      canonicalPath: '/products',
-      jsonLd: [seo.productListLd(products), seo.breadcrumbLd(crumbs('Products', '/products'))],
+      ...indexing(query, '/products'),
+      jsonLd: seo.pageGraph(content, { type: 'CollectionPage', name: 'Mamta Bhoj products', path: '/products', breadcrumbs: crumbs('Products', '/products'), mainEntity: seo.productListNode(products) }),
       active: 'products',
       content,
       products,
@@ -152,18 +159,23 @@ router.get('/products/:slug', async (req, res, params, query) => {
     layout({
       title: `${productTitle} | Mamta Bhoj`,
       description: details.seoDescription || product.description,
-      canonicalPath: pagePath,
-      ogImage: product.image ? { path: product.image } : null,
+      ...indexing(query, pagePath),
+      ogImage: product.image ? Object.assign({ path: product.image }, imgSize(product.image)) : null,
       ogImageAlt: product.image ? `Mamta Bhoj ${product.name} pack` : null,
-      jsonLd: [
-        seo.productLd(product),
-        seo.breadcrumbLd([
+      jsonLd: seo.pageGraph(content, {
+        type: 'ItemPage',
+        name: `${productTitle} | Mamta Bhoj`,
+        description: details.seoDescription || product.description,
+        path: pagePath,
+        breadcrumbs: [
           { name: 'Home', path: '/' },
           { name: 'Products', path: '/products' },
           { name: product.name, path: pagePath },
-        ]),
-        ...(details.faqs && details.faqs.length ? [seo.faqLd(details.faqs)] : []),
-      ],
+        ],
+        mainEntity: { '@id': `${seo.absoluteUrl(pagePath)}#product` },
+        primaryImage: product.image || null,
+        nodes: [seo.productNode(product)],
+      }),
       active: 'products',
       content,
       products,
@@ -182,8 +194,8 @@ router.get('/quality', async (req, res, params, query) => {
     layout({
       title: 'Quality & Process | Stone-Ground Milling at Mamta Bhoj',
       description: 'See how Mamta Bhoj flour is made: sourcing, cleaning, stone grinding, quality checks and hygienic packing at our Chaubepur, Kanpur mill.',
-      canonicalPath: '/quality',
-      jsonLd: [seo.pageLd('WebPage', 'Quality & Process', '/quality', { about: seo.orgRefLd() }), seo.breadcrumbLd(crumbs('Quality & Process', '/quality'))],
+      ...indexing(query, '/quality'),
+      jsonLd: seo.pageGraph(content, { name: 'Quality & Process', path: '/quality', breadcrumbs: crumbs('Quality & Process', '/quality'), about: { '@id': seo.ORG_ID } }),
       ogImage: { path: '/images/quality/mamta-bhoj-quality-process-overview.jpg', width: 1536, height: 1024 },
       ogImageAlt: 'Illustrative overview of the Mamta Bhoj flour milling process',
       active: 'quality',
@@ -204,8 +216,8 @@ router.get('/faq', async (req, res, params, query) => {
     layout({
       title: 'FAQs | Mamta Bhoj Atta, Maida & Sooji',
       description: 'Answers on freshness, stone-grinding, FSSAI and ISO certification, storage, dealership and bulk orders for Mamta Bhoj atta, maida and sooji.',
-      canonicalPath: '/faq',
-      jsonLd: [seo.faqLd(faqItems(content)), seo.breadcrumbLd(crumbs('FAQs', '/faq'))],
+      ...indexing(query, '/faq'),
+      jsonLd: seo.pageGraph(content, { name: 'FAQs', path: '/faq', breadcrumbs: crumbs('FAQs', '/faq'), about: { '@id': seo.ORG_ID } }),
       active: 'faq',
       content,
       products,
@@ -227,8 +239,8 @@ router.get('/certifications', async (req, res, params, query) => {
       active: 'certifications',
       content,
       products,
-      canonicalPath: '/certifications',
-      jsonLd: [seo.pageLd('WebPage', 'Certifications', '/certifications', { about: seo.orgRefLd() }), seo.breadcrumbLd(crumbs('Certifications', '/certifications'))],
+      ...indexing(query, '/certifications'),
+      jsonLd: seo.pageGraph(content, { name: 'Certifications', path: '/certifications', breadcrumbs: crumbs('Certifications', '/certifications'), about: { '@id': seo.ORG_ID } }),
       bodyHtml: breadcrumbNav(crumbs('Certifications', '/certifications')) + renderCertifications(content),
     })
   );
@@ -243,17 +255,16 @@ router.get(seo.MANUFACTURER_PATH, async (req, res, params, query) => {
     layout({
       title: 'Flour Manufacturer in Kanpur | Devmam Flourish Foods LLP',
       description: 'Devmam Flourish Foods LLP mills Mamta Bhoj chakki atta, maida, sooji, tandoori atta and besan in Chaubepur, Kanpur. Enquire about dealership and bulk supply.',
-      canonicalPath: seo.MANUFACTURER_PATH,
-      // The full Organization (with address) lives on the home, About and Contact
-      // pages; here the page only carries a small inline reference to it.
-      jsonLd: [
-        seo.pageLd('WebPage', 'Flour Manufacturer & Bulk Flour Supplier in Kanpur', seo.MANUFACTURER_PATH, { about: seo.orgRefLd() }),
-        seo.breadcrumbLd([
+      ...indexing(query, seo.MANUFACTURER_PATH),
+      jsonLd: seo.pageGraph(content, {
+        name: 'Flour Manufacturer & Bulk Flour Supplier in Kanpur',
+        path: seo.MANUFACTURER_PATH,
+        breadcrumbs: [
           { name: 'Home', path: '/' },
           { name: 'Flour Manufacturer in Kanpur', path: seo.MANUFACTURER_PATH },
-        ]),
-        seo.faqLd(b2bFaqs(content)),
-      ],
+        ],
+        about: { '@id': seo.ORG_ID },
+      }),
       active: 'b2b',
       content,
       products,
@@ -274,15 +285,17 @@ B2B_PAGES.forEach((page) => {
       layout({
         title: page.title,
         description: page.description,
-        canonicalPath: pagePath,
-        jsonLd: [
-          seo.pageLd('WebPage', page.h1, pagePath, { about: seo.orgRefLd() }),
-          seo.breadcrumbLd([
+        ...indexing(query, pagePath),
+        jsonLd: seo.pageGraph(content, {
+          name: page.h1,
+          description: page.description,
+          path: pagePath,
+          breadcrumbs: [
             { name: 'Home', path: '/' },
             { name: page.crumb || page.eyebrow, path: pagePath },
-          ]),
-          seo.faqLd(page.faqs),
-        ],
+          ],
+          about: { '@id': seo.ORG_ID },
+        }),
         active: 'b2b',
         content,
         products,
@@ -302,19 +315,17 @@ router.get('/guides', async (req, res, params, query) => {
     layout({
       title: 'Flour Guides: Atta, Maida, Sooji & Milling | Mamta Bhoj',
       description: 'Practical guides from Mamta Bhoj: how to choose atta, types of flour, storing flour, maida vs atta, sooji vs rava and buying flour in bulk.',
-      canonicalPath: '/guides',
-      jsonLd: [
-        seo.pageLd('CollectionPage', 'Flour guides from Mamta Bhoj', '/guides', {
-          mainEntity: {
-            '@type': 'ItemList',
-            itemListElement: GUIDES.map((g, i) => ({ '@type': 'ListItem', position: i + 1, url: seo.absoluteUrl(`/guides/${g.slug}`), name: g.h1 })),
-          },
-        }),
-        seo.breadcrumbLd([
+      ...indexing(query, '/guides'),
+      jsonLd: seo.pageGraph(content, {
+        type: 'CollectionPage',
+        name: 'Flour guides from Mamta Bhoj',
+        path: '/guides',
+        breadcrumbs: [
           { name: 'Home', path: '/' },
           { name: 'Guides', path: '/guides' },
-        ]),
-      ],
+        ],
+        mainEntity: seo.itemListNode('Mamta Bhoj flour guides', GUIDES.map((g) => ({ path: `/guides/${g.slug}`, name: g.h1 }))),
+      }),
       active: 'guides',
       content,
       products,
@@ -358,16 +369,19 @@ router.get('/guides/:slug', async (req, res, params, query) => {
     layout({
       title: guide.title,
       description: guide.description,
-      canonicalPath: pagePath,
-      jsonLd: [
-        seo.articleLd(guide.h1, guide.description, pagePath),
-        seo.breadcrumbLd([
+      ...indexing(query, pagePath),
+      jsonLd: seo.pageGraph(content, {
+        name: guide.h1,
+        description: guide.description,
+        path: pagePath,
+        breadcrumbs: [
           { name: 'Home', path: '/' },
           { name: 'Guides', path: '/guides' },
           { name: guide.shortTitle, path: pagePath },
-        ]),
-        seo.faqLd(guide.faqs),
-      ],
+        ],
+        mainEntity: { '@id': `${seo.absoluteUrl(pagePath)}#article` },
+        nodes: [seo.articleNode(guide.h1, guide.description, pagePath)],
+      }),
       active: 'guides',
       content,
       products,
@@ -386,8 +400,8 @@ router.get('/contact', async (req, res, params, query) => {
     layout({
       title: 'Contact & Dealership Enquiries | Mamta Bhoj',
       description: 'Contact Devmam Flourish Foods LLP in Chaubepur, Kanpur for Mamta Bhoj dealership, distributor, wholesale and bulk enquiries.',
-      canonicalPath: '/contact',
-      jsonLd: [seo.pageLd('ContactPage', 'Contact', '/contact', { mainEntity: seo.orgRefLd() }), seo.organizationLd(content), seo.breadcrumbLd(crumbs('Contact', '/contact'))],
+      ...indexing(query, '/contact'),
+      jsonLd: seo.pageGraph(content, { type: 'ContactPage', name: 'Contact', path: '/contact', breadcrumbs: crumbs('Contact', '/contact'), mainEntity: { '@id': seo.ORG_ID } }),
       active: 'contact',
       content,
       products,
@@ -446,6 +460,12 @@ router.post('/newsletter', async (req, res) => {
   });
 
   redirect(res, back + '?nl=sent');
+});
+
+// IndexNow ownership key file (public by design; see lib/indexnow.js). Not in the sitemap.
+router.get(INDEXNOW_KEY_PATH, async (req, res) => {
+  res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'public, max-age=86400' });
+  res.end(INDEXNOW_KEY);
 });
 
 router.get('/robots.txt', async (req, res) => {

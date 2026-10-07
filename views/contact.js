@@ -1,4 +1,5 @@
 'use strict';
+const { picture } = require('../lib/picture');
 const { escapeHtml } = require('../lib/http-utils');
 const icons = require('../lib/icons');
 
@@ -33,7 +34,7 @@ function renderContact(content, query, products) {
 <section class="wrap" data-reveal>
   <div class="contact-grid">
     <div class="contact-info">
-      <div class="contact-art"><img src="/images/about-mill/about-mill-exterior.jpg" width="764" height="508" alt="Representative AI-generated visual of a flour-mill exterior" loading="lazy" decoding="async"></div>
+      <div class="contact-art">${picture('/images/about-mill/about-mill-exterior.jpg', 'alt="Representative AI-generated visual of a flour-mill exterior" loading="lazy" decoding="async"')}</div>
       <div class="location-card">
         <div class="contact-row" style="margin-bottom:12px;">${icons.trust.pin}<div><strong>Visit Our Facility</strong><span>${escapeHtml(content.address)}</span></div></div>
         <p class="location-card-copy">Devmam Flourish Foods LLP operates from Chaubepur, Kanpur Nagar, Uttar Pradesh, serving the Mamta Bhoj brand and its customers from our flour-milling facility.</p>

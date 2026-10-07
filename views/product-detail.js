@@ -7,7 +7,7 @@ const { findGuide } = require('./guides');
 const { PRODUCT_EXTRA } = require('./product-content');
 const { b2bMeta, enquiryHref: contactHref } = require('./links');
 const seo = require('../lib/seo');
-const { imgDims } = require('../lib/image-dims');
+const { picture } = require('../lib/picture');
 const { packSizesText, packSizesShort } = require('../lib/business');
 
 // Presentation copy for each product's detail page. Kept separate from
@@ -125,7 +125,7 @@ function renderProductDetail(product, allProducts, content) {
     .slice(0, 4);
 
   const heroVisual = product.image
-    ? `<div class="product-photo-frame product-hero-frame"><img class="product-photo" src="${escapeHtml(product.image)}"${imgDims(product.image)} alt="${escapeHtml(brandedName)} pack" fetchpriority="high" decoding="async"></div>`
+    ? `<div class="product-photo-frame product-hero-frame">${picture(product.image, `class="product-photo" alt="${escapeHtml(brandedName)} pack" fetchpriority="high" decoding="async"`)}</div>`
     : `<div class="product-photo-frame product-hero-frame"><div class="product-icon">${icons.productIcons[product.icon] || icons.productIcons.wheat}</div></div>`;
 
   return `

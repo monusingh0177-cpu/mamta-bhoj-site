@@ -98,3 +98,16 @@ Backlinks and citations (Google Business Profile, trade directories, local media
 - Softened wording that could read as "customers we serve" on the new manufacturer page ("suits ..." instead of "is bought by ..."), and made the home meta description say that only the atta is stone-ground.
 - Long (one-year, immutable) caching now applies only when `?v=` equals the file's current fingerprint; a stale or invented `?v=` gets the one-day cache. HTML and other dynamic responses never receive a Cache-Control header from the static-file code.
 - Keyboard: the mobile menu button now has `aria-controls`, Enter moves focus into the menu (the menu precedes the button in page order, so Tab used to skip it), and Escape closes it.
+
+## Final SEO pass (October 2026): additions
+
+See README section 8 for usage. Summary of what the final code-level pass added on top of Phase 3:
+
+- Structured data rebuilt as one connected `@graph` per page (Organization, WebSite, WebPage, BreadcrumbList, Product/Article/ItemList); FAQPage markup removed everywhere (visible FAQs kept).
+- Status views (`?sent`, `?error`, `?nl`) are `noindex` with no canonical; other query variants canonicalise to the clean URL.
+- IndexNow key file route plus `scripts/indexnow-submit.js` (dry run by default; `--only-changed` avoids resubmitting unchanged pages).
+- Brotli (gzip fallback), HTML ETag with 304 and `Cache-Control: no-cache`, `no-store` for `/admin`, baseline security headers, HSTS only on requests the proxy reports as HTTPS, in-app http-to-https hop for the canonical host.
+- WebP copies of the large images served through `<picture>`; home page images on desktop dropped from about 2.5 MB to about 1 MB.
+- `npm run seo:hard-check` and the hard mode of `seo-health-check.sh`.
+- Legacy URLs: the only retired public URL in the history is `/products/chakki-atta` (301 to `/products/fresh-chakki-atta`); nothing else needed redirecting. No hreflang (single English site).
+- `<lastmod>` is intentionally absent (no verifiable per-URL modification date).

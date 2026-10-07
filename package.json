@@ -8,7 +8,9 @@
   },
   "scripts": {
     "start": "node server.js",
-    "dev": "node --watch server.js"
+    "dev": "node --watch server.js",
+    "seo:hard-check": "bash scripts/seo-hard-check.sh",
+    "seo:indexnow": "node scripts/indexnow-submit.js"
   },
   "dependencies": {
     "nodemailer": "^10.0.10"

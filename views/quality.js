@@ -2,7 +2,7 @@
 const { escapeHtml } = require('../lib/http-utils');
 const icons = require('../lib/icons');
 const { ctaBand, wheatDividerBand } = require('../lib/render');
-const { imgDims } = require('../lib/image-dims');
+const { picture } = require('../lib/picture');
 
 function renderQuality(content, gallery) {
   const sortedGallery = gallery.slice().sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
@@ -58,7 +58,7 @@ ${wheatDividerBand()}
     <p>An illustrative view of the journey from carefully handled grain through processing, quality checks and hygienic packing.</p>
   </div>
   <div class="quality-process-visual">
-    <img src="/images/quality/mamta-bhoj-quality-process-overview.jpg" width="1536" height="1024" alt="Illustrative overview of the Mamta Bhoj flour milling process from wheat receiving and cleaning through milling, quality checking and hygienic packing" loading="lazy" decoding="async">
+    ${picture('/images/quality/mamta-bhoj-quality-process-overview.jpg', 'alt="Illustrative overview of the Mamta Bhoj flour milling process from wheat receiving and cleaning through milling, quality checking and hygienic packing" loading="lazy" decoding="async"', { sizes: '(max-width: 1200px) 100vw, 1120px' })}
   </div>
   <p class="quality-process-disclaimer">A representative illustration of our milling process — not an exact depiction of our facility's machinery or layout.</p>
 </section>
@@ -78,7 +78,7 @@ ${ctaBand(content)}
 
 function galleryTile(g) {
   const visual = g.image
-    ? `<img src="${escapeHtml(g.image)}"${imgDims(g.image)} alt="${escapeHtml(g.caption)}" loading="lazy" decoding="async">`
+    ? picture(g.image, `alt="${escapeHtml(g.caption)}" loading="lazy" decoding="async"`)
     : icons.galleryArt[g.icon] || icons.galleryArt.field;
   return `<div class="gallery-tile" data-reveal-item>${visual}<div class="gallery-cap">${escapeHtml(g.caption)}</div></div>`;
 }

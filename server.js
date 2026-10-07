@@ -4,6 +4,7 @@ const url = require('url');
 const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
+const crypto = require('crypto');
 
 const { Router } = require('./lib/router');
 const publicRoutes = require('./routes/public');
@@ -41,10 +42,22 @@ const ROOT_ALIASES = {
 // Text assets worth compressing (images/PDFs are already compressed).
 const COMPRESSIBLE_EXT = new Set(['.css', '.js', '.svg']);
 const COMPRESSIBLE_TYPE = /^(text\/|application\/(javascript|json|xml)|image\/svg\+xml)/i;
-const gzipCache = new Map(); // filePath -> { stamp, buf }
+const encodedCache = new Map(); // `${enc}:${filePath}` -> { stamp, buf }
 
-function acceptsGzip(req) {
-  return /\bgzip\b/i.test(String(req.headers['accept-encoding'] || ''));
+// Brotli when the client offers it, otherwise gzip, otherwise nothing.
+function pickEncoding(req) {
+  const offered = String(req.headers['accept-encoding'] || '').toLowerCase().split(',').map((x) => x.trim());
+  const accepts = (name) => offered.some((x) => x === name || (x.startsWith(name + ';') && !/q=0(\.0+)?$/.test(x)));
+  if (accepts('br')) return 'br';
+  if (accepts('gzip')) return 'gzip';
+  return null;
+}
+
+function encode(buf, enc, quality) {
+  if (enc === 'br') {
+    return zlib.brotliCompressSync(buf, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: quality, [zlib.constants.BROTLI_PARAM_SIZE_HINT]: buf.length } });
+  }
+  return zlib.gzipSync(buf, { level: 9 });
 }
 
 // Cache lifetimes: CSS/JS are fingerprinted (?v=<hash>, see lib/asset-version.js).
@@ -52,7 +65,7 @@ function acceptsGzip(req) {
 // (immutable); any other request, including a stale or made-up ?v=, keeps the
 // one-day lifetime. Images/documents change rarely and are not fingerprinted.
 // This function is only used for static files; HTML and other dynamic responses
-// never receive a Cache-Control header from it.
+// never receive a long-lived Cache-Control header from it.
 function cacheControlFor(pathname, versioned) {
   if (pathname.startsWith('/uploads/')) return 'public, max-age=3600';
   if (versioned && /^\/(css|js)\//.test(pathname)) return 'public, max-age=31536000, immutable';
@@ -89,8 +102,8 @@ function tryServeStatic(req, res, pathname, query) {
     ETag: etag,
     'Last-Modified': stat.mtime.toUTCString(),
   };
-  const gz = COMPRESSIBLE_EXT.has(ext) && stat.size > 1024;
-  if (gz) headers.Vary = 'Accept-Encoding';
+  const compressible = COMPRESSIBLE_EXT.has(ext) && stat.size > 1024;
+  if (compressible) headers.Vary = 'Accept-Encoding';
 
   if (req.headers['if-none-match'] === etag) {
     res.writeHead(304, headers);
@@ -98,13 +111,15 @@ function tryServeStatic(req, res, pathname, query) {
     return true;
   }
 
-  if (gz && acceptsGzip(req)) {
-    let hit = gzipCache.get(filePath);
+  const enc = compressible ? pickEncoding(req) : null;
+  if (enc) {
+    const key = `${enc}:${filePath}`;
+    let hit = encodedCache.get(key);
     if (!hit || hit.stamp !== etag) {
-      hit = { stamp: etag, buf: zlib.gzipSync(fs.readFileSync(filePath), { level: 9 }) };
-      gzipCache.set(filePath, hit);
+      hit = { stamp: etag, buf: encode(fs.readFileSync(filePath), enc, 11) };
+      encodedCache.set(key, hit);
     }
-    headers['Content-Encoding'] = 'gzip';
+    headers['Content-Encoding'] = enc;
     headers['Content-Length'] = hit.buf.length;
     res.writeHead(200, headers);
     res.end(req.method === 'HEAD' ? undefined : hit.buf);
@@ -122,16 +137,35 @@ function tryServeStatic(req, res, pathname, query) {
   return true;
 }
 
-// Gzip for dynamic HTML/XML/text responses (the ~75 KB home page becomes ~13 KB).
-// Handlers keep calling res.writeHead(...)/res.end(body); this wrapper holds the
-// head until the body is known, then compresses when the client accepts gzip and
-// the body is a compressible type of useful size. Redirects, empty bodies and
-// anything already encoded pass through untouched. A reverse proxy that also
-// compresses leaves Content-Encoding responses alone, so there is no double encoding.
-function enableCompression(req, res) {
+// Baseline security headers on every response (static, dynamic and redirects).
+// HSTS is only sent when the request really arrived over HTTPS (behind the proxy:
+// X-Forwarded-Proto: https); it never includes subdomains or preload.
+// No Content-Security-Policy is set here on purpose: the site uses inline styles
+// and a third-party font stylesheet, so a policy needs its own testing.
+function applySecurityHeaders(req, res) {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=()');
+  const proto = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim().toLowerCase();
+  if (proto === 'https') res.setHeader('Strict-Transport-Security', 'max-age=31536000');
+}
+
+// Response handling for dynamic routes. Handlers keep calling
+// res.writeHead(...)/res.end(body); this wrapper holds the head until the body is
+// known, then:
+//  * public HTML (GET/HEAD, 200, no cookies, not /admin) gets a weak content-hash ETag,
+//    answers If-None-Match with 304, and carries "Cache-Control: no-cache" (always
+//    revalidate, never served stale as fresh); /admin responses get "no-store";
+//  * text bodies over 1 KB are compressed with Brotli or gzip when the client accepts
+//    it (the ~75 KB home page becomes ~10 KB).
+// Redirects, empty bodies and anything already encoded pass through untouched. A reverse
+// proxy that also compresses leaves Content-Encoding responses alone.
+function enableResponseHandling(req, res, pathname) {
   const writeHead = res.writeHead;
   const end = res.end;
-  const canGzip = acceptsGzip(req);
+  const enc = pickEncoding(req);
+  const isAdmin = pathname === '/admin' || pathname.startsWith('/admin/');
+  const readOnly = req.method === 'GET' || req.method === 'HEAD';
   let status = 200;
   let headers = null;
   res.writeHead = function (s, h) {
@@ -139,14 +173,30 @@ function enableCompression(req, res) {
     headers = Object.assign({}, h);
     return this;
   };
-  res.end = function (chunk, enc, cb) {
+  res.end = function (chunk, encoding, cb) {
     if (headers) {
       const type = String(headers['Content-Type'] || headers['content-type'] || '');
-      const body = chunk == null || typeof chunk === 'function' ? null : Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk), typeof enc === 'string' ? enc : 'utf8');
+      const body = chunk == null || typeof chunk === 'function' ? null : Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk), typeof encoding === 'string' ? encoding : 'utf8');
+      const isHtml = /^text\/html/i.test(type);
+      const hasCookie = Boolean(headers['Set-Cookie'] || headers['set-cookie'] || res.getHeader('set-cookie'));
+      if (isHtml && body) {
+        if (!headers['Cache-Control'] && !res.getHeader('cache-control')) headers['Cache-Control'] = isAdmin ? 'no-store' : 'no-cache';
+        if (readOnly && status === 200 && !isAdmin && !hasCookie) {
+          const tag = `W/"${crypto.createHash('sha1').update(body).digest('base64url')}"`;
+          headers.ETag = tag;
+          const offered = String(req.headers['if-none-match'] || '').split(',').map((x) => x.trim());
+          if (offered.includes(tag) || offered.includes('*')) {
+            headers.Vary = 'Accept-Encoding';
+            delete headers['Content-Type'];
+            writeHead.call(res, 304, headers);
+            return end.call(res);
+          }
+        }
+      }
       if (body && COMPRESSIBLE_TYPE.test(type)) headers.Vary = 'Accept-Encoding';
-      if (canGzip && body && body.length > 1024 && COMPRESSIBLE_TYPE.test(type) && !headers['Content-Encoding'] && !res.getHeader('content-encoding')) {
-        const packed = zlib.gzipSync(body, { level: 6 });
-        headers['Content-Encoding'] = 'gzip';
+      if (enc && body && body.length > 1024 && COMPRESSIBLE_TYPE.test(type) && !headers['Content-Encoding'] && !res.getHeader('content-encoding')) {
+        const packed = enc === 'br' ? encode(body, 'br', 4) : zlib.gzipSync(body, { level: 6 });
+        headers['Content-Encoding'] = enc;
         headers['Content-Length'] = packed.length;
         writeHead.call(res, status, headers);
         return end.call(res, packed);
@@ -154,7 +204,7 @@ function enableCompression(req, res) {
       writeHead.call(res, status, headers);
       headers = null;
     }
-    return end.call(res, chunk, enc, cb);
+    return end.call(res, chunk, encoding, cb);
   };
 }
 
@@ -163,12 +213,25 @@ router.routes = [...publicRoutes.routes, ...adminRoutes.routes];
 
 const server = http.createServer(async (req, res) => {
   try {
+    applySecurityHeaders(req, res);
     // One preferred hostname: www.<domain> permanently redirects to the
     // canonical https apex, preserving path and query. The target host can
     // never match this rule, so it cannot loop. (http->https is handled by
-    // the reverse proxy; the www rule always lands on https regardless.)
+    // the reverse proxy, with an app-level fallback below; the www rule always lands
+    // on https regardless.)
     const reqHost = String(req.headers['x-forwarded-host'] || req.headers.host || '').split(',')[0].trim().toLowerCase().replace(/:\d+$/, '');
     if (reqHost === `www.${CANONICAL_HOST}` && req.url.startsWith('/')) {
+      const keepMethod = req.method !== 'GET' && req.method !== 'HEAD';
+      res.writeHead(keepMethod ? 308 : 301, { Location: SITE_ORIGIN + req.url });
+      res.end();
+      return;
+    }
+
+    // http -> https for the canonical host (single hop). Only acts when the proxy says
+    // the client used plain http (X-Forwarded-Proto: http); localhost, IPs and other
+    // hosts are never redirected, so local testing is unaffected.
+    const fwdProto = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim().toLowerCase();
+    if (fwdProto === 'http' && reqHost === CANONICAL_HOST && req.url.startsWith('/')) {
       const keepMethod = req.method !== 'GET' && req.method !== 'HEAD';
       res.writeHead(keepMethod ? 308 : 301, { Location: SITE_ORIGIN + req.url });
       res.end();
@@ -184,7 +247,7 @@ const server = http.createServer(async (req, res) => {
 
     if (tryServeStatic(req, res, pathname, parsed.query)) return;
 
-    enableCompression(req, res);
+    enableResponseHandling(req, res, pathname);
 
     // Admin/login pages are private: keep them out of search results even if
     // a crawler ignores robots.txt (the admin layout also carries a noindex meta).

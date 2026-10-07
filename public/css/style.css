@@ -47,6 +47,8 @@ main{overflow-x:clip;}
 p{margin:0;line-height:1.65;color:var(--ink-soft);}
 a{color:inherit;}
 img{max-width:100%;height:auto;display:block;}
+/* <picture> is only a wrapper for the WebP source: the <img> inside lays out exactly as before */
+picture{display:contents;}
 button,input,textarea,select{font-family:inherit;}
 .wrap{max-width:1120px;margin:0 auto;padding-inline:max(16px, env(safe-area-inset-left,0px)) max(16px, env(safe-area-inset-right,0px));}
 section{padding-block:clamp(40px,8vw,88px);}
@@ -664,3 +666,7 @@ body{text-rendering:optimizeLegibility;}
 
 /* Contact form heading (keeps the heading outline h1 > h2 on /contact) */
 .form-panel-title{font-size:1.2rem;margin:0 0 14px;}
+
+/* Plain-text phone/email line under the enquiry call-to-action */
+.cta-band .cta-contact{margin:14px auto 0;font-size:.92rem;}
+.cta-contact a{color:inherit;font-weight:600;text-decoration:underline;text-underline-offset:2px;}

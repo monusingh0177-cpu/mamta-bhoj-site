@@ -31,6 +31,8 @@ VERBOSE=0
 EXPECT_URLS=""
 TIMEOUT=15
 NO_COLOR_FLAG=0
+HARD=0
+MATRIX=0
 
 usage() {
   cat <<'EOF'
@@ -49,6 +51,9 @@ Target:
 Options:
   --expect-urls N        Fail unless the sitemap lists exactly N URLs
   --skip-links           Skip the (slower) internal link / asset check
+  --hard                 Add the strict checks: link-graph discovery crawl, schema audit, duplicate
+                         content heuristics, performance smoke, security headers, IndexNow key, claims
+  --matrix               Print the per-URL indexability matrix (implies nothing else; use with --hard)
   --timeout SECONDS      Per-request timeout (default: 15)
   --verbose              Print every passing check, not just a count
   --no-color             Disable ANSI colours
@@ -69,6 +74,8 @@ while [ $# -gt 0 ]; do
     --expect-urls)     [ $# -ge 2 ] || die_usage "--expect-urls needs a value"; EXPECT_URLS="$2"; shift 2 ;;
     --timeout)         [ $# -ge 2 ] || die_usage "--timeout needs a value"; TIMEOUT="$2"; shift 2 ;;
     --skip-links)      SKIP_LINKS=1; shift ;;
+    --hard)            HARD=1; shift ;;
+    --matrix)          MATRIX=1; shift ;;
     --verbose|-v)      VERBOSE=1; shift ;;
     --no-color)        NO_COLOR_FLAG=1; shift ;;
     -h|--help)         usage; exit 0 ;;
@@ -89,7 +96,7 @@ COLOR=0
 if [ -t 1 ] && [ "$NO_COLOR_FLAG" -eq 0 ] && [ -z "${NO_COLOR:-}" ]; then COLOR=1; fi
 
 export HC_BASE_URL="${BASE_URL%/}" HC_EXPECTED_ORIGIN="${EXPECTED_ORIGIN%/}" HC_TIMEOUT="$TIMEOUT" \
-       HC_SKIP_LINKS="$SKIP_LINKS" HC_VERBOSE="$VERBOSE" HC_EXPECT_URLS="$EXPECT_URLS" HC_COLOR="$COLOR"
+       HC_SKIP_LINKS="$SKIP_LINKS" HC_HARD="$HARD" HC_MATRIX="$MATRIX" HC_VERBOSE="$VERBOSE" HC_EXPECT_URLS="$EXPECT_URLS" HC_COLOR="$COLOR"
 
 # -----------------------------------------------------------------------------
 # The checks themselves: a self-contained Node program (standard library only).
@@ -105,6 +112,8 @@ const BASE = process.env.HC_BASE_URL;
 const EXP = process.env.HC_EXPECTED_ORIGIN;
 const TIMEOUT = Number(process.env.HC_TIMEOUT) * 1000;
 const SKIP_LINKS = process.env.HC_SKIP_LINKS === '1';
+const HARD = process.env.HC_HARD === '1';
+const MATRIX = process.env.HC_MATRIX === '1';
 const VERBOSE = process.env.HC_VERBOSE === '1';
 const EXPECT_URLS = process.env.HC_EXPECT_URLS ? Number(process.env.HC_EXPECT_URLS) : null;
 const COLOR = process.env.HC_COLOR === '1';
@@ -224,7 +233,7 @@ const locOk = (loc, expectedPath) => loc === EXP + expectedPath || loc === expec
 
   // ---- per-page checks
   section = 'Pages (' + pages.length + ')';
-  const meta = []; const linkSet = new Set(); const linkSrc = new Map();
+  const meta = []; const store = []; const linkSet = new Set(); const linkSrc = new Map();
   for (const { loc, path: p, r } of pages) {
     const tag = (s) => `${p} :: ${s}`;
     if (r.error || r.status !== 200) { fail(tag('returns 200 (no redirect, no error)'), r.error || 'status ' + r.status); continue; }
@@ -265,6 +274,9 @@ const locOk = (loc, expectedPath) => loc === EXP + expectedPath || loc === expec
     const ldRaw = [...html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)].map((x) => x[1]);
     const ld = []; let ldOk = true;
     for (const raw of ldRaw) { try { ld.push(JSON.parse(raw)); } catch (e) { ldOk = false; } }
+    const nodesOf = (o) => (o && o['@graph'] ? o['@graph'] : [o]).filter(Boolean);
+    const ldNodes = [].concat(...ld.map(nodesOf));
+    const typesOf = (n) => [].concat(n['@type'] || []);
     expect(ldOk, tag('all JSON-LD blocks are valid JSON'));
     const keys = new Set(); const defined = new Set(); const refs = new Set();
     (function walk(o) {
@@ -275,19 +287,16 @@ const locOk = (loc, expectedPath) => loc === EXP + expectedPath || loc === expec
       }
     })(ld);
     if (p !== '/') {
-      expect(ld.some((n) => n['@type'] === 'BreadcrumbList'), tag('has BreadcrumbList schema'));
+      expect(ldNodes.some((n) => typesOf(n).includes('BreadcrumbList')), tag('has BreadcrumbList schema'));
       expect(/<nav[^>]+class="breadcrumb"/i.test(html), tag('has a visible breadcrumb'), '', 'WARN');
     }
     const badKeys = CFG.forbiddenSchemaKeys.filter((k) => keys.has(k));
     expect(badKeys.length === 0, tag('schema has no offers/price/rating/review/etc.'), badKeys.join(', '));
     const unresolved = [...refs].filter((x) => !defined.has(x));
     expect(unresolved.length === 0, tag('no unresolved @id references in schema'), unresolved.join(', '));
-    for (const node of ld) {
-      if (node['@type'] === 'FAQPage') {
-        const miss = (node.mainEntity || []).filter((q) => !text.includes(unesc(q.name)) || !text.includes(unesc((q.acceptedAnswer || {}).text || '')));
-        expect(miss.length === 0, tag('every FAQPage question + answer is visible on the page'), miss.map((q) => q.name).join(' | '));
-      }
-      if (node['@type'] === 'Organization' && node.address) {
+    expect(!ldNodes.some((n) => typesOf(n).includes('FAQPage') || typesOf(n).includes('QAPage')), tag('no FAQPage/QAPage markup (FAQ rich results are retired; FAQs stay as visible HTML)'));
+    for (const node of ldNodes) {
+      if (typesOf(node).includes('Organization') && node.address) {
         const a = node.address; const joined = `${a.streetAddress}, ${a.addressLocality}, ${a.addressRegion} – ${a.postalCode}`;
         expect(joined === CFG.address, tag('Organization schema address matches the authoritative address'), joined);
       }
@@ -316,6 +325,9 @@ const locOk = (loc, expectedPath) => loc === EXP + expectedPath || loc === expec
     internal.forEach((h) => { linkSet.add(h); if (!linkSrc.has(h)) linkSrc.set(h, new Set()); linkSrc.get(h).add(p); });
     const mainHtml = (html.match(/<main[\s\S]*?<\/main>/i) || [''])[0];
     const mainHrefs = new Set(tags(mainHtml, 'a').map((a) => (a.href || '').split('#')[0].split('?')[0].replace(/\/$/, '')).filter((h) => h.startsWith('/')));
+    const allLinks = tags(html, 'a').map((a) => a.href || '').filter(Boolean);
+    const mainAnchors = [...mainHtml.matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a>/gi)].map((m) => ({ href: ((attrs('<a ' + m[1] + '>').href) || '').split('#')[0].split('?')[0].replace(/\/$/, ''), text: unesc(m[2].replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim() })).filter((a) => a.href.startsWith('/'));
+    store.push({ p, status: r.status, headers: r.headers, html, text, ldNodes, title: unesc(title), desc: unesc(desc || ''), canon: canon[0], h1: unesc((h1s[0] || '').replace(/<[^>]+>/g, '')).trim(), h1Count: h1s.length, metaRobots: (metas.find((x) => x.name === 'robots') || {}).content || '', allLinks, mainAnchors });
     meta.push({ mainHrefs, path: p, title: unesc(title), desc: unesc(desc || ''), canon: canon[0], h1: unesc((h1s[0] || '').replace(/<[^>]+>/g, '')).trim(), hrefs: new Set(internal.map((h) => h.split('?')[0].replace(/\/$/, '') || '/')) });
   }
 
@@ -346,6 +358,250 @@ const locOk = (loc, expectedPath) => loc === EXP + expectedPath || loc === expec
   expect(lacks(prods, (x) => has(x, isGuide) && has(x, (h) => B2B_SET.includes(h)) && x.mainHrefs.has(MFR)) === '', 'product pages link to a guide, a B2B page and the manufacturer page in their body', lacks(prods, (x) => has(x, isGuide) && has(x, (h) => B2B_SET.includes(h)) && x.mainHrefs.has(MFR)));
   expect(lacks(guides, (x) => has(x, isProduct) && has(x, (h) => B2B_SET.includes(h)) && x.mainHrefs.has(MFR)) === '', 'guides link to a product, a B2B page and the manufacturer page in their body', lacks(guides, (x) => has(x, isProduct) && has(x, (h) => B2B_SET.includes(h)) && x.mainHrefs.has(MFR)));
   expect(lacks(b2bPages, (x) => has(x, isProduct) && (x.path === MFR || x.mainHrefs.has(MFR)) && x.mainHrefs.has('/contact')) === '', 'B2B and manufacturer pages link to products, the manufacturer page and the enquiry form in their body', lacks(b2bPages, (x) => has(x, isProduct) && (x.path === MFR || x.mainHrefs.has(MFR)) && x.mainHrefs.has('/contact')));
+
+  // ======================= HARD MODE (--hard): strict, site-wide checks =======================
+  if (HARD) {
+    const origin = new URL(EXP).origin;
+    const inSitemap = new Set(pages.map((x) => x.path));
+    const plain = (h) => (h || '').split('#')[0];
+    const cleanPath = (h) => { const q = plain(h).split('?')[0]; return q.length > 1 ? q.replace(/\/+$/, '') : q; };
+    const isIndexable = (rec) => !/noindex/i.test((rec.metaRobots || '') + ' ' + (rec.headers['x-robots-tag'] || ''));
+    // main text minus shared template blocks (product cards, call-to-action band, link lists, process/why grids)
+    const SHARED = /class="(product-grid|cta-band|guide-links|guide-grid|journey-section|why-grid|promo-strip)/;
+    const mainTextOf = (html) => visible(((html.match(/<main[\s\S]*?<\/main>/i) || [''])[0]).split(/(?=<section\b)/).filter((blk) => !SHARED.test(blk)).join(' '));
+
+    // ---- A. link-graph discovery: every internal page reachable by <a href> is accounted for
+    section = 'Hard: discovery crawl and indexability';
+    const known = new Map(store.map((r) => [r.p, r]));
+    const queue = []; const seenQ = new Set(store.map((r) => r.p)); const discovered = []; const paramVariants = new Set();
+    for (const r of store) for (const h of r.allLinks) {
+      if (!h.startsWith('/') || h.startsWith('//')) continue;
+      const base = cleanPath(h); if (plain(h).includes('?')) paramVariants.add(plain(h));
+      if (/^\/(css|js|images|documents|uploads)\//.test(base) || /\.(png|jpe?g|webp|ico|svg|pdf|txt|xml)$/i.test(base) || base === '' ) continue;
+      if (!seenQ.has(base)) { seenQ.add(base); queue.push(base); }
+    }
+    const crawled = await pool(queue, 6, async (p) => ({ p, r: await request(BASE + p) }));
+    const offSitemap = [];
+    for (const { p, r } of crawled) {
+      if (r.error) { fail(`link target ${p} is reachable`, r.error); continue; }
+      if (p.startsWith('/admin')) continue;
+      discovered.push([p, r.status]);
+      if (r.status === 200 && /text\/html/i.test(r.headers['content-type'] || '') && !/noindex/i.test(r.body.slice(0, 4000)) && !/noindex/i.test(r.headers['x-robots-tag'] || '')) offSitemap.push(p);
+      else if (r.status >= 400) fail(`internal link target ${p} returns ${r.status}`, '');
+      else if (r.status >= 300) warn(`internal link target ${p} redirects (${r.status} -> ${r.headers.location})`, 'link straight to the final URL');
+    }
+    expect(offSitemap.length === 0, 'every indexable page found by crawling links is in the sitemap', offSitemap.join(', '));
+    pass(`link crawl: ${store.length} sitemap pages + ${crawled.length} other internal link targets examined`);
+    // query-string variants must never be a second indexable copy
+    const paramBad = []; let paramN = 0;
+    for (const v of [...paramVariants].slice(0, 60)) {
+      const path0 = v.split('?')[0]; if (path0.startsWith('/admin') || /\.(png|jpe?g|webp|css|js)$/.test(path0)) continue;
+      const r = await request(BASE + v); paramN++;
+      if (r.error || r.status !== 200) continue;
+      const canon = (/<link rel="canonical" href="([^"]+)"/i.exec(r.body) || [])[1];
+      const noidx = /<meta name="robots" content="[^"]*noindex/i.test(r.body);
+      if (!noidx && canon !== EXP + (path0 === '/' ? '/' : path0)) paramBad.push(`${v} canonical=${canon}`);
+    }
+    expect(paramBad.length === 0, `query-string URLs (${paramN} variants linked on the site) canonicalise to the clean URL or are noindex`, paramBad.slice(0, 4).join('; '));
+    for (const q of ['?sent=1', '?error=1', '?nl=sent']) {
+      const r = await request(BASE + '/contact' + q);
+      expect(!r.error && /<meta name="robots" content="[^"]*noindex/i.test(r.body) && !/rel="canonical"/.test(r.body), `/contact${q} (a status view) is noindex and has no canonical`, r.error || '');
+    }
+    const sm0 = await request(BASE + '/sitemap.xml');
+    expect(!/<lastmod>/.test(sm0.body) || [...sm0.body.matchAll(/<lastmod>([^<]+)<\/lastmod>/g)].every((m) => !isNaN(Date.parse(m[1])) && Date.parse(m[1]) <= Date.now() + 864e5), 'sitemap lastmod values (if any) are valid dates and not in the future');
+    if (!/<lastmod>/.test(sm0.body)) pass('sitemap has no lastmod: none is emitted because no verifiable per-URL modification date exists');
+    const llms = await request(BASE + '/llms.txt');
+    expect(!llms.error && llms.status === 404, 'no /llms.txt (not used by Google Search; deliberately absent)', llms.error || 'status ' + llms.status);
+    const robotsTxt = (await request(BASE + '/robots.txt')).body || '';
+    const dis = robotsTxt.split(/\r?\n/).filter((l) => /^disallow:\s*\S/i.test(l)).map((l) => l.replace(/^disallow:\s*/i, '').trim());
+    expect(!pages.some((x) => dis.some((d) => x.path.startsWith(d))), 'no sitemap URL is blocked by a robots.txt Disallow rule', dis.join(', '));
+
+    // ---- B. structured data audit
+    section = 'Hard: structured data';
+    const BAD_TYPES = ['FAQPage', 'QAPage', 'HowTo', 'LocalBusiness', 'Review', 'AggregateRating', 'Offer', 'AggregateOffer', 'JobPosting', 'Recipe', 'Event', 'SpeakableSpecification'];
+    let sameAsFound = []; const logoUrls = new Set(); const sdProblems = [];
+    for (const r of store) {
+      const types = [].concat(...r.ldNodes.map((n) => [].concat(n['@type'] || [])));
+      const count = (t) => types.filter((x) => x === t).length;
+      const bad = types.filter((t) => BAD_TYPES.includes(t));
+      if (bad.length) sdProblems.push(`${r.p}: ${bad.join(',')}`);
+      if (JSON.stringify(r.ldNodes).includes('SearchAction')) sdProblems.push(`${r.p}: SearchAction`);
+      if (count('Organization') !== 1 || count('WebSite') !== 1) sdProblems.push(`${r.p}: needs exactly one Organization and one WebSite (${count('Organization')}/${count('WebSite')})`);
+      const wp = r.ldNodes.filter((n) => [].concat(n['@type']).some((t) => /^(WebPage|AboutPage|ContactPage|CollectionPage|ItemPage)$/.test(t)));
+      if (wp.length !== 1) sdProblems.push(`${r.p}: needs exactly one WebPage-type node (${wp.length})`);
+      else {
+        if (wp[0]['@id'] !== EXP + (r.p === '/' ? '/' : r.p) + '#webpage' && wp[0]['@id'] !== EXP + r.p + '#webpage') sdProblems.push(`${r.p}: WebPage @id is ${wp[0]['@id']}`);
+        if (wp[0].url !== EXP + (r.p === '/' ? '/' : r.p)) sdProblems.push(`${r.p}: WebPage url is ${wp[0].url}`);
+      }
+      const isProductPage = /^\/products\/[^/]+$/.test(r.p); const isGuide = /^\/guides\/[^/]+$/.test(r.p);
+      if (count('Product') !== (isProductPage ? 1 : 0)) sdProblems.push(`${r.p}: Product nodes = ${count('Product')}`);
+      if (count('Article') !== (isGuide ? 1 : 0)) sdProblems.push(`${r.p}: Article nodes = ${count('Article')}`);
+      const bc = r.ldNodes.find((n) => [].concat(n['@type']).includes('BreadcrumbList'));
+      if (bc) {
+        const els = bc.itemListElement || [];
+        if (!els.every((e, i) => e.position === i + 1 && typeof e.item === 'string' && e.item.startsWith(origin + '/') && e.name)) sdProblems.push(`${r.p}: BreadcrumbList positions/urls invalid`);
+        if (els.length && els[els.length - 1].item !== EXP + (r.p === '/' ? '/' : r.p)) sdProblems.push(`${r.p}: last breadcrumb is not this page`);
+        if (els.length && els[0].item !== EXP + '/') sdProblems.push(`${r.p}: first breadcrumb is not Home`);
+      }
+      const urlsIn = JSON.stringify(r.ldNodes).match(/"(https?:\/\/[^"]+)"/g) || [];
+      for (const u of urlsIn) { const v = u.slice(1, -1); if (!v.startsWith(origin + '/') && v !== origin && !/^https:\/\/schema\.org/.test(v)) sdProblems.push(`${r.p}: schema URL on another host: ${v}`); }
+      r.ldNodes.forEach((n) => { if (n.sameAs) sameAsFound.push(r.p); const lg = n.logo; if (lg) logoUrls.add(typeof lg === 'string' ? lg : lg.url); });
+      for (const n of r.ldNodes.filter((x) => [].concat(x['@type']).includes('Product'))) {
+        const pagePath = r.p; const hasManu = n.manufacturer && n.manufacturer['@id'] === origin + '/#organization';
+        if (!hasManu) sdProblems.push(`${pagePath}: Product.manufacturer must reference the Organization`);
+        if (!n.name || !n.description || !n.image) sdProblems.push(`${pagePath}: Product needs name, description, image`);
+      }
+    }
+    expect(sdProblems.length === 0, `schema audit over ${store.length} pages: one Organization + WebSite + WebPage per page, @id/url self-consistent, Product only on product pages, Article only on guides, valid breadcrumbs, no retired/unsupported types`, sdProblems.slice(0, 6).join(' | '));
+    expect(sameAsFound.length === 0, 'no sameAs (no verified profile URLs exist; none may be invented)', [...new Set(sameAsFound)].slice(0, 3).join(', '), 'WARN');
+    for (const u of logoUrls) {
+      const lr = await request(u.replace(origin, BASE));
+      expect(!lr.error && lr.status === 200 && /^image\//i.test(lr.headers['content-type'] || '') && !/noindex/i.test(lr.headers['x-robots-tag'] || ''), `Organization logo ${u} is crawlable (200, image, no noindex)`, lr.error || `${lr.status} ${lr.headers && lr.headers['content-type']}`);
+    }
+
+    // ---- C. duplicate / cannibalisation heuristics
+    section = 'Hard: duplicate content and cannibalisation';
+    const grams = (t) => { const w = t.toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').split(/\s+/).filter(Boolean); const g = new Set(); for (let i = 0; i + 5 <= w.length; i++) g.add(w.slice(i, i + 5).join(' ')); return g; };
+    const info = store.map((r) => ({ p: r.p, g: grams(mainTextOf(r.html)), title: new Set(r.title.toLowerCase().replace(/\|.*$/, '').split(/[^a-z0-9]+/).filter((w) => w.length > 3)) }));
+    const sim = (a, b) => { let i = 0; const [s, l] = a.size < b.size ? [a, b] : [b, a]; for (const x of s) if (l.has(x)) i++; return s.size ? i / s.size : 0; };
+    const dupes = []; const near = [];
+    for (let i = 0; i < info.length; i++) for (let j = i + 1; j < info.length; j++) {
+      const v = sim(info[i].g, info[j].g); if (v >= 0.6) dupes.push(`${info[i].p} ~ ${info[j].p} (${Math.round(v * 100)}%)`); else if (v >= 0.35) near.push(`${info[i].p} ~ ${info[j].p} (${Math.round(v * 100)}%)`);
+    }
+    expect(dupes.length === 0, 'no two pages share 60%+ of their main text (5-word shingles)', dupes.join('; '));
+    expect(near.length === 0, 'no page pair shares 35%+ of its main text', near.join('; '), 'WARN');
+    const tj = (a, b) => { let i = 0; for (const x of a) if (b.has(x)) i++; return i / (new Set([...a, ...b]).size || 1); };
+    const titleClash = []; for (let i = 0; i < info.length; i++) for (let j = i + 1; j < info.length; j++) { const v = tj(info[i].title, info[j].title); if (v >= 0.8 && info[i].title.size > 2) titleClash.push(`${info[i].p} ~ ${info[j].p}`); }
+    expect(titleClash.length === 0, 'titles are not near-identical (word overlap < 80%)', titleClash.join('; '), 'WARN');
+    const b2bPaths = ['/flour-manufacturer-india', '/flour-manufacturer-kanpur', '/bulk-flour-supplier-india', '/wholesale-flour-supplier', '/institutional-flour-supplier', '/supply-distribution-india'];
+    const h1set = store.filter((r) => b2bPaths.includes(r.p)).map((r) => r.h1);
+    expect(new Set(h1set).size === h1set.length && new Set(store.filter((r) => b2bPaths.includes(r.p)).map((r) => r.title)).size === h1set.length, 'the six B2B/manufacturer pages each have a distinct title and H1');
+    const anchorCount = new Map();
+    for (const r of store) for (const a of r.mainAnchors) { if (!b2bPaths.includes(a.href)) continue; const k = a.href + '|' + a.text.toLowerCase(); anchorCount.set(k, (anchorCount.get(k) || 0) + 1); }
+    const byTarget = new Map(); for (const [k, n] of anchorCount) { const t = k.split('|')[0]; byTarget.set(t, (byTarget.get(t) || []).concat([[k.split('|')[1], n]])); }
+    const repetitive = [...byTarget].filter(([, arr]) => { const tot = arr.reduce((s2, x) => s2 + x[1], 0); return tot >= 6 && Math.max(...arr.map((x) => x[1])) / tot > 0.5; }).map(([t, arr]) => `${t}: "${arr.sort((a, b) => b[1] - a[1])[0][0]}" x${arr.sort((a, b) => b[1] - a[1])[0][1]}`);
+    expect(repetitive.length === 0, 'in-body anchor text to B2B pages is varied (no single phrase is more than half of the links)', repetitive.join('; '), 'WARN');
+    const weakAnchors = []; for (const r of store) for (const a of r.mainAnchors) if (/^(click here|here|read more|more|link|this page)$/i.test(a.text.trim())) weakAnchors.push(`${r.p}: "${a.text}"`);
+    expect(weakAnchors.length === 0, 'no "click here / read more" style anchors in page bodies', weakAnchors.slice(0, 4).join('; '));
+
+    // ---- D. claims that must never appear (beyond the base claim patterns)
+    section = 'Hard: prohibited claims';
+    const HARD_CLAIMS = [
+      ['no private-label / contract / white-label manufacturing claims', /\b(private[- ]label|contract manufactur\w*|white[- ]label|oem\b|your own brand|buyer'?s? brand|custom(er)? (brand|packing))/i],
+      ['no production-capacity figures', /\b\d[\d,.]*\s*(tons?|tonnes?|mt|metric tons?|quintals?)\s*(\/|per)\s*(day|hour|month|year)|\bcapacity of\b|\bTPD\b/i],
+      ['no certifications beyond ISO 9001:2015 and FSSAI', /\b(ISO\s?22000|HACCP|BRC|FSSC|GMP\b|halal|kosher|organic certified|NABL|AGMARK|BIS\b)/i],
+      ['no reviews / ratings / testimonials', /\b(\d(\.\d)?\s*\/\s*5|five[- ]star|5[- ]star|customer reviews?|testimonials?|rated\b|trusted by (thousands|hundreds|\d))/i],
+      ['no delivery promises or coverage claims', /\b(free delivery|same[- ]day (delivery|dispatch|shipping)|next[- ]day (delivery|dispatch)|delivery in \d|delivered within|pan[- ]india (delivery|network|supply network)|deliver(s|y)? (to|across) (all|every))/i],
+      ['no invented minimum order', /\bminimum order (of|is|quantity of)\s*\d|\bMOQ\s*(of|:)\s*\d|\bat least \d+\s*(kg|tons?|bags)/i],
+      ['no invented prices or discounts', /(₹|\bRs\.?|\bINR)\s?\d|\b\d+\s?% (off|discount)|\bdiscounts? (on|for|of)\b|\b(our|we offer the|we guarantee the) (best|lowest) price/i],
+    ];
+    for (const [label, rx] of HARD_CLAIMS) {
+      const hits = store.filter((r) => rx.test(r.text) || rx.test(JSON.stringify(r.ldNodes))).map((r) => { const m = (r.text.match(rx) || [''])[0]; return `${r.p} ("${m}")`; });
+      // the guides legitimately TELL BUYERS to ask a supplier about these things; only an affirmative claim fails
+      const real = label.includes('invented minimum') || label.includes('delivery') ? hits.filter((h) => !/ask|should|whether|if /i.test(h)) : hits;
+      expect(real.length === 0, label, real.slice(0, 3).join('; '));
+    }
+    expect(store.every((r) => !/\b(areaServed|openingHours|geo|aggregateRating|offers)\b/.test(JSON.stringify(r.ldNodes))), 'schema never carries areaServed / openingHours / geo / rating / offers');
+
+    // ---- E. HTTP behaviour: headers, validators, compression
+    section = 'Hard: HTTP headers, validators and compression';
+    const lvl = isProd ? 'WARN' : 'FAIL';
+    const h0 = await request(BASE + '/', { headers: { 'Accept-Encoding': 'br, gzip' } });
+    expect(h0.headers['x-content-type-options'] === 'nosniff', 'X-Content-Type-Options: nosniff', h0.headers['x-content-type-options'] || '(none)', lvl);
+    expect(!!h0.headers['referrer-policy'], 'Referrer-Policy header present', '(none)', lvl);
+    expect(!!h0.headers['permissions-policy'], 'Permissions-Policy header present', '(none)', lvl);
+    expect(['br', 'gzip'].includes(h0.headers['content-encoding']), 'HTML compressed (Brotli preferred, gzip accepted)', h0.headers['content-encoding'] || '(none)', lvl);
+    const gz = await request(BASE + '/', { headers: { 'Accept-Encoding': 'gzip' } });
+    expect(gz.headers['content-encoding'] === 'gzip' || isProd, 'gzip still served to clients that do not offer Brotli', gz.headers['content-encoding'] || '(none)', lvl);
+    expect(/no-cache|max-age=\d/.test(h0.headers['cache-control'] || '') || !!h0.headers.etag, 'HTML carries a validator or an explicit Cache-Control', 'neither ETag nor Cache-Control', lvl);
+    if (h0.headers.etag) {
+      const c304 = await request(BASE + '/', { headers: { 'If-None-Match': h0.headers.etag, 'Accept-Encoding': 'br, gzip' } });
+      expect(c304.status === 304, 'HTML answers If-None-Match with 304 Not Modified', 'status ' + c304.status, lvl);
+    } else skip('HTML 304 check', 'no ETag on HTML');
+    const adm = await request(BASE + '/admin/login');
+    expect(/no-store/.test(adm.headers['cache-control'] || '') || !adm.headers.etag, 'admin responses are never cached or revalidated by content hash', adm.headers['cache-control'] || '(none)', lvl);
+    const homeRec = store.find((r) => r.p === '/');
+    const cssHref = ((homeRec && homeRec.html.match(/href="(\/css\/style\.css\?v=[^"]+)"/)) || [])[1];
+    if (cssHref) {
+      const c1 = await request(BASE + cssHref, { headers: { 'Accept-Encoding': 'br, gzip' } });
+      expect(c1.headers['content-encoding'] === 'br' || (isProd && !!c1.headers['content-encoding']), 'CSS compressed with Brotli', c1.headers['content-encoding'] || '(none)', lvl);
+      if (c1.headers.etag) { const c2 = await request(BASE + cssHref, { headers: { 'If-None-Match': c1.headers.etag } }); expect(c2.status === 304, 'static asset answers If-None-Match with 304', 'status ' + c2.status, lvl); }
+      const stale = await request(BASE + '/css/style.css?v=00000000');
+      expect(!/immutable/.test(stale.headers['cache-control'] || ''), 'a stale or invented ?v= never gets the immutable one-year cache', stale.headers['cache-control'] || '', lvl);
+    }
+    const ik = (() => { try { return (require('fs').readFileSync(require('path').join(process.env.HC_REPO_ROOT || process.cwd(), 'lib/indexnow.js'), 'utf8').match(/INDEXNOW_KEY = '([0-9a-f]{16,128})'/) || [])[1]; } catch (e) { return null; } })();
+    if (ik) {
+      const kr = await request(BASE + '/' + ik + '.txt');
+      expect(kr.status === 200 && kr.body === ik && /text\/plain/i.test(kr.headers['content-type'] || ''), 'IndexNow key file is served at /<key>.txt with the exact key', kr.error || `status ${kr.status}`, isProd ? 'WARN' : 'FAIL');
+      expect(!locs.some((l) => l.includes(ik)), 'the IndexNow key file is not in the sitemap');
+    } else skip('IndexNow key file', 'lib/indexnow.js not found relative to the working directory (run from the repo root)');
+
+    // ---- F. hostname / protocol consistency inside the HTML
+    section = 'Hard: hostname and HTTPS consistency';
+    const ALLOWED = [origin, 'https://fonts.googleapis.com', 'https://fonts.gstatic.com', 'https://schema.org', 'http://www.w3.org/2000/svg', 'http://www.w3.org/1999/xlink'];
+    const hostBad = []; const externalHosts = new Set();
+    for (const r of store) {
+      const abs = (r.html.match(/(?:href|src|content|action)="(https?:\/\/[^"]+)"/g) || []).map((x) => x.replace(/^[a-z]+="/, '').slice(0, -1));
+      for (const u of abs) {
+        if (ALLOWED.some((a) => u === a || u.startsWith(a + '/') || u.startsWith(a + '?'))) continue;
+        if (u.includes(origin.replace(/^https?:\/\//, ''))) hostBad.push(`${r.p}: ${u}`);   // our domain on the wrong host/protocol
+        else if (/^http:/i.test(u)) hostBad.push(`${r.p}: insecure external link ${u}`);
+        else externalHosts.add(new URL(u).host);                                               // other https sites (e.g. a verification portal)
+      }
+      if (/\s(?:href|src)="http:\/\/(?!www\.w3\.org)/.test(r.html)) hostBad.push(`${r.p}: insecure http:// link`);
+      if (new RegExp('//www\\.' + origin.replace(/^https?:\/\//, '').replace(/\./g, '\\.')).test(r.html)) hostBad.push(`${r.p}: www host referenced`);
+    }
+    expect(hostBad.length === 0, 'every absolute URL in every page is on the canonical HTTPS host (or fonts); no http:// and no www', hostBad.slice(0, 4).join('; '));
+    pass('external https hosts linked from pages: ' + ([...externalHosts].join(', ') || 'none'));
+    expect(store.every((r) => /<html[^>]+lang="en(-IN)?"/i.test(r.html)), '<html lang> is English on every page');
+    expect(store.every((r) => /<meta name="viewport" content="width=device-width, initial-scale=1">/.test(r.html)), 'viewport meta is correct on every page');
+
+    // ---- G. performance smoke (document, CSS/JS, images, TTFB)
+    section = 'Hard: performance smoke';
+    const css = (cssHref && (await request(BASE + cssHref, { headers: { 'Accept-Encoding': 'identity' } }))) || null;
+    const jsHref = ((homeRec && homeRec.html.match(/src="(\/js\/main\.js\?v=[^"]+)"/)) || [])[1]; const js = jsHref ? await request(BASE + jsHref) : null;
+    if (css) expect(css.body.length < 120000, `CSS size ${Math.round(css.body.length / 1024)} KB uncompressed (< 120 KB)`, '', 'WARN');
+    if (js) expect(js.body.length < 40000, `JS size ${Math.round(js.body.length / 1024)} KB uncompressed (< 40 KB)`, '', 'WARN');
+    const heavy = []; const lcpBad = []; const eagerHeavy = []; const blocking = [];
+    for (const r of store) {
+      if (r.html.length > 160000) heavy.push(`${r.p} ${Math.round(r.html.length / 1024)} KB`);
+      const imgsHere = (r.html.match(/<img\b[^>]*>/gi) || []).map(attrs);
+      const eager = imgsHere.filter((i) => i.loading !== 'lazy');
+      if (eager.length > 3 && r.p !== '/') eagerHeavy.push(`${r.p}: ${eager.length} eager images`);
+      const first = imgsHere.find((i) => i.fetchpriority === 'high'); if (first && first.loading === 'lazy') lcpBad.push(r.p);
+      const headHtml = (r.html.match(/<head[\s\S]*?<\/head>/i) || [''])[0];
+      const cssLinks = (headHtml.match(/<link[^>]+rel="stylesheet"/gi) || []).length; const syncScripts = (headHtml.match(/<script\b(?![^>]*type="application\/ld\+json")[^>]*src=/gi) || []).length;
+      if (cssLinks > 2 || syncScripts) blocking.push(`${r.p}: ${cssLinks} stylesheets, ${syncScripts} head scripts`);
+    }
+    expect(heavy.length === 0, 'every HTML document is under 160 KB', heavy.join('; '), 'WARN');
+    expect(lcpBad.length === 0, 'the priority (LCP) image is never lazy-loaded', lcpBad.join(', '));
+    expect(eagerHeavy.length === 0, 'inner pages load at most 3 images eagerly', eagerHeavy.join('; '), 'WARN');
+    expect(blocking.length === 0, 'at most 2 render-blocking stylesheets and no blocking head scripts', blocking.slice(0, 3).join('; '), 'WARN');
+    const webpSeen = new Set(); const imgUrls = new Map();
+    for (const r of store) for (const i of (r.html.match(/<img\b[^>]*>/gi) || []).map(attrs)) if (i.src && i.src.startsWith('/')) imgUrls.set(i.src, (imgUrls.get(i.src) || new Set()).add(r.p));
+    const webpMiss = [];
+    await pool([...imgUrls.keys()], 6, async (u) => {
+      const wp = u.replace(/\.(jpe?g|png)$/i, '.webp'); const r = await request(BASE + wp, { method: 'HEAD' });
+      if (/\.(jpe?g|png)$/i.test(u) && /^\/images\/(hero|about-mill|products|facility|quality)\//.test(u) && (r.error || r.status !== 200)) webpMiss.push(u);
+    });
+    expect(webpMiss.length === 0, 'every large content image has a WebP copy', webpMiss.slice(0, 4).join(', '));
+    const srcsetBad = []; for (const r of store) for (const m of r.html.matchAll(/<source type="image\/webp" srcset="([^"]+)"/g)) for (const part of m[1].split(',')) { const u = part.trim().split(/\s+/)[0]; if (!imgUrls.has(u) && !webpSeen.has(u)) webpSeen.add(u); }
+    const ttfb = []; for (const pth of ['/', '/products', '/guides/how-to-store-flour']) { const t0 = Date.now(); const rr = await request(BASE + pth); ttfb.push(Date.now() - t0); void rr; }
+    expect(Math.max(...ttfb) < (isProd ? 1500 : 500), `response time ${ttfb.join('/')} ms for three sample pages`, '', 'WARN');
+    for (const u of webpSeen) { const rr = await request(BASE + u, { method: 'HEAD' }); if (rr.error || rr.status !== 200 || !/image\/webp/.test(rr.headers['content-type'] || '')) srcsetBad.push(u); }
+    expect(srcsetBad.length === 0, `all ${webpSeen.size} WebP candidates in <picture> are served as image/webp with 200`, srcsetBad.slice(0, 4).join(', '));
+
+    // ---- matrix
+    if (MATRIX) {
+      console.log('\n== Indexability matrix');
+      console.log('URL'.padEnd(46) + 'ST  IDX CAN SMAP TITLE DESC H1 SCHEMA                          IN');
+      const inb = new Map(store.map((r) => [r.p, 0])); store.forEach((a) => new Set(a.allLinks.map(cleanPath)).forEach((h) => { if (h !== a.p && inb.has(h)) inb.set(h, inb.get(h) + 1); }));
+      for (const r of store) {
+        const types = [...new Set([].concat(...r.ldNodes.map((n) => [].concat(n['@type'] || []))))].filter((t) => !['Organization', 'WebSite', 'ImageObject'].includes(t)).join(',');
+        console.log(r.p.padEnd(46) + String(r.status).padEnd(4) + (isIndexable(r) ? 'yes ' : 'NO  ') + (r.canon === EXP + (r.p === '/' ? '/' : r.p) ? 'ok  ' : 'BAD ') + (inSitemap.has(r.p) ? 'yes  ' : 'no   ') + String(r.title.length).padEnd(6) + String((r.desc || '').length).padEnd(5) + String(r.h1Count).padEnd(3) + types.slice(0, 31).padEnd(32) + inb.get(r.p));
+      }
+    }
+  }
 
   // ---- redirects, status codes and special URLs
   section = 'Redirects, status codes, crawl rules';

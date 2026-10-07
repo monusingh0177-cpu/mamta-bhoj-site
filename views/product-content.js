@@ -55,7 +55,7 @@ const PRODUCT_EXTRA = {
     ],
     b2b: [
       ['flour-manufacturer-india#atta', 'our atta manufacturer overview'],
-      ['bulk-flour-supplier-india', 'bulk flour supply'],
+      ['bulk-flour-supplier-india', 'buying atta in bulk'],
       ['wholesale-flour-supplier', 'wholesale supply for dealers and retailers'],
     ],
     enquiry: { type: 'Wholesale / Bulk Purchase', label: 'send a bulk or wholesale enquiry' },
@@ -99,7 +99,7 @@ const PRODUCT_EXTRA = {
     b2b: [
       ['institutional-flour-supplier', 'institutional supply for restaurants and caterers'],
       ['flour-manufacturer-india#atta', 'tandoori atta manufacturer details'],
-      ['bulk-flour-supplier-india', 'bulk flour supply'],
+      ['bulk-flour-supplier-india', 'bulk supply for tandoor kitchens'],
     ],
     enquiry: { type: 'Institutional / HoReCa', label: 'send an enquiry for your kitchen' },
     guides: ['tandoori-atta-guide', 'how-to-choose-atta', 'chakki-atta-vs-roller-milled-atta'],
@@ -147,7 +147,7 @@ const PRODUCT_EXTRA = {
     b2b: [
       ['institutional-flour-supplier', 'institutional supply for bakeries and kitchens'],
       ['flour-manufacturer-india#maida', 'maida manufacturer details'],
-      ['bulk-flour-supplier-india', 'bulk flour supply'],
+      ['bulk-flour-supplier-india', 'bulk maida supply'],
     ],
     enquiry: { type: 'Institutional / HoReCa', label: 'send an enquiry for your bakery or kitchen' },
     guides: ['what-is-maida', 'maida-vs-atta', 'types-of-flour-in-india', 'how-to-choose-flour-supplier'],
@@ -231,7 +231,7 @@ const PRODUCT_EXTRA = {
     b2b: [
       ['wholesale-flour-supplier', 'wholesale supply for sweet shops and retailers'],
       ['flour-manufacturer-india#besan', 'besan manufacturer details'],
-      ['bulk-flour-supplier-india', 'bulk flour supply'],
+      ['bulk-flour-supplier-india', 'bulk besan supply'],
     ],
     enquiry: { type: 'Wholesale / Bulk Purchase', label: 'send a wholesale or bulk enquiry' },
     guides: ['what-is-besan', 'how-to-store-flour', 'types-of-flour-in-india', 'how-to-choose-flour-supplier'],
