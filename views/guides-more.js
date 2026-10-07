@@ -348,7 +348,7 @@ const MORE_GUIDES = [
   // ------------------------------------------------------------------
   {
     slug: 'how-to-choose-flour-supplier',
-    title: 'How to Choose a Flour Supplier: A Buyer’s Checklist | Mamta Bhoj',
+    title: 'How to Choose a Flour Supplier: Checklist | Mamta Bhoj',
     h1: 'How to Choose a Flour Supplier for Your Business',
     shortTitle: 'Choosing a flour supplier',
     description:

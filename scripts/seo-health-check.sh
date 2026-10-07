@@ -126,10 +126,13 @@ const CFG = {
   claimPatterns: [
     ['no Delhi / NCR / Ghaziabad / Noida / Gurgaon presence claims', /\b(delhi|ncr|ghaziabad|noida|gurgaon|gurugram)\b/i],
     ['no "fresh for longer" claim', /fresh for longer/i],
-    ['no "lab verified / tested" claim (no report is published)', /lab[- ]?(verified|tested|certified)/i],
+    ['no "lab tested / certified" claim (no report or certificate is published)', /lab[- ]?(tested|certified)/i],
     ['no prices (₹, Rs, INR)', /₹|\bRs\.?\s?\d|\bINR\b/],
     ['no "nationwide / distribution network / dealer network" claim', /\b(nationwide|distribution network|dealer network)\b/i],
   ],
+  // Owner-confirmed: ONLY the Fresh Chakki Atta fibre-and-protein claim is lab verified (no certificate,
+  // lab name or figures are published). "lab verified" may appear on these pages and only in a sentence about it.
+  labVerifiedPages: ['/products/fresh-chakki-atta', '/flour-manufacturer-india'],
   forbiddenSchemaKeys: ['offers', 'price', 'priceCurrency', 'aggregateRating', 'review', 'reviewRating', 'ratingValue',
     'ratingCount', 'availability', 'sku', 'gtin', 'gtin13', 'mpn', 'areaServed', 'openingHours', 'geo'],
 };
@@ -236,7 +239,7 @@ const locOk = (loc, expectedPath) => loc === EXP + expectedPath || loc === expec
     const wantCanon = EXP + (p === '/' ? '/' : p.split('?')[0]);
     const h1s = html.match(/<h1[\s>][\s\S]*?<\/h1>/gi) || [];
     expect(!!title, tag('has <title>'));
-    expect(title.length > 0 && title.length <= 70, tag('title <= 70 chars'), title.length + ' chars: ' + unesc(title), 'WARN');
+    expect(title.length > 0 && unesc(title).length <= 60, tag('title <= 60 chars (SERP width)'), unesc(title).length + ' chars: ' + unesc(title), 'WARN');
     expect(!!desc, tag('has meta description'));
     expect(!desc || (desc.length >= 50 && desc.length <= 160), tag('description 50-160 chars'), desc ? desc.length + ' chars' : '', 'WARN');
     expect(canon.length === 1, tag('exactly one canonical'), 'found ' + canon.length);
@@ -250,6 +253,11 @@ const locOk = (loc, expectedPath) => loc === EXP + expectedPath || loc === expec
     const imgs = tags(html, 'img');
     const badAlt = imgs.filter((i) => !('alt' in i) || !String(i.alt).trim());
     expect(badAlt.length === 0, tag('every <img> has non-empty alt'), badAlt.map((i) => i.src).join(', '));
+    const noDims = imgs.filter((i) => !i.width || !i.height);
+    expect(noDims.length === 0, tag('every <img> has width and height (no layout shift)'), noDims.map((i) => i.src).join(', ').slice(0, 160));
+    const levels = (html.match(/<h([1-6])[\s>]/gi) || []).map((x) => +x[2]);
+    const jumped = levels.find((l, i) => i > 0 && l > levels[i - 1] + 1);
+    expect(!jumped, tag('heading levels do not skip (h1>h2>h3)'), jumped ? 'jumps to h' + jumped : '', 'WARN');
     const text = visible(html);
     expect(text.includes(CFG.address), tag('shows the authoritative address'), 'address text not found');
     expect(!CFG.bannedAddress.test(text), tag('no old "NH34" address'));
@@ -266,6 +274,10 @@ const locOk = (loc, expectedPath) => loc === EXP + expectedPath || loc === expec
         if (o['@id']) (Object.keys(o).length === 1 ? refs : defined).add(o['@id']);
       }
     })(ld);
+    if (p !== '/') {
+      expect(ld.some((n) => n['@type'] === 'BreadcrumbList'), tag('has BreadcrumbList schema'));
+      expect(/<nav[^>]+class="breadcrumb"/i.test(html), tag('has a visible breadcrumb'), '', 'WARN');
+    }
     const badKeys = CFG.forbiddenSchemaKeys.filter((k) => keys.has(k));
     expect(badKeys.length === 0, tag('schema has no offers/price/rating/review/etc.'), badKeys.join(', '));
     const unresolved = [...refs].filter((x) => !defined.has(x));
@@ -283,6 +295,11 @@ const locOk = (loc, expectedPath) => loc === EXP + expectedPath || loc === expec
     // claims
     const claimText = text + ' ' + ldRaw.join(' ');
     for (const [label, rx] of CFG.claimPatterns) expect(!rx.test(claimText), tag(label), (claimText.match(rx) || [''])[0]);
+    const lv = claimText.match(/[^.!?]*lab[- ]?verified[^.!?]*/gi) || [];
+    if (CFG.labVerifiedPages.includes(p.split('?')[0])) {
+      const stray = lv.filter((x) => !/fibre|protein/i.test(x));
+      expect(stray.length === 0, tag('"lab verified" only appears about the Chakki Atta fibre and protein claim'), stray.join(' | ').slice(0, 120));
+    } else expect(lv.length === 0, tag('no "lab verified" claim (only allowed about Chakki Atta on its own page)'), lv.join(' | ').slice(0, 120));
     const kgText = text.replace(/1 kg, 2 kg and 5 kg/g, '').replace(/1 kg, 2 kg & 5 kg/g, '');
     expect(!/\b5 ?kg\b/i.test(kgText), tag('pack sizes only ever stated as "1 kg, 2 kg and 5 kg"'), (kgText.match(/.{20}\b5 ?kg\b.{10}/i) || [''])[0]);
     const badHP = (html.match(/<div class="product-card[\s\S]*?<\/div>\s*<\/div>/g) || []).filter((c) => /high protein/i.test(c) && !/<h3>Fresh Chakki Atta<\/h3>/.test(c));
@@ -297,7 +314,9 @@ const locOk = (loc, expectedPath) => loc === EXP + expectedPath || loc === expec
     tags(html, 'link').forEach((l) => l.href && !/canonical/i.test(l.rel || '') && found.push(l.href));
     const internal = found.filter((h) => h.startsWith('/') && !h.startsWith('//')).map((h) => h.split('#')[0]).filter(Boolean);
     internal.forEach((h) => { linkSet.add(h); if (!linkSrc.has(h)) linkSrc.set(h, new Set()); linkSrc.get(h).add(p); });
-    meta.push({ path: p, title: unesc(title), desc: unesc(desc || ''), canon: canon[0], h1: unesc((h1s[0] || '').replace(/<[^>]+>/g, '')).trim(), hrefs: new Set(internal.map((h) => h.split('?')[0].replace(/\/$/, '') || '/')) });
+    const mainHtml = (html.match(/<main[\s\S]*?<\/main>/i) || [''])[0];
+    const mainHrefs = new Set(tags(mainHtml, 'a').map((a) => (a.href || '').split('#')[0].split('?')[0].replace(/\/$/, '')).filter((h) => h.startsWith('/')));
+    meta.push({ mainHrefs, path: p, title: unesc(title), desc: unesc(desc || ''), canon: canon[0], h1: unesc((h1s[0] || '').replace(/<[^>]+>/g, '')).trim(), hrefs: new Set(internal.map((h) => h.split('?')[0].replace(/\/$/, '') || '/')) });
   }
 
   // ---- site-wide consistency
@@ -313,6 +332,20 @@ const locOk = (loc, expectedPath) => loc === EXP + expectedPath || loc === expec
   const weak = [...inbound].filter(([p, n]) => n > 0 && n < 3).map(([p, n]) => `${p}(${n})`);
   expect(orphans.length === 0, 'no orphan pages (every sitemap URL is linked from another page)', orphans.join(', '));
   expect(weak.length === 0, 'every page has >= 3 inbound internal links', weak.join(', '), 'WARN');
+
+  // ---- hub-and-spoke linking: contextual links inside <main>, not just the header/footer
+  const B2B_SET = ['/flour-manufacturer-india', '/bulk-flour-supplier-india', '/wholesale-flour-supplier', '/institutional-flour-supplier', '/supply-distribution-india'];
+  const MFR = '/flour-manufacturer-kanpur';
+  const has = (x, pred) => [...x.mainHrefs].some(pred);
+  const isProduct = (h) => /^\/products\/[^/]+$/.test(h); const isGuide = (h) => /^\/guides\/[^/]+$/.test(h);
+  const lacks = (list, pred) => list.filter((x) => !pred(x)).map((x) => x.path).join(', ');
+  const prods = meta.filter((x) => isProduct(x.path)); const guides = meta.filter((x) => isGuide(x.path));
+  const b2bPages = meta.filter((x) => B2B_SET.includes(x.path) || x.path === MFR);
+  const home = meta.find((x) => x.path === '/');
+  if (home) expect(['/products', MFR, '/flour-manufacturer-india', '/guides', '/contact'].every((h) => home.mainHrefs.has(h)), 'home page body links to products, both manufacturer pages, guides and enquiry', ['/products', MFR, '/flour-manufacturer-india', '/guides', '/contact'].filter((h) => !home.mainHrefs.has(h)).join(', '));
+  expect(lacks(prods, (x) => has(x, isGuide) && has(x, (h) => B2B_SET.includes(h)) && x.mainHrefs.has(MFR)) === '', 'product pages link to a guide, a B2B page and the manufacturer page in their body', lacks(prods, (x) => has(x, isGuide) && has(x, (h) => B2B_SET.includes(h)) && x.mainHrefs.has(MFR)));
+  expect(lacks(guides, (x) => has(x, isProduct) && has(x, (h) => B2B_SET.includes(h)) && x.mainHrefs.has(MFR)) === '', 'guides link to a product, a B2B page and the manufacturer page in their body', lacks(guides, (x) => has(x, isProduct) && has(x, (h) => B2B_SET.includes(h)) && x.mainHrefs.has(MFR)));
+  expect(lacks(b2bPages, (x) => has(x, isProduct) && (x.path === MFR || x.mainHrefs.has(MFR)) && x.mainHrefs.has('/contact')) === '', 'B2B and manufacturer pages link to products, the manufacturer page and the enquiry form in their body', lacks(b2bPages, (x) => has(x, isProduct) && (x.path === MFR || x.mainHrefs.has(MFR)) && x.mainHrefs.has('/contact')));
 
   // ---- redirects, status codes and special URLs
   section = 'Redirects, status codes, crawl rules';
@@ -348,11 +381,21 @@ const locOk = (loc, expectedPath) => loc === EXP + expectedPath || loc === expec
   expect(!al.error && al.status === 200 && (/noindex/i.test(al.headers['x-robots-tag'] || '') && /<meta name="robots" content="noindex/i.test(al.body)), '/admin/login is noindex (header + meta)');
   const hd = await request(BASE + '/', { method: 'HEAD' });
   expect(!hd.error && hd.status === 200 && hd.body === '', 'HEAD / returns 200 with an empty body', hd.error || `${hd.status} body=${(hd.body || '').length}`);
-  if (isProd) {
-    const home = await request(BASE + '/', { headers: { 'Accept-Encoding': 'gzip, br' } });
-    expect(!!home.headers['content-encoding'], 'responses are compressed (gzip/br)', 'no Content-Encoding header', 'WARN');
-    expect(!!home.headers['strict-transport-security'], 'HSTS header present', 'missing Strict-Transport-Security', 'WARN');
-  } else skip('compression and HSTS', 'production-only (usually set by the reverse proxy)');
+  {
+    // The app compresses text responses itself; in production a reverse proxy may do it instead (WARN only there).
+    const lvl = isProd ? 'WARN' : 'FAIL';
+    const zh = await request(BASE + '/', { headers: { 'Accept-Encoding': 'gzip, br' } });
+    expect(!!zh.headers['content-encoding'], 'HTML is compressed when the client accepts gzip', 'no Content-Encoding header', lvl);
+    expect(/accept-encoding/i.test(zh.headers.vary || ''), 'compressed HTML sends Vary: Accept-Encoding', 'Vary: ' + (zh.headers.vary || '(none)'), lvl);
+    const css = (pages[0] && /href="(\/css\/style\.css\?v=[^"]+)"/.exec((pages.find((x) => x.path === '/') || { r: { body: '' } }).r.body)) || null;
+    if (css) {
+      const cr = await request(BASE + css[1], { headers: { 'Accept-Encoding': 'gzip' } });
+      expect(!!cr.headers['content-encoding'], 'CSS is compressed when the client accepts gzip', 'no Content-Encoding header', lvl);
+      expect(/immutable/.test(cr.headers['cache-control'] || '') && /max-age=3[0-9]{7}/.test(cr.headers['cache-control'] || ''), 'fingerprinted CSS is cached for a year (immutable)', cr.headers['cache-control'] || '(none)', lvl);
+    }
+    if (isProd) expect(!!zh.headers['strict-transport-security'], 'HSTS header present', 'missing Strict-Transport-Security', 'WARN');
+    else skip('HSTS', 'production-only (usually set by the reverse proxy)');
+  }
 
   // ---- files that must never be reachable
   section = 'Exposure (must NOT be reachable)';

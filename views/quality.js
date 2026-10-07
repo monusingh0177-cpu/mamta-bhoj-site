@@ -2,6 +2,7 @@
 const { escapeHtml } = require('../lib/http-utils');
 const icons = require('../lib/icons');
 const { ctaBand, wheatDividerBand } = require('../lib/render');
+const { imgDims } = require('../lib/image-dims');
 
 function renderQuality(content, gallery) {
   const sortedGallery = gallery.slice().sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
@@ -41,12 +42,12 @@ ${wheatDividerBand()}
 
 <section class="wrap" data-reveal>
   <div class="process-grid">
-    <div class="process-step" data-reveal-item><div class="process-num">01</div><h4>${escapeHtml(content.process1_title)}</h4><p>${escapeHtml(content.process1_body)}</p></div>
-    <div class="process-step" data-reveal-item><div class="process-num">02</div><h4>${escapeHtml(content.process2_title)}</h4><p>${escapeHtml(content.process2_body)}</p></div>
-    <div class="process-step" data-reveal-item><div class="process-num">03</div><h4>${escapeHtml(content.process3_title)}</h4><p>${escapeHtml(content.process3_body)}</p></div>
-    <div class="process-step" data-reveal-item><div class="process-num">04</div><h4>${escapeHtml(content.process5_title)}</h4><p>${escapeHtml(content.process5_body)}</p></div>
-    <div class="process-step" data-reveal-item><div class="process-num">05</div><h4>${escapeHtml(content.process4_title)}</h4><p>${escapeHtml(content.process4_body)}</p></div>
-    <div class="process-step" data-reveal-item><div class="process-num">06</div><h4>${escapeHtml(content.process6_title)}</h4><p>${escapeHtml(content.process6_body)}</p></div>
+    <div class="process-step" data-reveal-item><div class="process-num">01</div><h3>${escapeHtml(content.process1_title)}</h3><p>${escapeHtml(content.process1_body)}</p></div>
+    <div class="process-step" data-reveal-item><div class="process-num">02</div><h3>${escapeHtml(content.process2_title)}</h3><p>${escapeHtml(content.process2_body)}</p></div>
+    <div class="process-step" data-reveal-item><div class="process-num">03</div><h3>${escapeHtml(content.process3_title)}</h3><p>${escapeHtml(content.process3_body)}</p></div>
+    <div class="process-step" data-reveal-item><div class="process-num">04</div><h3>${escapeHtml(content.process5_title)}</h3><p>${escapeHtml(content.process5_body)}</p></div>
+    <div class="process-step" data-reveal-item><div class="process-num">05</div><h3>${escapeHtml(content.process4_title)}</h3><p>${escapeHtml(content.process4_body)}</p></div>
+    <div class="process-step" data-reveal-item><div class="process-num">06</div><h3>${escapeHtml(content.process6_title)}</h3><p>${escapeHtml(content.process6_body)}</p></div>
   </div>
 </section>
 
@@ -77,7 +78,7 @@ ${ctaBand(content)}
 
 function galleryTile(g) {
   const visual = g.image
-    ? `<img src="${escapeHtml(g.image)}" alt="${escapeHtml(g.caption)}" loading="lazy">`
+    ? `<img src="${escapeHtml(g.image)}"${imgDims(g.image)} alt="${escapeHtml(g.caption)}" loading="lazy" decoding="async">`
     : icons.galleryArt[g.icon] || icons.galleryArt.field;
   return `<div class="gallery-tile" data-reveal-item>${visual}<div class="gallery-cap">${escapeHtml(g.caption)}</div></div>`;
 }

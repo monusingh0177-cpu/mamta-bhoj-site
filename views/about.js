@@ -14,7 +14,7 @@ function renderAbout(content) {
 <section class="page-hero wrap" data-reveal>
   <span class="eyebrow">About Us</span>
   <h1>Devmam Flourish Foods LLP</h1>
-  <p>Millers of the Mamta Bhoj range — fresh, naturally stone-ground atta, maida and sooji from our unit in Chaubepur, Kanpur.</p>
+  <p>Millers of the Mamta Bhoj range: naturally stone-ground chakki atta and tandoori atta, plus maida, sooji and besan, from our unit in Chaubepur, Kanpur.</p>
 </section>
 <section class="wrap">
   <div class="about-grid" data-reveal>
@@ -46,7 +46,7 @@ ${wheatDividerBand()}
         (t, i) => `<div class="story-step" data-reveal-item style="--i:${i}">
           <div class="story-step-icon">${t.icon}</div>
           <div class="story-step-line" aria-hidden="true"></div>
-          <h4>${escapeHtml(t.title)}</h4>
+          <h3>${escapeHtml(t.title)}</h3>
           <p>${t.body}</p>
         </div>`
       )

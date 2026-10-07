@@ -14,7 +14,7 @@ function faqItems(content) {
     ['Is Mamta Bhoj FSSAI licensed and ISO certified?', `Yes — our facility is FSSAI licensed (Licence No. ${content.fssai || ''}) and ISO 9001:2015 certified. Both are printed on every pack.`],
     ['How should I store the atta, maida or sooji after opening?', 'Keep the pack sealed and store it in a cool, dry place away from direct sunlight and moisture. Batch and packing details are printed on the label — please refer to it for guidance.'],
     ['Do you offer dealership or distributor opportunities?', 'Yes. We are actively onboarding dealers and distributors. Send us your details from the Contact page and our team will respond within one business day.'],
-    ['Can I place a bulk or wholesale order?', 'Yes. Use the enquiry form on our Contact page and select "Bulk / Wholesale Order" as the enquiry type — our team will get in touch to discuss quantities and pricing.'],
+    ['Can I place a bulk or wholesale order?', 'Yes. Use the enquiry form on our Contact page and select "Wholesale / Bulk Purchase" as the enquiry type — our team will get in touch to discuss quantities and pricing.'],
     ['Where is Mamta Bhoj made?', `All our products are milled and packed at our facility at ${content.address || ''}.`],
     ['How can I get in touch with your team?', `Call us at ${content.phone || ''}, email ${content.email || ''}, or use the enquiry form on our Contact page.`],
   ];

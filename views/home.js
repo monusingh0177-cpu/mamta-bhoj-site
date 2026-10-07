@@ -3,6 +3,7 @@ const { escapeHtml, slugify } = require('../lib/http-utils');
 const icons = require('../lib/icons');
 const { whyGrid, promoStrip, ctaBand, wheatDividerBand, journeySection } = require('../lib/render');
 const { B2B_LINKS } = require('./links');
+const { imgDims } = require('../lib/image-dims');
 
 // Generic descriptions of the B2B enquiry categories only — no eligibility
 // criteria, exclusivity, guaranteed supply or commercial terms implied.
@@ -78,7 +79,7 @@ function renderHome(content, products, guides) {
         ${slides
           .map(
             (s, i) => `<div class="hero-carousel-slide${i === 0 ? ' is-active' : ''}" data-slide-index="${i}" aria-hidden="${i === 0 ? 'false' : 'true'}">
-              <div class="hero-carousel-art" data-expected="${s.image}"><img data-carousel-img src="/images/hero/${s.image}" alt="${escapeHtml(s.alt)}" ${i === 0 ? 'fetchpriority="high"' : 'loading="lazy"'}></div>
+              <div class="hero-carousel-art" data-expected="${s.image}"><img data-carousel-img src="/images/hero/${s.image}"${imgDims('/images/hero/' + s.image)} alt="${escapeHtml(s.alt)}" ${i === 0 ? 'fetchpriority="high"' : 'loading="lazy" decoding="async"'}></div>
               <a href="${s.href}" class="hero-carousel-cta">${s.cta} ${arrowIcon()}</a>
             </div>`
           )
@@ -131,7 +132,7 @@ ${promoStrip(icons)}
       ${aboutSlides
         .map(
           (s, i) => `<div class="about-carousel-slide${i === 0 ? ' is-active' : ''}" data-slide-index="${i}" aria-hidden="${i === 0 ? 'false' : 'true'}">
-            <div class="about-carousel-art" data-expected="${s.image}"><img data-carousel-img src="/images/about-mill/${s.image}" alt="${escapeHtml(s.alt)}" loading="lazy" decoding="async"></div>
+            <div class="about-carousel-art" data-expected="${s.image}"><img data-carousel-img src="/images/about-mill/${s.image}"${imgDims('/images/about-mill/' + s.image)} alt="${escapeHtml(s.alt)}" loading="lazy" decoding="async"></div>
           </div>`
         )
         .join('')}
@@ -220,7 +221,7 @@ ${whyGrid(icons, 'Freshness you can taste, standards you can trust')}
     ${PARTNER_TYPES.map(
       (p, i) => `<div class="why-card" data-reveal-item>
         <div class="process-num">${String(i + 1).padStart(2, '0')}</div>
-        <h4>${escapeHtml(p.title)}</h4>
+        <h3 class="why-h">${escapeHtml(p.title)}</h3>
         <p>${escapeHtml(p.body)}</p>
       </div>`
     ).join('')}
@@ -231,7 +232,7 @@ ${whyGrid(icons, 'Freshness you can taste, standards you can trust')}
       <a href="/contact?type=${encodeURIComponent('Dealership')}" class="btn btn-primary">Become a Partner ${arrowIcon()}</a>
       <a href="/contact?type=${encodeURIComponent('Wholesale / Bulk Purchase')}" class="btn btn-ghost">Discuss Bulk Requirements</a>
     </div>
-    <p class="partner-more">Learn more about <a class="inline-link" href="/flour-manufacturer-kanpur">our flour-milling unit in Kanpur</a>, or browse our <a class="inline-link" href="/guides">flour guides</a>.</p>
+    <p class="partner-more">Learn more about <a class="inline-link" href="/flour-manufacturer-kanpur">our flour-milling unit in Kanpur</a> and <a class="inline-link" href="/flour-manufacturer-india">our range as a flour manufacturer for buyers across India</a>, or browse our <a class="inline-link" href="/guides">flour guides</a>.</p>
   </div>
 </section>
 
@@ -253,11 +254,11 @@ ${whyGrid(icons, 'Freshness you can taste, standards you can trust')}
   ${
     guides && guides.length
       ? `<div class="section-head" style="margin-top:2.4em;"><span class="eyebrow">Learn Before You Buy</span><h3 style="font-size:1.25rem;margin-top:.3em;">Flour guides</h3></div>
-  <ul class="guide-links">${['chakki-atta-vs-roller-milled-atta', 'what-is-maida', 'what-is-besan', 'how-to-choose-flour-supplier']
+  <ul class="guide-links">${['how-to-choose-atta', 'types-of-flour-in-india', 'chakki-atta-vs-roller-milled-atta', 'how-to-store-flour', 'how-to-choose-flour-supplier', 'bulk-flour-procurement-guide']
     .map((s) => guides.find((g) => g.slug === s))
     .filter(Boolean)
     .map((g) => `<li><a href="/guides/${g.slug}">${escapeHtml(g.h1)}</a></li>`)
-    .join('')}</ul>`
+    .join('')}<li><a href="/guides">All flour guides</a></li></ul>`
       : ''
   }
 </section>
@@ -288,7 +289,7 @@ function heroWave() {
 function productCard(p) {
   const tags = (Array.isArray(p.tags) ? p.tags : []).map((t) => `<span class="tag">${escapeHtml(t)}</span>`).join('');
   const visual = p.image
-    ? `<div class="product-photo-frame"><img class="product-photo" src="${escapeHtml(p.image)}" alt="Mamta Bhoj ${escapeHtml(p.name)} pack" loading="lazy"></div>`
+    ? `<div class="product-photo-frame"><img class="product-photo" src="${escapeHtml(p.image)}"${imgDims(p.image)} alt="Mamta Bhoj ${escapeHtml(p.name)} pack" loading="lazy" decoding="async"></div>`
     : `<div class="product-icon" style="margin:20px 0 0 20px;">${icons.productIcons[p.icon] || icons.productIcons.wheat}</div>`;
   return `<div class="product-card${p.featured ? ' featured' : ''}" data-reveal-item>
     ${p.image ? visual : ''}
@@ -306,7 +307,7 @@ function packagingShowcase(product) {
   if (!product.image) return '';
   return `<section class="wrap" data-reveal>
     <div class="pack-grid">
-      <div class="pack-photo"><img src="${escapeHtml(product.image)}" alt="Mamta Bhoj ${escapeHtml(product.name)} pack" loading="lazy"></div>
+      <div class="pack-photo"><img src="${escapeHtml(product.image)}"${imgDims(product.image)} alt="Mamta Bhoj ${escapeHtml(product.name)} pack" loading="lazy" decoding="async"></div>
       <div>
         <span class="eyebrow">As It Reaches Your Kitchen</span>
         <h2 style="margin-top:.4em;font-size:clamp(1.4rem,2.6vw,1.9rem);">Packed for freshness, labelled for trust</h2>

@@ -7,6 +7,10 @@
       if (isHidden) {
         links.removeAttribute('hidden');
         toggle.setAttribute('aria-expanded', 'true');
+        // The menu sits before the button in the page order, so move keyboard
+        // focus into it; otherwise Tab would skip straight past the links.
+        var first = links.querySelector('a');
+        if (first) first.focus();
       } else {
         links.setAttribute('hidden', '');
         toggle.setAttribute('aria-expanded', 'false');
@@ -17,6 +21,13 @@
         links.setAttribute('hidden', '');
         toggle.setAttribute('aria-expanded', 'false');
       });
+    });
+    // Escape closes the open menu and returns focus to the menu button.
+    document.addEventListener('keydown', function (e) {
+      if (e.key !== 'Escape' || links.hasAttribute('hidden') || toggle.offsetParent === null) return;
+      links.setAttribute('hidden', '');
+      toggle.setAttribute('aria-expanded', 'false');
+      toggle.focus();
     });
   }
 

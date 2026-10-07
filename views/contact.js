@@ -41,9 +41,10 @@ function renderContact(content, query, products) {
       <div class="contact-row">${icons.trust.phone}<div><strong>Phone</strong><a href="tel:${escapeHtml((content.phone || '').replace(/\s+/g, ''))}">${escapeHtml(content.phone)}</a></div></div>
       <div class="contact-row">${icons.trust.mail}<div><strong>Email</strong><a href="mailto:${escapeHtml(content.email)}">${escapeHtml(content.email)}</a></div></div>
       <div class="contact-row">${icons.trust.fssai}<div><strong>FSSAI Licence No.</strong><span>${escapeHtml(content.fssai)}</span></div></div>
-      <p class="contact-more">Before you write, you can browse the <a class="inline-link" href="/products">Mamta Bhoj products</a> or read about us as a <a class="inline-link" href="/flour-manufacturer-kanpur">flour manufacturer in Kanpur</a>.</p>
+      <p class="contact-more">Before you write, you can browse the <a class="inline-link" href="/products">Mamta Bhoj products</a>, read about us as a <a class="inline-link" href="/flour-manufacturer-kanpur">flour manufacturer in Kanpur</a> and our <a class="inline-link" href="/flour-manufacturer-india">overview for buyers across India</a>, or see how to <a class="inline-link" href="/bulk-flour-supplier-india">buy flour in bulk</a>.</p>
     </div>
     <form method="POST" action="/contact" class="form-panel">
+      <h2 class="form-panel-title">Send us an enquiry</h2>
       ${alertHtml}
       <div class="field-row">
         <div class="field"><label for="f-name">Full Name</label><input type="text" id="f-name" name="name" placeholder="Your name" required></div>
