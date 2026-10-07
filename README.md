@@ -263,3 +263,125 @@ gallery placeholders) are hand-drawn inline SVG — no stock photography — so
 the whole site loads fast and nothing depends on a third-party image host.
 Replace them with real mill/facility photography any time via the admin
 panel's Gallery section.
+
+---
+
+## 7. Safe deployment & SEO health checks
+
+Two helper scripts live in `scripts/`. Neither is used by the running app,
+and neither ever changes production data, uploads, `.env`, the mailer, or
+admin/auth code.
+
+### SEO health check (read-only)
+
+```bash
+scripts/seo-health-check.sh --local 3000          # a local copy (npm start)
+scripts/seo-health-check.sh                       # the live site (https://devmamflourishfoods.com)
+scripts/seo-health-check.sh --base-url https://staging.example --verbose
+```
+
+Only sends GET/HEAD requests. Checks robots.txt, sitemap.xml, canonicals,
+titles/descriptions, one H1 per page, Open Graph/Twitter tags, image alt text,
+JSON-LD validity (no fabricated prices/ratings/offers), the business address,
+banned claims, pack sizes, redirects (www, trailing slash, legacy slugs),
+404 noindex, that private files are not exposed, and internal links.
+Canonicals must always point at the production origin, even for a local run.
+Options: `--expect-urls N`, `--skip-links`, `--timeout S`, `--no-color`.
+Exit codes: `0` pass, `1` failures, `2` usage / site unreachable.
+
+### Mamta Bhoj production configuration
+
+| Setting | Value |
+|---|---|
+| App path on the server | `DEPLOY_PATH=/var/www/mamta-bhoj-site` (script default) |
+| Branch | `main` (script default; anything else needs `--allow-non-main`) |
+| Restart command | `DEPLOY_RESTART_CMD="pm2 restart mamta-bhoj"` (script default) |
+| Restart shell | `DEPLOY_RESTART_SHELL=login` (default: `bash -lc`, so a `pm2` installed under nvm or a user prefix is found) |
+| Backups | `DEPLOY_BACKUP_DIR`, default `~/mamta-bhoj-backups` of the deploy user |
+| Config file | `~/.config/mamta-bhoj/deploy.env` on the machine you deploy **from**, `chmod 600`, never committed |
+
+`deploy.env` (host and user are the only things you must provide):
+
+```
+DEPLOY_HOST=your.server.example
+DEPLOY_USER=deploy
+# Defaults, only set to override:
+# DEPLOY_PATH=/var/www/mamta-bhoj-site
+# DEPLOY_RESTART_CMD=pm2 restart mamta-bhoj
+# DEPLOY_BACKUP_DIR=/var/backups/mamta-bhoj     # must already exist and be writable by the deploy user
+# DEPLOY_PERSIST_DIR=/var/data                  # only if the app uses PERSIST_DIR
+# DEPLOY_HEALTH_URL=https://devmamflourishfoods.com
+```
+
+Backups: the script does **not** assume it can write next to the app. The
+default is `~/mamta-bhoj-backups` of the deploy user, created with mode 700
+(files are 600). To use a system location such as `/var/backups/mamta-bhoj`,
+create it once yourself with the right owner and set `DEPLOY_BACKUP_DIR`.
+Before it changes anything the script checks the backup directory is writable
+and outside the app checkout, and that the restart program is found on the
+server; otherwise it stops with nothing changed.
+
+PM2 note: non-interactive ssh sessions often lack the PATH that your login
+shell has. The restart runs through a login shell for that reason, and the
+script verifies `pm2` is found before deploying. If it is still not found, use
+an absolute path (`DEPLOY_RESTART_CMD="/usr/bin/pm2 restart mamta-bhoj"`) or
+fix the server's login profile. `DEPLOY_RESTART_CMD` and `DEPLOY_SSH` are
+**trusted operator input**: they are executed as written, so take them only
+from your own environment or `deploy.env`. Do not put passwords or tokens in
+them (they are printed, and hidden with a warning if they look sensitive);
+keep app secrets in the server's environment or PM2 ecosystem file.
+
+### Commands
+
+```bash
+# 1. Always first: runs the local checks and PRINTS every remote command, executes nothing remotely
+scripts/deploy-production.sh --dry-run
+
+# 2. Production deploy (asks you to type the server name; main must be clean and pushed)
+scripts/deploy-production.sh
+
+# 3. Verify the live site at any time (read-only)
+scripts/seo-health-check.sh
+
+# Rollback: preview, then execute
+scripts/deploy-production.sh --rollback <commit-sha> --dry-run
+scripts/deploy-production.sh --rollback <commit-sha>
+```
+
+What a deploy does, in order: local pre-flight (on `main`, clean tree, pushed
+to origin, syntax checks, secret scan, no sensitive files tracked) -> isolated
+smoke test of `HEAD` plus the SEO health check -> server inspection (clean
+checkout, restart program found, backup directory writable) -> timestamped
+backup of `data/` and `public/uploads/` -> fetch + fast-forward check +
+protected-path guard -> `git merge --ff-only` -> `npm ci` only if package files
+changed -> restart -> live SEO verification. The app is never restarted unless
+every earlier step succeeded.
+
+Safety guarantees:
+- **Protected paths** (`data/`, `public/uploads/`, `.env*`, mailer, admin/auth,
+  session and store code): a deploy **or rollback** whose diff touches them is
+  refused, naming the files, before any backup or change. The only way past is
+  the explicit `--allow-protected-changes`, which is reported as a warning.
+- **Dirty server checkout**: uncommitted changes to tracked code files on the
+  server are refused. Admin edits in `data/` and uploads are expected, kept,
+  and never overwritten (git refuses a merge/reset that would touch them).
+- **Never** `reset --hard`, `clean`, `rm -rf`, force-push or `rsync --delete`.
+- **Rollback** uses `git reset --keep`, only to an ancestor of the server's
+  commit, after the guard and a backup. If package files differ it runs
+  `npm ci` **before** restarting; if `npm ci` fails the app is not restarted.
+  Rolling back past SEO fixes will fail the live check; that is expected.
+- **Failed live check after the restart**: the script prints diagnostics (HTTP
+  probes, server commit and status, and for pm2 a `pm2 describe` plus the last
+  20 error-log lines, with obvious secrets masked), the failure, and the exact
+  rollback command. It never rolls back by itself.
+- **Skip flags**: `--skip-local-tests` and `--skip-post-check` remain, and are
+  reported as `SAFETY VALIDATION BYPASSED` at the start, at the step, and in
+  the final summary.
+- **Inputs**: host, user, remote name, branch, `--base`, SHAs, paths and URLs are
+  validated (no leading `-`) and shell-quoted; ssh is called with `--` before
+  `user@host`.
+- **Logs and secrets**: logs (in `$TMPDIR`, default `/tmp`) and backups are
+  mode 600/700; the config file is flagged if group- or world-accessible; secret
+  scan hits are redacted; the script refuses to run under `set -x`.
+
+Exit codes: `0` ok, `1` stopped (a check or step failed), `2` usage/config error.
