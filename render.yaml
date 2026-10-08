@@ -18,24 +18,15 @@ services:
     envVars:
       - key: FORCE_HTTPS
         value: "1"
-      # Enquiry-email settings (see lib/mailer.js). ENQUIRY_TO_EMAIL has a
-      # safe default below; the SMTP_* values are `sync: false` so Render
-      # prompts for them in the dashboard instead of storing them here —
-      # fill them in with the mailbox's real SMTP credentials after the
-      # service is created. Until they're set, enquiries still save
-      # normally, they just aren't emailed (see the mailer's own log line).
+      # Enquiry-email settings (see lib/mailer.js). Email goes through the ZeptoMail
+      # HTTP API. ENQUIRY_TO_EMAIL has a safe default below; the token and sender
+      # are `sync: false` so Render prompts for them in the dashboard instead of
+      # storing them here. Until the token is set, enquiries still save normally,
+      # they just aren't emailed (see the mailer's own log line).
       - key: ENQUIRY_TO_EMAIL
         value: info@devmamflourishfoods.com
-      - key: SMTP_HOST
+      - key: ZEPTOMAIL_API_TOKEN
         sync: false
-      - key: SMTP_PORT
-        sync: false
-      - key: SMTP_SECURE
-        sync: false
-      - key: SMTP_USER
-        sync: false
-      - key: SMTP_PASSWORD
-        sync: false
-      # Sender address (must be on a verified domain when SMTP_USER is not an email).
+      # Sender address (must be on a domain verified in ZeptoMail).
       - key: SMTP_FROM_EMAIL
         sync: false

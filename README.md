@@ -216,25 +216,25 @@ manage updates and HTTPS yourself."
 ## 4. Enquiry form and email notifications
 
 Every Contact form submission is validated, saved (visible in `Admin → Enquiries`) and then
-emailed to `ENQUIRY_TO_EMAIL` through SMTP (`lib/mailer.js`, ZeptoMail in production). The
-enquiry is **saved first**; the visitor always gets an answer within a few seconds, even if the
+emailed to `ENQUIRY_TO_EMAIL` through the **ZeptoMail HTTP API** (`lib/mailer.js`, HTTPS on port 443).
+SMTP is not used: DigitalOcean blocks outbound SMTP ports 25, 465 and 587 on Droplets.
+The enquiry is **saved first**; the visitor always gets an answer within a few seconds, even if the
 mail service is slow, down or misconfigured (the failure is logged as `[mailer] ... email FAILED`).
 
 | Variable | Purpose |
 |---|---|
-| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD` | SMTP service. Email is skipped (enquiry still saved) until host, user and password are set. |
-| `SMTP_SECURE` | `1` = TLS on connect (port 465), `0` = STARTTLS (port 587). If unset, port 465 means secure. |
+| `ZEPTOMAIL_API_TOKEN` | ZeptoMail **Send Mail token** (the same token that was used as the SMTP password). If this is not set, the existing `SMTP_PASSWORD` value is used, so a server that already has the token in `SMTP_PASSWORD` needs no change. Email is skipped (enquiry still saved) when neither is set. |
+| `SMTP_FROM_EMAIL` | Sender address. Must be on a domain verified in ZeptoMail (for example `info@devmamflourishfoods.com`). |
 | `ENQUIRY_TO_EMAIL` | Recipient (default `info@devmamflourishfoods.com`). |
-| `SMTP_FROM_EMAIL` | Sender address. Must be on a domain verified in the mail service. Needed when `SMTP_USER` is not an email address. |
-| `SMTP_TIMEOUT_MS` | Hard cap for one email send (default 15000). |
-| `ENQUIRY_EMAIL_WAIT_MS` | How long the form waits for the email before answering (default 6000). |
+| `ZEPTOMAIL_API_URL` | Optional. Default `https://api.zeptomail.com/v1.1/email`. An account in ZeptoMail's India data centre (the old SMTP host was `smtp.zeptomail.in`) normally needs `https://api.zeptomail.in/v1.1/email`; confirm in the ZeptoMail console. |
+| `ZEPTOMAIL_TIMEOUT_MS` | Optional hard cap for one API call (default 10000). |
+| `ENQUIRY_EMAIL_WAIT_MS` | Optional. How long the form waits for the email before answering (default 6000). |
 
-ZeptoMail SMTP typically uses host `smtp.zeptomail.in` (or `.com` / `.eu`, matching your account
-region), port 587 with `SMTP_SECURE=0` (or 465 with `1`), user `emailapikey`, and the Send Mail
-token as the password; confirm the exact values in the ZeptoMail console. The sender
-(`SMTP_FROM_EMAIL`) must be an address on your verified domain. Never commit these values.
+The old `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE` and `SMTP_USER` settings are no longer used (a valid
+email address in `SMTP_USER` is still accepted as the sender if `SMTP_FROM_EMAIL` is missing).
+Never commit these values.
 
-Test the whole pipeline with fake services (no real credentials needed): `npm run test:enquiry`.
+Test the whole pipeline with a fake API server (no real credentials needed): `npm run test:enquiry`.
 
 ---
 
