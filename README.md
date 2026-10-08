@@ -213,22 +213,28 @@ manage updates and HTTPS yourself."
 
 ---
 
-## 4. Adding email notifications for new enquiries (optional, later)
+## 4. Enquiry form and email notifications
 
-Right now, every Contact form submission is saved and visible in
-`Admin → Enquiries`. If you'd also like an email sent to your inbox the
-moment someone submits the form, that needs an email-sending library
-(e.g. `nodemailer`), which needs `npm install` — not possible from the
-sandbox this project was built in, but works fine once this is on your own
-server with normal internet access:
+Every Contact form submission is validated, saved (visible in `Admin → Enquiries`) and then
+emailed to `ENQUIRY_TO_EMAIL` through SMTP (`lib/mailer.js`, ZeptoMail in production). The
+enquiry is **saved first**; the visitor always gets an answer within a few seconds, even if the
+mail service is slow, down or misconfigured (the failure is logged as `[mailer] ... email FAILED`).
 
-```bash
-npm install nodemailer
-```
+| Variable | Purpose |
+|---|---|
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD` | SMTP service. Email is skipped (enquiry still saved) until host, user and password are set. |
+| `SMTP_SECURE` | `1` = TLS on connect (port 465), `0` = STARTTLS (port 587). If unset, port 465 means secure. |
+| `ENQUIRY_TO_EMAIL` | Recipient (default `info@devmamflourishfoods.com`). |
+| `SMTP_FROM_EMAIL` | Sender address. Must be on a domain verified in the mail service. Needed when `SMTP_USER` is not an email address. |
+| `SMTP_TIMEOUT_MS` | Hard cap for one email send (default 15000). |
+| `ENQUIRY_EMAIL_WAIT_MS` | How long the form waits for the email before answering (default 6000). |
 
-Then wire it up in `routes/public.js` inside the `router.post('/contact', ...)`
-handler, right after `store.insertRow('enquiries', ...)`. Ask any Node.js
-developer to do this in under an hour if you'd rather not do it yourself.
+ZeptoMail SMTP typically uses host `smtp.zeptomail.in` (or `.com` / `.eu`, matching your account
+region), port 587 with `SMTP_SECURE=0` (or 465 with `1`), user `emailapikey`, and the Send Mail
+token as the password; confirm the exact values in the ZeptoMail console. The sender
+(`SMTP_FROM_EMAIL`) must be an address on your verified domain. Never commit these values.
+
+Test the whole pipeline with fake services (no real credentials needed): `npm run test:enquiry`.
 
 ---
 

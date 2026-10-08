@@ -31,17 +31,115 @@
     });
   }
 
-  // Give instant feedback on form submit (these are plain POSTs that reload
-  // the page, so a disabled/relabelled button just prevents double-submits
-  // and shows the visitor something is happening while the page navigates).
+  // Give instant feedback on form submit (plain POSTs that reload the page, e.g. the newsletter box):
+  // a disabled/relabelled button prevents double-submits and shows the visitor something is happening.
   document.querySelectorAll('form').forEach(function (form) {
+    if (form.hasAttribute('data-enquiry-form')) return; // handled below
     form.addEventListener('submit', function () {
       var btn = form.querySelector('button[type="submit"]');
       if (!btn || btn.disabled) return;
+      btn.setAttribute('data-label', btn.textContent);
       btn.disabled = true;
       btn.textContent = btn.getAttribute('data-loading-text') || 'Please wait…';
     });
   });
+  // A page restored from the back/forward cache must not keep a button stuck on "Sending…".
+  window.addEventListener('pageshow', function (e) {
+    if (!e.persisted) return;
+    document.querySelectorAll('button[type="submit"][data-label]').forEach(function (btn) {
+      btn.disabled = false;
+      btn.textContent = btn.getAttribute('data-label');
+    });
+  });
+
+  // Enquiry form: sent in the background so the visitor always gets a clear answer on the page, never a
+  // raw gateway error page. Without JavaScript (or fetch) the form is an ordinary POST and still works.
+  var enquiryForm = document.querySelector('form[data-enquiry-form]');
+  if (enquiryForm && window.fetch && window.FormData && window.URLSearchParams && window.AbortController) {
+    var statusBox = document.getElementById('enquiry-status');
+    var submitBtn = enquiryForm.querySelector('button[type="submit"]');
+    var idleLabel = submitBtn ? submitBtn.textContent : 'Send Enquiry';
+    var busy = false;
+    var SEND_TIMEOUT_MS = 20000;
+    var phone = enquiryForm.getAttribute('data-phone') || '';
+    var email = enquiryForm.getAttribute('data-email') || '';
+    var contactHint = (phone ? ' call us on ' + phone : '') + (phone && email ? ' or' : '') + (email ? ' email ' + email : '');
+
+    var showStatus = function (kind, text) {
+      statusBox.className = 'enquiry-status alert alert-' + kind;
+      statusBox.setAttribute('role', kind === 'error' ? 'alert' : 'status');
+      statusBox.textContent = text; // text only, never markup
+      statusBox.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      statusBox.focus({ preventScroll: true });
+    };
+    var clearErrors = function () {
+      statusBox.className = 'enquiry-status';
+      statusBox.textContent = '';
+      enquiryForm.querySelectorAll('.field-error').forEach(function (n) { n.remove(); });
+      enquiryForm.querySelectorAll('[aria-invalid]').forEach(function (n) { n.removeAttribute('aria-invalid'); });
+    };
+    var markFields = function (fields) {
+      var first = null;
+      Object.keys(fields || {}).forEach(function (name) {
+        var input = enquiryForm.elements[name];
+        if (!input || !input.parentNode) return;
+        input.setAttribute('aria-invalid', 'true');
+        var msg = document.createElement('span');
+        msg.className = 'field-error';
+        msg.textContent = String(fields[name]);
+        input.parentNode.appendChild(msg);
+        if (!first) first = input;
+      });
+      if (first) first.focus({ preventScroll: true });
+    };
+    var failure = function (timedOut) {
+      showStatus('error', timedOut
+        ? 'This is taking longer than expected. Your enquiry may already have been received, so please check before sending it again, or' + contactHint + '.'
+        : 'Sorry, we could not send your enquiry just now. Please try again in a minute, or' + contactHint + '.');
+    };
+
+    enquiryForm.addEventListener('submit', function (e) {
+      e.preventDefault();
+      if (busy) return; // a second click while the first is in flight does nothing
+      if (!enquiryForm.checkValidity()) { enquiryForm.reportValidity(); return; }
+      busy = true;
+      clearErrors();
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Sending…';
+      enquiryForm.setAttribute('aria-busy', 'true');
+      var controller = new AbortController();
+      var timer = setTimeout(function () { controller.abort(); }, SEND_TIMEOUT_MS);
+      fetch(enquiryForm.getAttribute('action') || '/contact', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { Accept: 'application/json', 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+        body: new URLSearchParams(new FormData(enquiryForm)).toString(),
+        signal: controller.signal,
+      })
+        .then(function (res) {
+          return res.json().then(function (data) { return { res: res, data: data }; }, function () { return { res: res, data: null }; });
+        })
+        .then(function (r) {
+          if (r.data && r.data.ok) {
+            showStatus('success', r.data.message || 'Thank you! Your enquiry has been submitted successfully. We will contact you shortly.');
+            enquiryForm.reset();
+          } else if (r.res.status === 422 && r.data && r.data.fields) {
+            markFields(r.data.fields);
+            showStatus('error', r.data.message || 'Please check the highlighted details and try again.');
+          } else {
+            failure(false);
+          }
+        })
+        .catch(function (err) { failure(Boolean(err && err.name === 'AbortError')); })
+        .then(function () {
+          clearTimeout(timer);
+          busy = false;
+          submitBtn.disabled = false;
+          submitBtn.textContent = idleLabel;
+          enquiryForm.removeAttribute('aria-busy');
+        });
+    });
+  }
 
   // Subtle reveal-on-scroll for [data-reveal] / [data-reveal-item] elements.
   // The CSS only hides these once html.js-reveal-ready is present, so the

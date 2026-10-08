@@ -670,3 +670,9 @@ body{text-rendering:optimizeLegibility;}
 /* Plain-text phone/email line under the enquiry call-to-action */
 .cta-band .cta-contact{margin:14px auto 0;font-size:.92rem;}
 .cta-contact a{color:inherit;font-weight:600;text-decoration:underline;text-underline-offset:2px;}
+
+/* Enquiry form status and field errors (progressive enhancement, public/js/main.js) */
+.enquiry-status:empty{display:none;}
+.enquiry-status{margin-bottom:14px;}
+.field-error{display:block;margin-top:4px;color:var(--danger);font-size:.82rem;}
+.field [aria-invalid="true"]{border-color:var(--danger);}

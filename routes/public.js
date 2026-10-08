@@ -1,7 +1,8 @@
 'use strict';
 const store = require('../lib/store');
 const { layout, breadcrumbNav } = require('../lib/render');
-const { parseForm, sendHtml, redirect, slugify, escapeHtml } = require('../lib/http-utils');
+const { parseForm, sendHtml, sendJson, redirect, slugify, escapeHtml } = require('../lib/http-utils');
+const { validateEnquiry, isRecentDuplicate, forget, MESSAGES } = require('../lib/enquiry');
 const { renderHome } = require('../views/home');
 const { renderAbout } = require('../views/about');
 const { renderProducts } = require('../views/products');
@@ -411,38 +412,59 @@ router.get('/contact', async (req, res, params, query) => {
   );
 });
 
+// How long the visitor may wait for the notification email. The enquiry is already saved before the
+// email is attempted, so the answer never depends on the mail service: if it is slow, the visitor is
+// answered after this many milliseconds and the send keeps running in the background (it has its own hard
+// timeout in lib/mailer.js and is always logged).
+const EMAIL_WAIT_MS = Number(process.env.ENQUIRY_EMAIL_WAIT_MS) > 0 ? Number(process.env.ENQUIRY_EMAIL_WAIT_MS) : 6000;
+
 router.post('/contact', async (req, res) => {
-  const body = await parseForm(req);
-  const name = (body.name || '').toString().trim();
-  const phone = (body.phone || '').toString().trim();
-  const type = (body.type || '').toString().trim();
-  const productInterest = (body.productInterest || '').toString().trim();
-  const monthlyRequirement = (body.monthlyRequirement || '').toString().trim();
-  const cityState = (body.cityState || '').toString().trim();
-  const message = (body.message || '').toString().trim();
+  // The enhanced form (public/js/main.js) asks for JSON; a plain browser POST gets a redirect.
+  const wantsJson = /application\/json/i.test(String(req.headers.accept || ''));
+  const fail = (status, code, message, fields) => {
+    if (wantsJson) return sendJson(res, status, { ok: false, error: code, message, fields: fields || undefined });
+    return redirect(res, code === 'validation' ? '/contact?error=1' : '/contact?error=server');
+  };
+  try {
+    let body;
+    try {
+      body = await parseForm(req);
+    } catch (err) {
+      if (err && err.statusCode === 413) return fail(413, 'too_large', MESSAGES.tooLarge);
+      return fail(400, 'bad_request', MESSAGES.invalid);
+    }
 
-  if (!name || !phone || !type || !productInterest) {
-    return redirect(res, '/contact?error=1');
+    const products = siteProducts();
+    const checked = validateEnquiry(body, products.map((p) => p.name));
+    if (!checked.ok) return fail(422, 'validation', MESSAGES.invalid, checked.fields);
+    const data = checked.data;
+
+    // Same enquiry again within two minutes (double click, retry after a slow page): acknowledge, store nothing new.
+    if (isRecentDuplicate(data)) {
+      console.log('[enquiry] repeat submission within 2 minutes acknowledged without storing it again');
+      return wantsJson ? sendJson(res, 200, { ok: true, duplicate: true, message: MESSAGES.success }) : redirect(res, '/contact?sent=1');
+    }
+
+    let saved;
+    try {
+      saved = store.insertRow('enquiries', Object.assign({}, data, { read: false, createdAt: new Date().toISOString() }));
+    } catch (err) {
+      forget(data);
+      console.error(`[enquiry] could not store the enquiry: ${err.code || ''} ${String(err.message || '').slice(0, 200)}`);
+      return fail(500, 'storage', MESSAGES.server);
+    }
+
+    // Notification email: attempted now, waited for only briefly, never allowed to fail or delay the answer.
+    const mailing = sendEnquiryEmail(saved).catch((err) => ({ sent: false, reason: 'unexpected', ms: 0, err: err && err.message }));
+    const outcome = await Promise.race([mailing, new Promise((resolve) => setTimeout(() => resolve({ sent: false, reason: 'still_sending' }), EMAIL_WAIT_MS))]);
+    console.log(`[enquiry] #${saved.id} stored; email ${outcome.sent ? 'sent' : outcome.reason}`);
+
+    return wantsJson ? sendJson(res, 201, { ok: true, message: MESSAGES.success }) : redirect(res, '/contact?sent=1');
+  } catch (err) {
+    console.error(`[enquiry] unexpected error: ${String((err && err.message) || err).slice(0, 200)}`);
+    if (res.headersSent) return undefined;
+    return fail(500, 'unexpected', MESSAGES.server);
   }
-
-  const enquiry = store.insertRow('enquiries', {
-    name,
-    phone,
-    type,
-    productInterest,
-    monthlyRequirement,
-    cityState,
-    message,
-    read: false,
-    createdAt: new Date().toISOString(),
-  });
-
-  // The enquiry is already safely stored above regardless of what happens
-  // next — sendEnquiryEmail never throws, so a mail failure can't turn a
-  // successful submission into an error for the visitor.
-  await sendEnquiryEmail(enquiry);
-
-  redirect(res, '/contact?sent=1');
 });
 
 router.post('/newsletter', async (req, res) => {

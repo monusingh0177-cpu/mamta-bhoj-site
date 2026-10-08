@@ -2,16 +2,16 @@
 const { picture } = require('../lib/picture');
 const { escapeHtml } = require('../lib/http-utils');
 const icons = require('../lib/icons');
-
-const ENQUIRY_TYPES = ['Dealership', 'Distributorship', 'Wholesale / Bulk Purchase', 'Retailer', 'Institutional / HoReCa', 'General Product Enquiry'];
-const MONTHLY_REQUIREMENTS = ['Less than 100 kg', '100–500 kg', '500 kg–1 Ton', '1–5 Tons', '5+ Tons'];
+const { ENQUIRY_TYPES, MONTHLY_REQUIREMENTS, MESSAGES } = require('../lib/enquiry');
 
 function renderContact(content, query, products) {
   let alertHtml = '';
   if (query && query.sent === '1') {
-    alertHtml = `<div class="alert alert-success">Thank you. Your enquiry has been received. Our team will get back to you shortly.</div>`;
+    alertHtml = `<div class="alert alert-success" role="status">${escapeHtml(MESSAGES.success)}</div>`;
   } else if (query && query.error === '1') {
-    alertHtml = `<div class="alert alert-error">Please fill in your name, phone number, enquiry type and product interest before sending.</div>`;
+    alertHtml = `<div class="alert alert-error" role="alert">Please fill in your name, phone number, enquiry type and product interest correctly before sending.</div>`;
+  } else if (query && query.error) {
+    alertHtml = `<div class="alert alert-error" role="alert">${escapeHtml(MESSAGES.server)}</div>`;
   }
 
   const productOptions = (products || []).slice().sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0)).map((p) => p.name).concat(['All Products']);
@@ -44,8 +44,9 @@ function renderContact(content, query, products) {
       <div class="contact-row">${icons.trust.fssai}<div><strong>FSSAI Licence No.</strong><span>${escapeHtml(content.fssai)}</span></div></div>
       <p class="contact-more">Before you write, you can browse the <a class="inline-link" href="/products">Mamta Bhoj products</a>, read about us as a <a class="inline-link" href="/flour-manufacturer-kanpur">flour manufacturer in Kanpur</a> and our <a class="inline-link" href="/flour-manufacturer-india">overview for buyers across India</a>, or see how to <a class="inline-link" href="/bulk-flour-supplier-india">buy flour in bulk</a>.</p>
     </div>
-    <form method="POST" action="/contact" class="form-panel">
+    <form method="POST" action="/contact" class="form-panel" data-enquiry-form data-phone="${escapeHtml(content.phone || '')}" data-email="${escapeHtml(content.email || '')}">
       <h2 class="form-panel-title">Send us an enquiry</h2>
+      <div id="enquiry-status" class="enquiry-status" role="status" aria-live="polite" tabindex="-1"></div>
       ${alertHtml}
       <div class="field-row">
         <div class="field"><label for="f-name">Full Name</label><input type="text" id="f-name" name="name" placeholder="Your name" required></div>
