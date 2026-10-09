@@ -469,11 +469,11 @@ ${ctaBand(content)}
 }
 
 function renderGuidesIndex(content) {
-  const card = (g) => `<a href="/guides/${g.slug}" class="why-card guide-card" data-reveal-item>
-      <h3>${escapeHtml(g.h1)}</h3>
+  const card = (g) => `<div class="why-card guide-card" data-reveal-item>
+      <h3><a href="/guides/${g.slug}" class="card-link">${escapeHtml(g.h1)}</a></h3>
       <p>${escapeHtml(g.cardText)}</p>
-      <span class="know-more">Read the guide ${arrowIcon()}</span>
-    </a>`;
+      <span class="know-more" aria-hidden="true">Read the guide ${arrowIcon()}</span>
+    </div>`;
   const groups = GUIDE_GROUPS.map(
     (grp) => `<section class="wrap" data-reveal>
   <div class="section-head"><h2>${escapeHtml(grp.h2)}</h2><p>${escapeHtml(grp.intro)}</p></div>

@@ -190,11 +190,11 @@ ${wheatDividerBand()}
   </div>
   <div class="guide-grid">
     ${B2B_LINKS.map(
-      (l) => `<a href="/${l.slug}" class="why-card guide-card" data-reveal-item>
-      <h3 style="font-size:1.08rem;line-height:1.35;">${escapeHtml(l.cardTitle)}</h3>
+      (l) => `<div class="why-card guide-card" data-reveal-item>
+      <h3 style="font-size:1.08rem;line-height:1.35;"><a href="/${l.slug}" class="card-link">${escapeHtml(l.cardTitle)}</a></h3>
       <p>${escapeHtml(l.cardText)}</p>
-      <span class="know-more">Read how it works ${arrowIcon()}</span>
-    </a>`
+      <span class="know-more" aria-hidden="true">Read how it works ${arrowIcon()}</span>
+    </div>`
     ).join('')}
   </div>
 </section>

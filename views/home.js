@@ -66,7 +66,7 @@ function renderHome(content, products, guides) {
   <div class="hero-grid">
     <div data-reveal>
       <span class="eyebrow">${escapeHtml(content.hero_eyebrow)}</span>
-      <h1>${escapeHtml(content.hero_title)}<br><em>${escapeHtml(content.hero_title_accent)}</em></h1>
+      <h1>${escapeHtml(content.hero_title)} <br><em>${escapeHtml(content.hero_title_accent)}</em></h1>
       <p class="lead">${escapeHtml(content.hero_lead)}</p>
       <div class="hero-cta">
         <a href="/products" class="btn btn-primary">Explore Products ${arrowIcon()}</a>
@@ -181,7 +181,7 @@ ${promoStrip(icons)}
   <div class="section-head">
     <span class="eyebrow">Our Range</span>
     <h2>Milled fresh, straight from Kanpur</h2>
-    <p>Every staple under the Mamta Bhoj name is ground the same careful way — naturally stone-ground, hygienically packed, milled close to when you order.</p>
+    <p>Every staple under the Mamta Bhoj name is ground the same careful way — naturally stone-ground, hygienically packed, milled close to when you order. It is how we put &ldquo;${escapeHtml(content.hero_title)} ${escapeHtml(content.hero_title_accent)}&rdquo; into practice: good grain, ground with care, for everyday kitchens.</p>
   </div>
   <div class="product-grid">
     ${sorted.map((p) => productCard(p)).join('')}
@@ -244,11 +244,11 @@ ${whyGrid(icons, 'Freshness you can taste, standards you can trust')}
   </div>
   <div class="guide-grid">
     ${B2B_LINKS.map(
-      (l) => `<a href="/${l.slug}" class="why-card guide-card" data-reveal-item>
-      <h3 style="font-size:1.08rem;line-height:1.35;">${escapeHtml(l.cardTitle)}</h3>
+      (l) => `<div class="why-card guide-card" data-reveal-item>
+      <h3 style="font-size:1.08rem;line-height:1.35;"><a href="/${l.slug}" class="card-link">${escapeHtml(l.cardTitle)}</a></h3>
       <p>${escapeHtml(l.cardText)}</p>
-      <span class="know-more">Read how it works ${arrowIcon()}</span>
-    </a>`
+      <span class="know-more" aria-hidden="true">Read how it works ${arrowIcon()}</span>
+    </div>`
     ).join('')}
   </div>
   ${
