@@ -2,6 +2,7 @@
 const { picture } = require('../lib/picture');
 const { escapeHtml } = require('../lib/http-utils');
 const icons = require('../lib/icons');
+const { whatsappHref, WHATSAPP_DISPLAY } = require('../lib/business');
 const { ENQUIRY_TYPES, MONTHLY_REQUIREMENTS, MESSAGES } = require('../lib/enquiry');
 
 function renderContact(content, query, products) {
@@ -40,6 +41,7 @@ function renderContact(content, query, products) {
         <p class="location-card-copy">Devmam Flourish Foods LLP operates from Chaubepur, Kanpur Nagar, Uttar Pradesh, serving the Mamta Bhoj brand and its customers from our flour-milling facility.</p>
       </div>
       <div class="contact-row">${icons.trust.phone}<div><strong>Phone</strong><a href="tel:${escapeHtml((content.phone || '').replace(/\s+/g, ''))}">${escapeHtml(content.phone)}</a></div></div>
+      <div class="contact-row">${icons.whatsapp}<div><strong>WhatsApp</strong><a href="${escapeHtml(whatsappHref())}" target="_blank" rel="noopener noreferrer" aria-label="Chat with us on WhatsApp (opens in a new tab)">Chat on WhatsApp: ${escapeHtml(WHATSAPP_DISPLAY)}</a></div></div>
       <div class="contact-row">${icons.trust.mail}<div><strong>Email</strong><a href="mailto:${escapeHtml(content.email)}">${escapeHtml(content.email)}</a></div></div>
       <div class="contact-row">${icons.trust.fssai}<div><strong>FSSAI Licence No.</strong><span>${escapeHtml(content.fssai)}</span></div></div>
       <p class="contact-more">Before you write, you can browse the <a class="inline-link" href="/products">Mamta Bhoj products</a>, read about us as a <a class="inline-link" href="/flour-manufacturer-kanpur">flour manufacturer in Kanpur</a> and our <a class="inline-link" href="/flour-manufacturer-india">overview for buyers across India</a>, or see how to <a class="inline-link" href="/bulk-flour-supplier-india">buy flour in bulk</a>.</p>
