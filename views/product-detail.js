@@ -125,7 +125,7 @@ function renderProductDetail(product, allProducts, content) {
     .slice(0, 4);
 
   const heroVisual = product.image
-    ? `<div class="product-photo-frame product-hero-frame">${picture(product.image, `class="product-photo" alt="${escapeHtml(brandedName)} pack" fetchpriority="high" decoding="async"`)}</div>`
+    ? `<div class="product-photo-frame product-hero-frame">${picture(product.image, `class="product-photo" alt="${escapeHtml(brandedName)} pack${ALT_KIND[slugify(product.name)] ? ', ' + escapeHtml(ALT_KIND[slugify(product.name)]) : ''}" fetchpriority="high" decoding="async"`)}</div>`
     : `<div class="product-photo-frame product-hero-frame"><div class="product-icon">${icons.productIcons[product.icon] || icons.productIcons.wheat}</div></div>`;
 
   return `
@@ -243,6 +243,15 @@ function glanceSection(product, details) {
 </section>`;
 }
 
+// What the pack contains, appended to the hero image's alt text.
+const ALT_KIND = {
+  'fresh-chakki-atta': '100% whole wheat stone-ground atta',
+  'tandoori-atta': 'coarser stone-ground wheat flour',
+  maida: 'refined wheat flour',
+  'sooji-rava': 'semolina',
+  besan: 'gram flour from chana dal',
+};
+
 // Varied, natural phrasing per product (avoids the same anchor text on every page).
 const MANUFACTURER_ANCHORS = {
   'fresh-chakki-atta': 'our flour-milling unit in Chaubepur, Kanpur',
@@ -263,7 +272,7 @@ function businessSection(product, brandedName, details) {
     : ' You can';
   return `<section class="wrap" data-reveal>
   <div class="section-head"><span class="eyebrow">For Businesses</span><h2>Buying ${escapeHtml(brandedName)} for your business?</h2></div>
-  <p style="max-width:70ch;">Dealers, distributors, wholesalers and food businesses can read more about <a class="inline-link" href="${seo.MANUFACTURER_PATH}">${escapeHtml(anchor)}</a>.${b2bText} <a class="inline-link" href="${contactHref(enq.type, product.name)}">${escapeHtml(enq.label)}</a> for ${escapeHtml(brandedName)} directly.</p>
+  <p style="max-width:70ch;">${details && details.supply ? `${escapeHtml(details.supply)} ` : ''}Dealers, distributors, wholesalers and food businesses can read more about <a class="inline-link" href="${seo.MANUFACTURER_PATH}">${escapeHtml(anchor)}</a>.${b2bText} <a class="inline-link" href="${contactHref(enq.type, product.name)}">${escapeHtml(enq.label)}</a> for ${escapeHtml(brandedName)} directly.</p>
   ${
     guides.length
       ? `<p style="max-width:70ch;margin-top:1em;"><strong>Related reading</strong></p>

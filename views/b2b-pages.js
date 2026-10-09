@@ -35,7 +35,7 @@ const B2B_PAGES = [
       'Mamta Bhoj atta, tandoori atta, maida, sooji and besan, milled by Devmam Flourish Foods LLP in Kanpur. A product-by-product overview for buyers across India.',
     eyebrow: 'Flour Manufacturer',
     intro:
-      'Mamta Bhoj is the brand of Devmam Flourish Foods LLP, which mills and packs its flour at its own unit in Kanpur, Uttar Pradesh. This page is for buyers anywhere in India who want to know what we make, what each flour is for and what to check before choosing a manufacturer.',
+      'Mamta Bhoj is the brand of Devmam Flourish Foods LLP, which mills and packs its flour at its own unit in Kanpur, Uttar Pradesh. It is a working flour mill with its own range: whole wheat atta, tandoori atta, refined maida, semolina (sooji / rava) and gram flour (besan). This page is for buyers anywhere in India who want to know what we make, what each flour is for and what to check before choosing a manufacturer.',
     enquiryType: 'Wholesale / Bulk Purchase',
     ctaLabel: 'Send a Manufacturer Enquiry',
     sections: [
@@ -44,6 +44,7 @@ const B2B_PAGES = [
         body: [
           `Devmam Flourish Foods LLP mills and packs the Mamta Bhoj range at its own unit in Chaubepur, Kanpur Nagar. The range has five flours: Fresh Chakki Atta, Tandoori Atta, Maida, Sooji / Rava and Besan. Each one comes in ${PACKS} packs.`,
           `Businesses from any part of India are welcome to enquire: dealers, distributors, wholesalers, bakeries, caterers, sweet shops and kitchens. Whether and how we can supply a particular city or state is confirmed during the enquiry, because delivery depends on the location and the requirement. This page does not promise supply to any specific place.`,
+          `Four of the five are wheat flours: the two attas, maida and sooji. Besan is the exception, milled from chana dal. If you are looking for a flour supplier in India that mills what it sells, the table below sets out each product, and the sections after it take atta, maida, sooji and besan one at a time.`,
           `The mill itself, its address and its certifications are described on our ${MFRLINK('flour manufacturer in Kanpur page')}.`,
         ],
       },
@@ -68,8 +69,9 @@ const B2B_PAGES = [
         id: 'atta',
         h2: 'Atta manufacturer: Chakki Atta and Tandoori Atta',
         body: [
-          `Our atta is made from wheat and naturally stone-ground in the traditional chakki way. ${PRODLINK('fresh-chakki-atta', 'Mamta Bhoj Fresh Chakki Atta')} is 100% whole wheat, made for everyday rotis, chapatis and parathas, and suits households, canteens, hostels and retailers who stock a staple atta. It is rich in fibre and protein, a claim that is lab verified; the nutrition information printed on the pack gives the exact values.`,
+          `Our atta is made from wheat and naturally stone-ground in the traditional chakki way. ${PRODLINK('fresh-chakki-atta', 'Mamta Bhoj Fresh Chakki Atta')} is 100% whole wheat flour, made for everyday rotis, chapatis and parathas, and suits households, canteens, hostels and retailers who stock a staple atta. It is rich in fibre and protein, a claim that is lab verified; the nutrition information printed on the pack gives the exact values.`,
           `${PRODLINK('tandoori-atta', 'Mamta Bhoj Tandoori Atta')} is milled coarser, for kitchens that bake tandoori-style rotis and thicker parathas.`,
+          `A retailer or kitchen that needs a regular chakki atta supplier, or a business that wants to buy atta in bulk, can start from our ${B2BLINK('bulk-flour-supplier-india', 'bulk flour supply page')}.`,
         ],
         subs: [
           {
@@ -89,6 +91,7 @@ const B2B_PAGES = [
         h2: 'Maida manufacturer',
         body: [
           `${PRODLINK('maida', 'Mamta Bhoj Maida')} is a finely refined wheat flour. It suits bakeries and biscuit makers, kitchens that make naan and kulcha, and snack and sweet makers who roll pastry. Which flour is right depends on the product you make, so describe the dish or item rather than only the quantity.`,
+          `Bakeries, biscuit makers and kitchens looking for a maida flour supplier can read how we work with them on our ${B2BLINK('institutional-flour-supplier', 'institutional supply page')}.`,
           `We do not publish technical specifications for maida on this website. If your process depends on a particular property of the flour, say so in your enquiry.`,
         ],
         after: [`New to the difference between the flours? See ${GUIDELINK('what-is-maida', 'what maida is')} and ${GUIDELINK('maida-vs-atta', 'how maida differs from atta')}.`],
@@ -97,7 +100,7 @@ const B2B_PAGES = [
         id: 'sooji',
         h2: 'Sooji (rava) manufacturer',
         body: [
-          `${PRODLINK('sooji-rava', 'Mamta Bhoj Sooji / Rava')} is semolina milled to a consistent grain size, used for upma, halwa, dosa batter and snacks. It suits breakfast and tiffin kitchens, sweet makers and caterers.`,
+          `${PRODLINK('sooji-rava', 'Mamta Bhoj Sooji / Rava')} is semolina flour milled to a consistent grain size, used for upma, halwa, dosa batter and snacks. It suits breakfast and tiffin kitchens, sweet makers and caterers.`,
           `If your recipe needs a particular grain size, describe it in your enquiry. Our guide to ${GUIDELINK('sooji-vs-rava', 'sooji and rava')} explains why the two names exist and why grain size matters.`,
         ],
       },
@@ -106,7 +109,7 @@ const B2B_PAGES = [
         h2: 'Besan manufacturer',
         body: [
           `${PRODLINK('besan', 'Mamta Bhoj Besan')} is gram flour finely milled from cleaned chana dal. It suits sweet shops, namkeen and snack makers, caterers and households making pakoras, chilla, kadhi, ladoo and other traditional preparations.`,
-          `Besan comes from chana dal, not wheat, which is worth knowing if you are planning storage or labelling. Our guide to ${GUIDELINK('what-is-besan', 'what besan is')} covers how it is made and used.`,
+          `Besan comes from chana dal, not wheat, which is worth knowing if you are planning storage or labelling. Sweet shops and snack makers looking for a besan supplier can ask about regular supply through our ${B2BLINK('wholesale-flour-supplier', 'wholesale supply page')}. Our guide to ${GUIDELINK('what-is-besan', 'what besan is')} covers how it is made and used.`,
         ],
       },
       {
@@ -183,7 +186,7 @@ const B2B_PAGES = [
       {
         h2: 'Who our bulk enquiries are for',
         body: [
-          `Bulk enquiries usually come from businesses where flour is a daily raw material rather than an occasional purchase.`,
+          `Bulk enquiries usually come from businesses where flour is a daily raw material rather than an occasional purchase: bulk atta for canteens and caterers, maida for bakeries, and sooji and besan for sweet and snack makers.`,
         ],
         list: [
           'Bakeries and biscuit makers that use maida every day',
@@ -202,7 +205,7 @@ const B2B_PAGES = [
           {
             h3: 'Match the flour to the job',
             body: [
-              `Name the dish or product you are making. A tandoori roti, a naan, a biscuit and a halwa each ask for a different flour, and the right match matters more than the rate per kilogram. Our guides on ${GUIDELINK('chakki-atta-vs-roller-milled-atta', 'chakki atta and roller-milled atta')} and ${GUIDELINK('what-is-maida', 'what maida is')} can help you decide.`,
+              `As a wheat flour supplier we mill four of our five products from wheat (the two attas, maida and sooji), so a bakery, canteen or caterer can cover most of its flour in a single enquiry. Besan is the exception, milled from chana dal. Name the dish or product you are making. A tandoori roti, a naan, a biscuit and a halwa each ask for a different flour, and the right match matters more than the rate per kilogram. Our guides on ${GUIDELINK('chakki-atta-vs-roller-milled-atta', 'chakki atta and roller-milled atta')} and ${GUIDELINK('what-is-maida', 'what maida is')} can help you decide.`,
             ],
           },
           {
@@ -308,7 +311,7 @@ const B2B_PAGES = [
       {
         h2: 'A branded range, packed for the shelf',
         body: [
-          `Mamta Bhoj is sold under one brand in sealed packs that carry batch and packing details and our FSSAI licence number on the label. For a dealer or retailer, that means one supplier for the core flours a customer buys: atta, maida, sooji and besan, plus a coarser atta for tandoor-style breads.`,
+          `Mamta Bhoj is sold under one brand in sealed packs that carry batch and packing details and our FSSAI licence number on the label. For a dealer or retailer, that means one supplier for the core flours a customer buys: atta, maida, sooji and besan, plus a coarser atta for tandoor-style breads. A shop that wants a chakki atta supplier and also needs maida, sooji and besan from the same mill can stock the whole range under one brand.`,
         ],
       },
       {
