@@ -11,7 +11,7 @@ const B2B_LINKS = [
   {
     slug: 'flour-manufacturer-india',
     name: 'Flour manufacturer in India: atta, maida, sooji and besan',
-    cardTitle: 'Flour manufacturer for India',
+    cardTitle: 'Flour manufacturer in India',
     cardText: 'The five Mamta Bhoj flours, what each is made for, and how to evaluate a manufacturer before you buy.',
     enquiryType: 'Wholesale / Bulk Purchase',
     anchors: ['an atta, maida, sooji and besan manufacturer', 'our manufacturer overview for buyers across India', 'how to source these flours from a Kanpur mill'],
@@ -19,7 +19,7 @@ const B2B_LINKS = [
   {
     slug: 'bulk-flour-supplier-india',
     name: 'Bulk flour supply',
-    cardTitle: 'Bulk flour supply',
+    cardTitle: 'Bulk flour supplier in India',
     cardText: 'For bakeries, sweet shops, caterers and food makers that need flour in volume.',
     enquiryType: 'Wholesale / Bulk Purchase',
     anchors: ['bulk flour supply', 'buying flour in volume', 'our bulk supply page'],
@@ -27,7 +27,7 @@ const B2B_LINKS = [
   {
     slug: 'wholesale-flour-supplier',
     name: 'Wholesale supply for dealers and retailers',
-    cardTitle: 'Wholesale for dealers and retailers',
+    cardTitle: 'Wholesale flour supplier for dealers and retailers',
     cardText: 'Branded atta, maida, sooji and besan for resale, in 1 kg, 2 kg and 5 kg packs.',
     enquiryType: 'Wholesale / Bulk Purchase',
     anchors: ['wholesale supply for dealers and retailers', 'stocking Mamta Bhoj for resale', 'our wholesale page'],
@@ -35,7 +35,7 @@ const B2B_LINKS = [
   {
     slug: 'institutional-flour-supplier',
     name: 'Institutional supply for kitchens and bakeries',
-    cardTitle: 'Institutional supply',
+    cardTitle: 'Institutional and food-service flour supply',
     cardText: 'For restaurants, canteens, hostels and bakeries: which flour suits which kitchen.',
     enquiryType: 'Institutional / HoReCa',
     anchors: ['institutional supply for kitchens and bakeries', 'flour for restaurants, canteens and caterers', 'our institutional supply page'],

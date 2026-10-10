@@ -35,12 +35,12 @@ const B2B_PAGES = [
       'Mamta Bhoj atta, tandoori atta, maida, sooji and besan, milled by Devmam Flourish Foods LLP in Kanpur. A product-by-product overview for buyers across India.',
     eyebrow: 'Flour Manufacturer',
     intro:
-      'Mamta Bhoj is the brand of Devmam Flourish Foods LLP, which mills and packs its flour at its own unit in Kanpur, Uttar Pradesh. It is a working flour mill with its own range: whole wheat atta, tandoori atta, refined maida, semolina (sooji / rava) and gram flour (besan). This page is for buyers anywhere in India who want to know what we make, what each flour is for and what to check before choosing a manufacturer.',
+      'Mamta Bhoj is the brand of Devmam Flourish Foods LLP, which mills and packs its flour at its own unit in Kanpur, Uttar Pradesh. It is a working wheat flour manufacturer with its own range: whole wheat atta, tandoori atta, refined maida, semolina (sooji / rava) and gram flour (besan). This page is for buyers anywhere in India who want to deal with a flour mill manufacturer directly: what we make, what each flour is for and what to check before choosing a manufacturer.',
     enquiryType: 'Wholesale / Bulk Purchase',
     ctaLabel: 'Send a Manufacturer Enquiry',
     sections: [
       {
-        h2: 'A flour manufacturer based in Kanpur, Uttar Pradesh',
+        h2: 'A wheat flour manufacturer based in Kanpur, Uttar Pradesh',
         body: [
           `Devmam Flourish Foods LLP mills and packs the Mamta Bhoj range at its own unit in Chaubepur, Kanpur Nagar. The range has five flours: Fresh Chakki Atta, Tandoori Atta, Maida, Sooji / Rava and Besan. Each one comes in ${PACKS} packs.`,
           `Businesses from any part of India are welcome to enquire: dealers, distributors, wholesalers, bakeries, caterers, sweet shops and kitchens. Whether and how we can supply a particular city or state is confirmed during the enquiry, because delivery depends on the location and the requirement. This page does not promise supply to any specific place.`,
@@ -67,7 +67,7 @@ const B2B_PAGES = [
       },
       {
         id: 'atta',
-        h2: 'Atta manufacturer: Chakki Atta and Tandoori Atta',
+        h2: 'Atta manufacturer in India: Chakki Atta and Tandoori Atta',
         body: [
           `Our atta is made from wheat and naturally stone-ground in the traditional chakki way. ${PRODLINK('fresh-chakki-atta', 'Mamta Bhoj Fresh Chakki Atta')} is 100% whole wheat flour, made for everyday rotis, chapatis and parathas, and suits households, canteens, hostels and retailers who stock a staple atta. It is rich in fibre and protein, a claim that is lab verified; the nutrition information printed on the pack gives the exact values.`,
           `${PRODLINK('tandoori-atta', 'Mamta Bhoj Tandoori Atta')} is milled coarser, for kitchens that bake tandoori-style rotis and thicker parathas.`,
@@ -138,7 +138,7 @@ const B2B_PAGES = [
     faqs: [
       [
         'Are you a manufacturer or a trader?',
-        'Mamta Bhoj flours are milled and packed by Devmam Flourish Foods LLP at its own unit in Chaubepur, Kanpur Nagar, Uttar Pradesh.',
+        'Mamta Bhoj flours are milled and packed by Devmam Flourish Foods LLP, a wheat flour milling company and flour manufacturing company with its own unit in Chaubepur, Kanpur Nagar, Uttar Pradesh.',
       ],
       ['Which flours do you manufacture?', `Fresh Chakki Atta, Tandoori Atta, Maida, Sooji / Rava and Besan. Each is available in ${PACKS} packs.`],
       [
@@ -169,7 +169,7 @@ const B2B_PAGES = [
       'Bulk flour enquiries for Mamta Bhoj atta, maida, sooji and besan, milled by Devmam Flourish Foods LLP in Kanpur. Tell us your requirement and city.',
     eyebrow: 'Bulk Supply',
     intro:
-      'Devmam Flourish Foods LLP mills the Mamta Bhoj range at its own unit in Kanpur, Uttar Pradesh. If your business uses flour in volume, tell us what you need and we will discuss it with you directly. We welcome bulk enquiries from businesses in any part of India; supply for each location is confirmed case by case.',
+      'Devmam Flourish Foods LLP mills the Mamta Bhoj range at its own unit in Kanpur, Uttar Pradesh, and supplies it in bulk, on enquiry, to commercial buyers: bakeries, caterers, sweet shops, food processors and traders. As a commercial flour supplier and wheat flour supplier in India that mills what it sells, we deal with bulk requirements directly. If your business uses flour in volume, tell us what you need and we will discuss it with you directly. We welcome bulk enquiries from businesses in any part of India; supply for each location is confirmed case by case.',
     enquiryType: 'Wholesale / Bulk Purchase',
     ctaLabel: 'Send a Bulk Enquiry',
     productsAfter: 1,
@@ -184,7 +184,7 @@ const B2B_PAGES = [
     ],
     sections: [
       {
-        h2: 'Who our bulk enquiries are for',
+        h2: 'Who we supply in bulk: commercial and wholesale flour buyers',
         body: [
           `Bulk enquiries usually come from businesses where flour is a daily raw material rather than an occasional purchase: bulk atta for canteens and caterers, maida for bakeries, and sooji and besan for sweet and snack makers.`,
         ],
@@ -197,6 +197,7 @@ const B2B_PAGES = [
         ],
         after: [
           `If you are not sure whether your requirement counts as bulk, simply describe it. We do not publish a fixed minimum on this website, so the conversation starts with what you need.`,
+          `Traders who buy to resell can ask about bulk flour wholesale through our ${B2BLINK('wholesale-flour-supplier', 'wholesale flour supplier page')}. Restaurants, caterers and canteens can read how food-service supply works on our ${B2BLINK('institutional-flour-supplier', 'institutional supply page')}, and dealers or distributors outside Uttar Pradesh can see ${B2BLINK('supply-distribution-india', 'how bulk flour supply and distribution enquiries work')}.`,
         ],
       },
       {
@@ -261,6 +262,10 @@ const B2B_PAGES = [
     ],
     faqs: [
       [
+        'Are you a bulk flour supplier or a manufacturer?',
+        'Both. Devmam Flourish Foods LLP mills the Mamta Bhoj range at its own unit in Kanpur and supplies it in bulk, on enquiry, to commercial buyers such as bakeries, caterers, wholesalers and food businesses. Whether we can supply a particular location is confirmed during the enquiry.',
+      ],
+      [
         'What counts as a bulk order?',
         'We do not publish a fixed minimum on this website. Describe your monthly requirement in an enquiry and our team will discuss it with you directly.',
       ],
@@ -311,7 +316,7 @@ const B2B_PAGES = [
       {
         h2: 'A branded range, packed for the shelf',
         body: [
-          `Mamta Bhoj is sold under one brand in sealed packs that carry batch and packing details and our FSSAI licence number on the label. For a dealer or retailer, that means one supplier for the core flours a customer buys: atta, maida, sooji and besan, plus a coarser atta for tandoor-style breads. A shop that wants a chakki atta supplier and also needs maida, sooji and besan from the same mill can stock the whole range under one brand.`,
+          `Mamta Bhoj is sold under one brand in sealed packs that carry batch and packing details and our FSSAI licence number on the label. For a dealer or retailer, that means one supplier for the core flours a customer buys: atta, maida, sooji and besan, plus a coarser atta for tandoor-style breads. Dealers, traders and retailers looking for a wholesale flour supplier can buy wholesale flour straight from the mill that makes it: Devmam Flourish Foods LLP is the manufacturer as well as the supplier, so you deal with the mill directly. We welcome enquiries from across India, with prices, quantities and delivery agreed directly for each bulk flour wholesale requirement. A shop that wants a chakki atta supplier and also needs maida, sooji and besan from the same mill can stock the whole range under one brand.`,
         ],
       },
       {
@@ -362,6 +367,10 @@ const B2B_PAGES = [
     ],
     faqs: [
       [
+        'Are you a wholesale flour supplier for dealers and retailers in India?',
+        'Yes. Dealers, traders and retailers can enquire about wholesale supply of the Mamta Bhoj range. We welcome enquiries from any part of India; what is workable for a particular location is confirmed during the enquiry, and prices and minimum quantities are discussed directly.',
+      ],
+      [
         'What is the difference between wholesale, dealership and distributorship?',
         'A wholesale purchase means buying stock to resell. A dealership means representing and selling the brand in a market, and a distributorship means building a distribution business around it. Which fits depends on your business, and we discuss it with you directly.',
       ],
@@ -395,7 +404,7 @@ const B2B_PAGES = [
       'Flour for restaurants, caterers, canteens and bakeries: Mamta Bhoj chakki atta, tandoori atta, maida, sooji and besan from our Kanpur mill. Enquire today.',
     eyebrow: 'Institutional Supply',
     intro:
-      'Commercial kitchens and bakeries need flour that behaves the same on every shift. Devmam Flourish Foods LLP mills the Mamta Bhoj range in Kanpur, Uttar Pradesh. This page maps each product to the kitchens it is made for, so you know what to ask about.',
+      'Commercial kitchens and bakeries need flour that behaves the same on every shift. Devmam Flourish Foods LLP mills the Mamta Bhoj range in Kanpur, Uttar Pradesh, and welcomes enquiries from food-service and institutional buyers across India. This page maps each product to the kitchens it is made for, so you know what to ask about.',
     enquiryType: 'Institutional / HoReCa',
     ctaLabel: 'Send an Institutional Enquiry',
     productsAfter: 0,
@@ -403,7 +412,7 @@ const B2B_PAGES = [
       {
         h2: 'Which flour for which kitchen',
         body: [
-          `Different kitchens need different flours. The table below pairs common commercial kitchens with the Mamta Bhoj product to ask about first.`,
+          `Different kitchens need different flours. If you are looking for a restaurant flour supplier, or a bulk flour supplier for restaurants, caterers, canteens and bakeries, the table below pairs common commercial kitchens with the Mamta Bhoj product to ask about first.`,
         ],
         table: {
           head: ['Kitchen or business', 'What it typically makes', 'Product to ask about'],
@@ -481,6 +490,10 @@ const B2B_PAGES = [
     ],
     faqs: [
       [
+        'Are you an institutional flour supplier for restaurants and caterers in India?',
+        'Restaurants, caterers, canteens, hostels and bakeries can enquire about supply of the Mamta Bhoj range as a food-service flour supplier. We welcome enquiries from any part of India; supply to a particular location is confirmed during the enquiry, and prices, quantities and delivery are discussed directly.',
+      ],
+      [
         'Which Mamta Bhoj flour is made for a tandoor?',
         'Tandoori Atta is a coarser stone-ground wheat flour made for tandoori rotis and thicker parathas, aimed at kitchens that cook breads in a tandoor.',
       ],
@@ -514,7 +527,7 @@ const B2B_PAGES = [
       'Mamta Bhoj is milled in Kanpur and we are planning wider distribution across India. Dealers, distributors and wholesale buyers in any state can enquire.',
     eyebrow: 'Supply & Distribution',
     intro:
-      'Mamta Bhoj flour is milled at one unit, in Kanpur, Uttar Pradesh. We are planning to extend distribution across India, and we want to hear from dealers, distributors and wholesale buyers in other states. This page explains how that conversation works, and is careful about what it does not promise.',
+      'Mamta Bhoj flour is milled at one unit, in Kanpur, Uttar Pradesh. We are planning to extend distribution across India, and we want to hear from dealers, distributors and wholesale buyers in other states. Whether your enquiry is about bulk flour supply in India or wholesale flour distribution in your own region, this page explains how that conversation works, and is careful about what it does not promise.',
     enquiryType: 'Distributorship',
     ctaLabel: 'Send a Distribution Enquiry',
     productsAfter: -1,
@@ -590,7 +603,7 @@ const B2B_PAGES = [
         'Yes. Mention your locations, the products you need and your approximate monthly requirement in the enquiry.',
       ],
       [
-        'Where can I buy Mamta Bhoj near me?',
+        'Where can businesses source Mamta Bhoj products?',
         'This website does not list retail stockists. If you are a business that wants to stock Mamta Bhoj, please send an enquiry.',
       ],
     ],
