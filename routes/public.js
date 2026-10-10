@@ -173,9 +173,9 @@ router.get('/products/:slug', async (req, res, params, query) => {
           { name: 'Products', path: '/products' },
           { name: product.name, path: pagePath },
         ],
-        mainEntity: { '@id': `${seo.absoluteUrl(pagePath)}#product` },
+        // No Product node: Google's Product rich results need offers, review or aggregateRating, and an
+        // enquiry-only site has none of them (and must not invent them). The page is still an ItemPage.
         primaryImage: product.image || null,
-        nodes: [seo.productNode(product)],
       }),
       active: 'products',
       content,

@@ -434,7 +434,15 @@ const locOk = (loc, expectedPath) => loc === EXP + expectedPath || loc === expec
         if (wp[0].url !== EXP + (r.p === '/' ? '/' : r.p)) sdProblems.push(`${r.p}: WebPage url is ${wp[0].url}`);
       }
       const isProductPage = /^\/products\/[^/]+$/.test(r.p); const isGuide = /^\/guides\/[^/]+$/.test(r.p);
-      if (count('Product') !== (isProductPage ? 1 : 0)) sdProblems.push(`${r.p}: Product nodes = ${count('Product')}`);
+      // Product is deliberately absent everywhere: Google requires offers, review or aggregateRating for Product
+      // snippets and none may be invented (enquiry-only site). A bare Product block shows up as Invalid in Search Console.
+      if (count('Product') !== 0) sdProblems.push(`${r.p}: Product nodes = ${count('Product')} (must be 0: no offers/review/aggregateRating exist)`);
+      { const flat = JSON.stringify(r.ldNodes); if (/"(offers|aggregateRating|review|price|priceCurrency|availability)"\s*:/.test(flat)) sdProblems.push(`${r.p}: offers/review/rating/price markup present`); }
+      { // every {"@id": ...} reference (an object with only @id) must be defined somewhere in the same graph
+        const defs = new Set(); const refs = new Set();
+        const walk = (o) => { if (Array.isArray(o)) return o.forEach(walk); if (o && typeof o === 'object') { if (o['@id']) (Object.keys(o).length === 1 ? refs : defs).add(o['@id']); Object.values(o).forEach(walk); } };
+        walk(r.ldNodes);
+        const dangling = [...refs].filter((x) => !defs.has(x)); if (dangling.length) sdProblems.push(`${r.p}: @id referenced but not defined: ${dangling.slice(0, 2).join(', ')}`); }
       if (count('Article') !== (isGuide ? 1 : 0)) sdProblems.push(`${r.p}: Article nodes = ${count('Article')}`);
       const bc = r.ldNodes.find((n) => [].concat(n['@type']).includes('BreadcrumbList'));
       if (bc) {
@@ -446,13 +454,8 @@ const locOk = (loc, expectedPath) => loc === EXP + expectedPath || loc === expec
       const urlsIn = JSON.stringify(r.ldNodes).match(/"(https?:\/\/[^"]+)"/g) || [];
       for (const u of urlsIn) { const v = u.slice(1, -1); if (!v.startsWith(origin + '/') && v !== origin && !/^https:\/\/schema\.org/.test(v)) sdProblems.push(`${r.p}: schema URL on another host: ${v}`); }
       r.ldNodes.forEach((n) => { if (n.sameAs) sameAsFound.push(r.p); const lg = n.logo; if (lg) logoUrls.add(typeof lg === 'string' ? lg : lg.url); });
-      for (const n of r.ldNodes.filter((x) => [].concat(x['@type']).includes('Product'))) {
-        const pagePath = r.p; const hasManu = n.manufacturer && n.manufacturer['@id'] === origin + '/#organization';
-        if (!hasManu) sdProblems.push(`${pagePath}: Product.manufacturer must reference the Organization`);
-        if (!n.name || !n.description || !n.image) sdProblems.push(`${pagePath}: Product needs name, description, image`);
-      }
     }
-    expect(sdProblems.length === 0, `schema audit over ${store.length} pages: one Organization + WebSite + WebPage per page, @id/url self-consistent, Product only on product pages, Article only on guides, valid breadcrumbs, no retired/unsupported types`, sdProblems.slice(0, 6).join(' | '));
+    expect(sdProblems.length === 0, `schema audit over ${store.length} pages: one Organization + WebSite + WebPage per page, @id/url self-consistent, no Product/offers/review/rating markup, Article only on guides, every @id reference defined, valid breadcrumbs, no retired/unsupported types`, sdProblems.slice(0, 6).join(' | '));
     expect(sameAsFound.length === 0, 'no sameAs (no verified profile URLs exist; none may be invented)', [...new Set(sameAsFound)].slice(0, 3).join(', '), 'WARN');
     for (const u of logoUrls) {
       const lr = await request(u.replace(origin, BASE));
