@@ -1,0 +1,12 @@
+[Unit]
+Description=Run the Mamta Bhoj SEO autopilot once a day (Asia/Kolkata, low-traffic window)
+
+[Timer]
+# One run per day at 03:30 India time; a missed run (server was off) executes at the next boot.
+OnCalendar=*-*-* 03:30:00 Asia/Kolkata
+RandomizedDelaySec=600
+Persistent=true
+Unit=mamta-autopilot.service
+
+[Install]
+WantedBy=timers.target

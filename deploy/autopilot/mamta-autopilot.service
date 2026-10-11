@@ -1,0 +1,26 @@
+[Unit]
+Description=Mamta Bhoj SEO autopilot (daily audit, report and branch-only proposals)
+Documentation=file:@REPO@/docs/seo-autopilot.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=@USER@
+WorkingDirectory=@REPO@
+# Secrets live only in this root-managed file (chmod 600), never in the repository.
+EnvironmentFile=-/etc/mamta-autopilot/autopilot.env
+Environment=AUTOPILOT_REPO_DIR=@REPO@
+Environment=AUTOPILOT_STATE_DIR=@STATE@
+ExecStart=@NODE@ @REPO@/autopilot/cli.js run
+TimeoutStartSec=3600
+Nice=10
+# The autopilot never restarts PM2, edits nginx or merges to the production branch. These limits make that structural.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=@STATE@ @REPO@/.git
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
