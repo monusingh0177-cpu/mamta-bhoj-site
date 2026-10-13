@@ -9,7 +9,7 @@ const inventory = require('./inventory');
 const { auditInventory } = require('./audit');
 const { git, run } = require('./git');
 const { isProtected, ALLOWED_FILES } = require('./patch');
-const { request } = require('./util');
+const { request, requestRetry } = require('./util');
 
 function freePort() { return new Promise((r) => { const s = net.createServer().listen(0, '127.0.0.1', () => { const p = s.address().port; s.close(() => r(p)); }); }); }
 function copyTree(src, dst) {
@@ -57,7 +57,7 @@ function checkChangedPages(inv, changed, origin) {
 }
 
 async function sitemapAndRobotsOk(base) {
-  const sm = await request(base + '/sitemap.xml'); const rb = await request(base + '/robots.txt');
+  const sm = await requestRetry(base + '/sitemap.xml'); const rb = await requestRetry(base + '/robots.txt');
   const smOk = sm.status === 200 && /<urlset[\s\S]*<\/urlset>/.test(sm.body) && !/<loc>\s*<\/loc>/.test(sm.body);
   const rbOk = rb.status === 200 && /Disallow:\s*\/admin/i.test(rb.body) && !/^\s*Disallow:\s*\/\s*$/m.test(rb.body) && /Sitemap:\s*\S+/.test(rb.body);
   return { smOk, rbOk };

@@ -1,7 +1,9 @@
 'use strict';
 // Route inventory: the sitemap plus every internal link found on those pages, fetched over HTTP (live site or a
 // local preview). For each URL: status, title, description, H1s, canonical, robots, words, JSON-LD, links, hash.
-const { request, sha1 } = require('./util');
+// GET requests are idempotent: transient failures (network blip, 429, 5xx) are retried a bounded number of times, so one
+// dropped connection does not become a failed run or a false "critical" finding.
+const { requestRetry: request, sha1 } = require('./util');
 
 const decode = (s) => String(s || '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'").replace(/&ldquo;|&rdquo;/g, '"').replace(/&nbsp;/g, ' ');
 const strip = (h) => decode(h.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim();

@@ -7,7 +7,7 @@ const http = require('http');
 const https = require('https');
 const crypto = require('crypto');
 
-const SECRET_KEY_RE = /(TOKEN|SECRET|PASSWORD|API_KEY|APIKEY|REFRESH|AUTH|BEARER|PRIVATE)/i;
+const SECRET_KEY_RE = /(TOKEN|SECRET|PASSWORD|API_KEY|APIKEY|REFRESH|AUTH|BEARER|PRIVATE|WEBHOOK)/i;
 const secretValues = new Set();
 
 // Remember a secret value so redact() can scrub it wherever it shows up.
@@ -66,4 +66,32 @@ function request(url, opts) {
   });
 }
 
-module.exports = { registerSecrets, redact, log, warn, ensureDir, readJson, writeJson, today, addDays, daysBetween, sha1, request };
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// Bounded retry for TRANSIENT failures only (network error, timeout, HTTP 429, HTTP 5xx), with exponential backoff.
+// Honours Retry-After (capped). Never retries other 4xx. After the last attempt the final response/error is returned/thrown
+// unchanged, with `attempts` set, so callers can tell a rate limit from an outage.
+async function requestRetry(url, opts, retry) {
+  const r = Object.assign({ retries: 2, baseMs: 1000, maxMs: 30000 }, retry || {});
+  const envBase = Number(process.env.AUTOPILOT_RETRY_BASE_MS);
+  if (process.env.AUTOPILOT_RETRY_BASE_MS !== undefined && Number.isFinite(envBase) && envBase >= 0) r.baseMs = envBase;
+  for (let attempt = 0; ; attempt++) {
+    let res = null; let err = null;
+    try { res = await request(url, opts); } catch (e) { err = e; }
+    const transient = err ? true : res.status === 429 || res.status >= 500;
+    if (!transient || attempt >= r.retries) { if (err) { err.attempts = attempt + 1; throw err; } res.attempts = attempt + 1; return res; }
+    let wait = Math.min(r.maxMs, r.baseMs * 2 ** attempt);
+    const ra = res && res.headers ? Number(res.headers['retry-after']) : NaN;
+    if (Number.isFinite(ra)) wait = Math.min(r.maxMs, Math.max(wait, ra * 1000));
+    await sleep(wait);
+  }
+}
+
+// YYYY-MM-DD and weekday in a named time zone (the daily/weekly schedule is in Asia/Kolkata; today() stays UTC for limits).
+function zonedDate(d, tz) {
+  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: tz || 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit', weekday: 'short' }).formatToParts(d || new Date());
+  const g = (t) => (parts.find((x) => x.type === t) || {}).value;
+  return { date: `${g('year')}-${g('month')}-${g('day')}`, weekday: g('weekday') };
+}
+
+module.exports = { registerSecrets, redact, log, warn, ensureDir, readJson, writeJson, today, addDays, daysBetween, sha1, request, requestRetry, sleep, zonedDate };
