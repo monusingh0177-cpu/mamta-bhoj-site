@@ -701,3 +701,16 @@ body{text-rendering:optimizeLegibility;}
 }
 @media (prefers-reduced-motion:reduce){.wa-fab{transition:none;}.wa-fab:hover{transform:none;}}
 @media print{.wa-fab{display:none;}}
+
+/* Factory inauguration popup (see lib/launch-banner.js) */
+.launch-modal{position:fixed;inset:0;z-index:2147483000;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(14,8,3,.78);-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px);overflow:hidden;animation:launch-fade .25s ease;}
+.launch-modal[hidden]{display:none;}
+.launch-modal__frame{position:relative;display:flex;max-width:100%;max-height:100%;border-radius:14px;box-shadow:0 30px 80px -20px rgba(0,0,0,.7),0 0 0 1px rgba(255,255,255,.12);animation:launch-pop .3s ease;}
+.launch-modal__img{display:block;width:auto;height:auto;max-width:calc(100vw - 32px);max-height:calc(100vh - 32px);max-height:calc(100dvh - 32px);object-fit:contain;border-radius:14px;}
+.launch-modal__close{position:absolute;top:10px;right:10px;z-index:1;width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:rgba(20,10,3,.85);color:#fff;border:2px solid rgba(255,255,255,.85);cursor:pointer;box-shadow:0 6px 16px -4px rgba(0,0,0,.6);transition:transform .15s ease,background .15s ease;}
+.launch-modal__close:hover{background:#000;transform:scale(1.06);}
+.launch-modal__close:focus-visible{outline:3px solid #f3c862;outline-offset:2px;}
+body.launch-modal-open{overflow:hidden;}
+@keyframes launch-fade{from{opacity:0}to{opacity:1}}
+@keyframes launch-pop{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.launch-modal,.launch-modal__frame{animation:none;}.launch-modal__close{transition:none;}}

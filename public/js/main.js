@@ -252,3 +252,30 @@
     startAuto();
   });
 })();
+
+// Factory inauguration popup: opens on every page load (no storage/cookies, so it
+// returns after refresh), closes via button, Escape or backdrop click.
+(function () {
+  var modal = document.getElementById('launch-modal');
+  if (!modal) return;
+  var expires = Number(modal.getAttribute('data-expires'));
+  if (expires && Date.now() >= expires) { modal.parentNode.removeChild(modal); return; }
+  var closeBtn = document.getElementById('launch-modal-close');
+  var opener = document.activeElement;
+  function close() {
+    modal.setAttribute('hidden', '');
+    document.body.classList.remove('launch-modal-open');
+    document.removeEventListener('keydown', onKey);
+    if (opener && opener.focus && opener !== document.body) opener.focus();
+  }
+  function onKey(e) {
+    if (e.key === 'Escape' || e.key === 'Esc') { e.preventDefault(); close(); }
+    else if (e.key === 'Tab') { e.preventDefault(); closeBtn.focus(); } // the close button is the only focusable control
+  }
+  modal.addEventListener('click', function (e) { if (e.target === modal) close(); });
+  closeBtn.addEventListener('click', close);
+  document.addEventListener('keydown', onKey);
+  modal.removeAttribute('hidden');
+  document.body.classList.add('launch-modal-open');
+  closeBtn.focus();
+})();
