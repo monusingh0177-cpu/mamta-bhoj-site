@@ -20,7 +20,9 @@ const reportLib = require('./lib/report');
 const branchLib = require('./lib/branch');
 const { checkClaims } = require('./lib/claims');
 const git = require('./lib/git');
-const { today, addDays, writeJson, request, warn } = require('./lib/util');
+const { today, addDays, writeJson, zonedDate } = require('./lib/util');
+const health = require('./lib/health');
+const weekly = require('./lib/weekly');
 
 const RUNTIME_DATA = /^(data\/|public\/uploads\/)/;
 const IMPORTANT = ['/', '/flour-manufacturer-india', '/bulk-flour-supplier-india', '/wholesale-flour-supplier', '/institutional-flour-supplier', '/supply-distribution-india', '/flour-manufacturer-kanpur', '/products/fresh-chakki-atta', '/products/maida', '/products/besan', '/products/sooji-rava', '/products/tandoori-atta', '/products', '/contact'];
@@ -32,11 +34,6 @@ function windows(cfg) {
 const sum = (rows) => { const t = { clicks: 0, impressions: 0, posW: 0 }; for (const r of rows) { t.clicks += r.clicks; t.impressions += r.impressions; t.posW += r.position * r.impressions; } return { clicks: t.clicks, impressions: t.impressions, ctr: t.impressions ? t.clicks / t.impressions : 0, position: t.impressions ? t.posW / t.impressions : null }; };
 const tot = (r) => ({ clicks: r.clicks, impressions: r.impressions, ctr: r.ctr, position: r.position });
 
-async function notify(cfg, payload) {
-  if (!cfg.alertWebhook) return;
-  try { await request(cfg.alertWebhook, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload), timeoutMs: 10000 }); } catch (e) { warn('alert webhook failed:', e.message); }
-}
-
 async function runOnce(cfg, opts) {
   const o = opts || {};
   const runId = o.runId || crypto.randomBytes(3).toString('hex');
@@ -46,13 +43,35 @@ async function runOnce(cfg, opts) {
   const dryRun = Boolean(o.dryRun);
   const initial = !st.initialAuditDone;
   const effectiveMode = dryRun || initial || cfg.mode !== 'propose' ? 'report-only' : 'propose';
-  const R = { runId, date, startedAt: new Date().toISOString(), mode: cfg.mode, publish: cfg.publish, effectiveMode, dryRun, initialRun: initial, stops: [], repo: {}, gsc: { available: false, reason: '' }, opportunities: [], risingCommercial: [], newQueries: [], pageMovement: [], changes: [], notChanged: [], newPageProposals: [], findings: [], auditSummary: { critical: 0, high: 0, medium: 0, low: 0 }, inventory: {}, indexnow: { keyVerified: false, keyDetail: '', submissions: [] }, sitemapSubmission: { status: 'not attempted' }, inspections: [], rollbacks: [], gates: [], smoke: [], ai: { note: '' }, errors: [] };
+  const R = { runId, date, startedAt: new Date().toISOString(), mode: cfg.mode, publish: cfg.publish, effectiveMode, dryRun, initialRun: initial, stops: [], repo: {}, gsc: { available: false, status: 'unknown', reason: '' }, opportunities: [], risingCommercial: [], newQueries: [], pageMovement: [], changes: [], notChanged: [], newPageProposals: [], findings: [], auditSummary: { critical: 0, high: 0, medium: 0, low: 0 }, inventory: {}, indexnow: { keyVerified: false, keyDetail: '', submissions: [] }, sitemapSubmission: { status: 'not attempted' }, inspections: [], rollbacks: [], gates: [], smoke: [], ai: { note: '', status: cfg.ai.mode === 'none' ? 'none' : 'unused' }, errors: [] };
   const A = (event, data) => state.audit(cfg, runId, event, data);
   A('run_start', { mode: cfg.mode, effectiveMode, dryRun, initial, publish: cfg.publish });
   if (cfg.envFileWarning) R.errors.push(cfg.envFileWarning);
-  const finish = () => { R.endedAt = new Date().toISOString(); R.reportFile = reportLib.write(cfg, files, R); const n = state.rotate(cfg, date); if (n) A('rotated', { removed: n }); A('run_end', { stops: R.stops, proposals: R.changes.length, rejected: R.rollbacks.length }); return R; };
+  const lastLedgerRun = state.readLedger(cfg, 20).filter((e) => !e.dryRun && e.endedAt).pop();
+  const prevRun = lastLedgerRun ? { at: lastLedgerRun.endedAt } : st.lastRun;
+  const finish = async () => {
+    R.endedAt = new Date().toISOString();
+    const h = health.assess(R, cfg, { prevRunAt: prevRun && prevRun.at });
+    R.status = h.status; R.health = h.items;
+    R.reportFile = reportLib.write(cfg, files, R);
+    const n = state.rotate(cfg, date); if (n) A('rotated', { removed: n });
+    if (!R.skipped) {
+      const entry = health.ledgerEntry(R); state.recordRun(cfg, entry);
+      if (!dryRun) {
+        const z = zonedDate(new Date(), cfg.timezone);
+        if (R.status !== 'failed') { const wk = weekly.due(cfg, st, new Date()); if (wk) { try { R.weeklyReport = weekly.write(cfg, files, st, wk); st.lastWeekly = wk; A('weekly_report', { file: R.weeklyReport }); } catch (e) { R.errors.push(`weekly report failed: ${e.message}`); } } }
+        const reasons = health.alertReasons(R, st.lastHealth, Date.now());
+        const ids = (R.health || []).filter((i) => i.level === 'warn' || i.level === 'fail').map((i) => i.id).sort().join(',');
+        if (reasons.length) { const out = await health.sendAlert(cfg, health.alertText(R, reasons)); A('alert', { reasons, sent: out.sent, reason: out.reason || null }); st.lastHealth = { ids, at: new Date().toISOString(), alertedAt: out.sent ? new Date().toISOString() : (st.lastHealth || {}).alertedAt, pending: Boolean(cfg.alertWebhook) && !out.sent, status: R.status, day: z.date }; }
+        else st.lastHealth = { ids, at: new Date().toISOString(), alertedAt: (st.lastHealth || {}).alertedAt, status: R.status, day: z.date };
+        state.save(cfg, st);
+      }
+    }
+    A('run_end', { status: R.status, stops: R.stops, proposals: R.changes.length, rejected: R.rollbacks.length });
+    return R;
+  };
 
-  if (!o.manual && state.isDisabled(cfg)) { A('skipped', { reason: 'autopilot is disabled' }); R.stops.push('autopilot is disabled (run npm run seo:enable)'); return finish(); }
+  if (!o.manual && state.isDisabled(cfg)) { A('skipped', { reason: 'autopilot is disabled' }); R.stops.push('autopilot is disabled (run npm run seo:enable)'); R.skipped = true; return finish(); }
   if (cfg.publish === 'auto') R.stops.push('publish=auto (autonomous publishing) is not available in this build: patches are only proposed on a separate branch');
 
   // ---- preflight: production repository must be clean (runtime data/uploads are ignored) and untouched by us
@@ -67,7 +86,7 @@ async function runOnce(cfg, opts) {
   // ---- inventory of the live site
   let inv;
   try { inv = await inventory.build(cfg.fetchBase, { origin: cfg.siteOrigin }); }
-  catch (e) { R.errors.push(`inventory failed: ${e.message}`); R.stops.push(`site inventory failed: ${e.message}`); A('inventory_failed', { error: e.message }); return finish(); }
+  catch (e) { R.errors.push(`inventory failed: ${e.message}`); R.stops.push(`site inventory failed: ${e.message}`); R.fatal = `site inventory failed: ${e.message}`; A('inventory_failed', { error: e.message }); return finish(); }
   R.inventory = { pageCount: inv.sitemapPaths.length, indexablePages: Object.values(inv.pages).filter((p) => p.indexable).length, nonOk: inv.nonOk };
   writeJson(`${files.snapshots}/inventory-${date}.json`, inventory.compact(inv));
   if (st.pageCount != null && st.pageCount !== inv.sitemapPaths.length) R.stops.push(`page count changed unexpectedly (${st.pageCount} -> ${inv.sitemapPaths.length}); review it, then run: node autopilot/cli.js baseline`);
@@ -90,18 +109,28 @@ async function runOnce(cfg, opts) {
   // ---- Google Search Console
   const gsc = gscLib.create(cfg, files.cache);
   let curRows = [], prevRows = [];
-  if (!gsc.configured()) { R.gsc.reason = 'Google OAuth is not configured'; R.stops.push('Google API auth is unavailable (OAuth not configured)'); }
-  else {
+  const gv = await gsc.verify();
+  if (!gv.ok) {
+    R.gsc = { available: false, status: gv.status, reason: gv.detail, remedy: gv.remedy };
+    R.stops.push(`Google API auth is unavailable (${gv.detail})`);
+    if (gv.status !== 'not_configured') A('gsc_failed', { status: gv.status, error: gv.detail });
+  } else {
     try {
       const w = windows(cfg);
       curRows = (await gsc.query({ ...w.cur, dimensions: ['query', 'page'] })).rows;
       prevRows = (await gsc.query({ ...w.prev, dimensions: ['query', 'page'] })).rows;
       const totCur = (await gsc.query({ ...w.cur, dimensions: [] })).rows, totPrev = (await gsc.query({ ...w.prev, dimensions: [] })).rows;
       const pgCur = (await gsc.query({ ...w.cur, dimensions: ['page'] })).rows, pgPrev = (await gsc.query({ ...w.prev, dimensions: ['page'] })).rows;
-      R.gsc = { available: true, window: w, totals: { current: totCur.length ? tot(totCur[0]) : sum(curRows), previous: totPrev.length ? tot(totPrev[0]) : sum(prevRows) } };
+      R.gsc = { available: true, status: 'ok', detail: gv.detail, window: w, totals: { current: totCur.length ? tot(totCur[0]) : sum(curRows), previous: totPrev.length ? tot(totPrev[0]) : sum(prevRows) } };
+      // a healthy API with nothing to report is "no data", never an error
+      if (!curRows.length && !prevRows.length && !pgCur.length && R.gsc.totals.current.impressions === 0) R.gsc.status = 'ok_no_data';
       const prevMap = new Map(pgPrev.map((r) => [new URL(r.keys[0]).pathname, r.impressions]));
       R.pageMovement = pgCur.map((r) => { const p = new URL(r.keys[0]).pathname; const prev = prevMap.get(p) || 0; return { path: p, current: r.impressions, previous: prev, change: r.impressions - prev }; }).filter((m) => m.change !== 0).sort((a, b) => Math.abs(b.change) - Math.abs(a.change)).slice(0, 10);
-    } catch (e) { R.gsc = { available: false, reason: e.message }; R.stops.push(`Google API auth is unavailable (${e.message})`); A('gsc_failed', { error: e.message }); }
+    } catch (e) {
+      const kind = e.kind || 'api_error';
+      R.gsc = { available: false, status: kind, reason: e.message, remedy: gscLib.REMEDY[kind] || gscLib.REMEDY.api_error };
+      R.stops.push(`Google API auth is unavailable (${e.message})`); A('gsc_failed', { status: kind, error: e.message });
+    }
   }
 
   // ---- opportunities
@@ -116,6 +145,7 @@ async function runOnce(cfg, opts) {
       gates: [{ name: 'high-confidence cluster', ok: x.score >= cfg.limits.minScore && x.impressions >= 10 }, { name: 'no cannibalisation', ok: x.cannibalRisk < 0.3 && x.bestPageFit < 0.15 }, { name: 'commercially relevant', ok: x.kind === 'commercial' || x.kind === 'product' }, { name: 'no location/doorway intent', ok: checkClaims(x.query, '/').length === 0 }, { name: 'rate limit (1 per 7 days)', ok: state.newPageAllowed(cfg, st, date) }, { name: 'real facts available (human check)', ok: false }],
     }));
   } else R.ai.note = 'No Search Console data, so no opportunities were scored.';
+  if (R.gsc.status === 'ok_no_data') R.ai.note = 'Search Console is connected but returned no traffic data for the window (not an error), so no opportunities were scored.';
 
   // ---- proposals (separate branch only)
   let blocked = R.stops.length > 0 || effectiveMode !== 'propose';
@@ -131,8 +161,9 @@ async function runOnce(cfg, opts) {
       if (openBranches.some((b) => b.includes(`-${branchLib.slug(page)}-`))) { R.notChanged.push({ page, reason: 'an open autopilot proposal branch for this page is awaiting review' }); continue; }
       const block = patchLib.sourceBlock(cfg.repoDir, page); if (!block) { R.notChanged.push({ page, reason: 'no editable source block for this page' }); continue; }
       const proposal = await ai.propose(cfg, { opportunity: op, page: inv.pages[page], path: page, block });
-      if (proposal.skipped) { R.ai.note = `AI-dependent changes are report-only: ${proposal.reason}`; R.notChanged.push({ page, reason: `no patch generated: ${proposal.reason}` }); continue; }
-      if (proposal.error) { R.ai.note = proposal.error; R.notChanged.push({ page, reason: proposal.error }); A('ai_error', { page, error: proposal.error }); continue; }
+      if (proposal.skipped) { R.ai.status = 'misconfigured'; R.ai.note = `AI-dependent changes are report-only: ${proposal.reason}`; R.notChanged.push({ page, reason: `no patch generated: ${proposal.reason}` }); continue; }
+      if (proposal.error) { R.ai.status = 'error'; R.ai.note = proposal.error; R.notChanged.push({ page, reason: proposal.error }); A('ai_error', { page, error: proposal.error }); continue; }
+      R.ai.status = 'ok';
       const valid = []; const kinds = new Set();
       for (const d of proposal.decisions) {
         d.page = page; const v = patchLib.validate(d, { repoDir: cfg.repoDir });
@@ -204,8 +235,7 @@ async function runOnce(cfg, opts) {
   R.stops = [...new Set(R.stops)];
   st.lastRun = { at: new Date().toISOString(), runId, stops: R.stops, proposals: R.changes.length };
   state.save(cfg, st);
-  finish();
-  if (R.rollbacks.length) await notify(cfg, { text: `Mamta SEO autopilot: a proposal was discarded on ${date}. ${R.stops.join(' | ')}`.slice(0, 500) });
+  await finish();
   return R;
 }
 

@@ -12,9 +12,18 @@ function markdown(r) {
   const L = [];
   const h = (t) => L.push('', `## ${t}`, '');
   L.push(`# SEO autopilot report: ${r.date}`, '', `Run ${r.runId} | mode: **${r.effectiveMode}** | ${r.dryRun ? 'DRY RUN (no branch, no submission)' : 'live run'} | repo ${r.repo.head ? r.repo.head.slice(0, 8) : 'n/a'}`);
+  if (r.status) {
+    h('Summary');
+    const open = (r.health || []).filter((i) => i.level === 'warn' || i.level === 'fail');
+    L.push(`Status: **${r.status.toUpperCase()}**${r.status === 'success' ? ' (every check that ran passed)' : r.status === 'degraded' ? ' (the run completed; items below need attention)' : r.status === 'failed' ? ' (the run could not complete)' : ''}.`);
+    L.push(...(open.length ? open.flatMap((i) => [`- [${i.level.toUpperCase()}] ${i.title}${i.detail ? ': ' + i.detail : ''}`, ...(i.remedy ? [`  - What to do: ${i.remedy}`] : [])]) : ['- No open problems.']));
+    const notes = (r.health || []).filter((i) => i.level === 'note');
+    if (notes.length) L.push(...notes.map((i) => `- Note: ${i.title}${i.detail ? ': ' + i.detail : ''}`));
+    L.push(`- Pages ${(r.inventory || {}).pageCount || 0} | findings ${r.auditSummary.critical} critical, ${r.auditSummary.high} high | opportunities ${r.opportunities.length} | proposals ${r.changes.length} | Google: ${(r.gsc || {}).status || 'n/a'}`);
+  }
   if (r.stops.length) { h('Stop conditions (no proposals were prepared)'); r.stops.forEach((s) => L.push(`- ${s}`)); }
   h('Search Console (28-day window vs previous 28 days)');
-  if (!r.gsc.available) L.push(`Not available: ${r.gsc.reason}`);
+  if (!r.gsc.available) L.push(`Not available (${r.gsc.status || 'unknown'}): ${r.gsc.reason}`, ...(r.gsc.remedy ? [`What to do: ${r.gsc.remedy}`] : []));
   else { const c = r.gsc.totals.current, p = r.gsc.totals.previous; L.push('| Metric | Current | Previous |', '|---|---|---|', `| Clicks | ${c.clicks} | ${p.clicks} |`, `| Impressions | ${c.impressions} | ${p.impressions} |`, `| CTR | ${pct(c.ctr)} | ${pct(p.ctr)} |`, `| Avg position | ${num(c.position)} | ${num(p.position)} |`); }
   if (r.gsc.available) {
     h('Top rising commercial queries'); L.push(...(r.risingCommercial.length ? r.risingCommercial.map((q) => `- ${q.query}: ${q.impressions} impressions (was ${q.prevImpressions == null ? 'new' : q.prevImpressions}), position ${q.position} -> ${q.bestPage || 'no page'}`) : ['None this period.']));

@@ -5,7 +5,7 @@
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { request } = require('./util');
+const { requestRetry: request } = require('./util');
 
 function discoverKey(repoDir) {
   const src = fs.readFileSync(path.join(repoDir, 'lib/indexnow.js'), 'utf8');

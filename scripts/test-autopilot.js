@@ -55,14 +55,19 @@ async function startGoogle() {
       const send = (s, o) => { res.writeHead(s, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(o)); };
       if (g.mode === 'timeout') return; // never answers
       try {
-      if (req.url === '/token') { g.calls.token++; return g.mode === 'authfail' ? send(400, { error: 'invalid_grant' }) : send(200, { access_token: 'fake-access-token-abcdef', expires_in: 3600 }); }
+      if (req.url === '/token') { g.calls.token++; return g.mode === 'authfail' ? send(400, { error: 'invalid_grant' }) : g.mode === 'badclient' ? send(401, { error: 'invalid_client' }) : send(200, { access_token: 'fake-access-token-abcdef', expires_in: 3600 }); }
       if (req.headers.authorization !== 'Bearer fake-access-token-abcdef') return send(401, { error: { message: 'unauthorized' } });
+      if (req.method === 'GET' && /\/sites\/[^/]+$/.test(req.url)) { g.calls.siteGet = (g.calls.siteGet || 0) + 1; return g.mode === 'noaccess' ? send(403, { error: { message: 'User does not have sufficient permission for site' } }) : g.mode === 'nosite' ? send(404, { error: { message: 'Site not found' } }) : send(200, { siteUrl: 'sc-domain:devmamflourishfoods.com', permissionLevel: g.mode === 'unverified' ? 'siteUnverifiedUser' : 'siteOwner' }); }
+      if (/searchAnalytics\/query$/.test(req.url) && g.mode === 'quota') { g.calls.query++; res.writeHead(429, { 'Content-Type': 'application/json', 'Retry-After': '0' }); return res.end(JSON.stringify({ error: { message: 'Quota exceeded' } })); }
+      if (/searchAnalytics\/query$/.test(req.url) && g.mode === 'flaky' && g.flakyLeft > 0) { g.flakyLeft--; g.calls.query++; return send(500, { error: { message: 'backend error' } }); }
+      if (/searchAnalytics\/query$/.test(req.url) && g.mode === 'empty') { g.calls.query++; return send(200, {}); }
       if (/searchAnalytics\/query$/.test(req.url)) {
         g.calls.query++; const j = JSON.parse(body || '{}'); const cur = j.startDate >= new Date(Date.now() - 40 * 86400000).toISOString().slice(0, 10) || g.nowCurrent;
         const base = (g.rows || CUR); const rows = j.dimensions.length === 2 ? (j.startDate >= g.curStart ? base : PREV) : j.dimensions.length === 0 ? [{ keys: [], clicks: 3, impressions: 186, ctr: 0.016, position: 14.2 }] : [{ keys: ['https://devmamflourishfoods.com/products/besan'], clicks: 1, impressions: 85, ctr: 0.01, position: 12 }];
         return send(200, { rows });
       }
       if (/\/sitemaps\//.test(req.url) && req.method === 'PUT') { g.calls.sitemapPut.push(decodeURIComponent(req.url.split('/sitemaps/')[1])); return g.mode === 'sitemap403' ? send(403, { error: { message: 'insufficient scope' } }) : (res.writeHead(204), res.end()); }
+      if (/index:inspect$/.test(req.url) && g.mode === 'inspect429') { g.calls.inspect429 = (g.calls.inspect429 || 0) + 1; return send(429, { error: { message: 'Quota exceeded' } }); }
       if (/index:inspect$/.test(req.url)) { const j = JSON.parse(body); g.calls.inspect.push(j.inspectionUrl); return send(200, { inspectionResult: { indexStatusResult: { verdict: 'PASS', coverageState: 'Submitted and indexed', indexingState: 'INDEXING_ALLOWED', robotsTxtState: 'ALLOWED', pageFetchState: 'SUCCESSFUL', lastCrawlTime: '2026-10-08T03:00:00Z', googleCanonical: j.inspectionUrl, userCanonical: j.inspectionUrl } } }); }
       send(404, {});
       } catch (e) { send(500, { error: { message: 'fake google bug: ' + e.message } }); }
@@ -111,6 +116,13 @@ async function startIndexNow() {
   const port = await freePort(); await new Promise((r) => n.server.listen(port, '127.0.0.1', r)); n.base = `http://127.0.0.1:${port}/indexnow`; return n;
 }
 
+// ------------------------------------------------------------------ fake alert webhook
+async function startWebhook() {
+  const w = { posts: [], status: 200 };
+  w.server = http.createServer((req, res) => { let b = ''; req.on('data', (c) => (b += c)); req.on('end', () => { try { w.posts.push(JSON.parse(b)); } catch (e) { w.posts.push({ raw: b }); } res.writeHead(w.status); res.end('ok'); }); });
+  const port = await freePort(); await new Promise((r) => w.server.listen(port, '127.0.0.1', r)); w.base = `http://127.0.0.1:${port}/hook`; return w;
+}
+
 // ------------------------------------------------------------------ throw-away production repo + live site
 async function makeSite(root) {
   const repo = path.join(root, 'prod'); copyTree(SRC, repo, ['node_modules']);
@@ -134,7 +146,7 @@ function runCli(site, cmd, env, root, state) {
   // asynchronous on purpose: the fake Google/AI/IndexNow servers live in THIS process and must keep answering while the CLI runs
   const e = Object.assign({}, process.env, {
     AUTOPILOT_ENV_FILE: '/nonexistent', AUTOPILOT_REPO_DIR: site.repo, AUTOPILOT_STATE_DIR: state, AUTOPILOT_FETCH_BASE: site.base, AUTOPILOT_SITE_ORIGIN: 'https://devmamflourishfoods.com',
-    AUTOPILOT_GATE_HARDCHECK: FULL && env.__full ? '1' : '0', AUTOPILOT_GATE_ENQUIRY: FULL && env.__full ? '1' : '0', AUTOPILOT_HTTP_TIMEOUT_MS: '3000', AUTOPILOT_DATA_DIR: path.join(site.repo, 'data'),
+    AUTOPILOT_GATE_HARDCHECK: FULL && env.__full ? '1' : '0', AUTOPILOT_GATE_ENQUIRY: FULL && env.__full ? '1' : '0', AUTOPILOT_HTTP_TIMEOUT_MS: '3000', AUTOPILOT_RETRY_BASE_MS: '5', AUTOPILOT_DATA_DIR: path.join(site.repo, 'data'),
   }, env || {});
   delete e.__full;
   return new Promise((resolve) => {
@@ -409,6 +421,127 @@ const cleanBranches = (repo) => { try { git(repo, 'worktree', 'prune'); } catch 
       check((await runCli(site, 'enable', s.env, root, s.state)).code === 0, 'seo:enable');
       r = (await runCli(site, 'run', s.env, root, s.state)); rep = jsonReport(s.state); check(rep.inventory.pageCount === 31, 'after enable the run executes');
       const st = (await runCli(site, 'status', s.env, root, s.state)); check(/"enabled": true/.test(st.out) && !st.out.includes(SECRET), 'status shows state without secrets');
+    }
+
+    // ---- E13 operations: classified Google failures, retries, status/exit codes, ledger, alerts, lock, watchdog, weekly
+    if (want('e13')) {
+      const reportText = async (s) => (await runCli(site, 'report', s.env, root, s.state)).out;
+      const ledgerLast = (st) => JSON.parse(fs.readFileSync(path.join(st, 'last-run.json'), 'utf8'));
+
+      section('E13a: Google failures are classified, explained, and degrade to safe report-only');
+      const cases = [['authfail', 'auth_invalid', /refresh token/i], ['badclient', 'auth_invalid_client', /OAuth client/i], ['noaccess', 'no_access', /owner\/full user/i], ['unverified', 'no_access', /unverified/i], ['nosite', 'not_found', /AUTOPILOT_GSC_SITE/], ['quota', 'quota', /rate\/quota limit/i]];
+      for (const [mode, kind, re] of cases) {
+        const s = scenario({}); google.mode = mode; const r = await runCli(site, 'run', s.env, root, s.state); const rep = jsonReport(s.state); const md = await reportText(s);
+        check(rep.gsc.available === false && rep.gsc.status === kind, `Google ${mode}: classified as ${kind}`, JSON.stringify(rep.gsc));
+        check(rep.status === 'degraded' && r.code === 0 && rep.inventory.pageCount === 31 && rep.changes.length === 0, `Google ${mode}: the run completes as DEGRADED, the audit still runs, nothing is proposed`, r.out);
+        check(re.test(md) && /What to do/.test(md), `Google ${mode}: the report explains what to do`);
+        check(!md.includes(SECRET) && !r.out.includes(SECRET) && !md.includes('csecret-0123456789'), `Google ${mode}: no credential in the report or output`);
+      }
+      let s = scenario({ AUTOPILOT_GOOGLE_REFRESH_TOKEN: '' }); let r = await runCli(site, 'run', s.env, root, s.state); let rep = jsonReport(s.state);
+      check(rep.gsc.status === 'not_configured' && rep.status === 'degraded' && rep.effectiveMode === 'report-only' && /safe report-only/.test(await reportText(s)), 'missing OAuth: safe report-only mode with a remediation report');
+      s = scenario({}); google.mode = 'timeout'; r = await runCli(site, 'run', s.env, root, s.state); rep = jsonReport(s.state);
+      check(rep.gsc.status === 'network' && rep.status === 'degraded', 'a Google timeout is a network problem, not "no data"', JSON.stringify(rep.gsc));
+      s = scenario({}); google.mode = 'empty'; r = await runCli(site, 'run', s.env, root, s.state); rep = jsonReport(s.state); const mdEmpty = await reportText(s);
+      check(rep.gsc.available === true && rep.gsc.status === 'ok_no_data' && rep.status === 'success' && !rep.stops.some((x) => /Google/.test(x)), 'a healthy API with zero traffic is "no data", never a failure', JSON.stringify(rep.gsc) + JSON.stringify(rep.stops));
+      check(/no traffic data/i.test(mdEmpty) && rep.opportunities.length === 0, 'the report says so and invents no opportunities');
+      s = scenario({}); r = await runCli(site, 'verify-google', s.env, root, s.state); check(r.code === 0 && /OK \[ok\]/.test(r.out) && /siteOwner/.test(r.out) && !r.out.includes(SECRET), 'verify-google confirms access to the property without printing credentials', r.out);
+      google.mode = 'authfail'; r = await runCli(site, 'verify-google', s.env, root, s.state); check(r.code === 1 && /NOT OK \[auth_invalid\]/.test(r.out) && /remedy:/.test(r.out) && !r.out.includes(SECRET), 'verify-google reports bad credentials with a remedy', r.out);
+      google.mode = 'ok'; r = await runCli(site, 'verify-google', Object.assign({}, s.env, { AUTOPILOT_GOOGLE_CLIENT_ID: '' }), root, s.state); check(r.code === 1 && /\[not_configured\]/.test(r.out), 'verify-google reports missing configuration');
+
+      section('E13b: bounded retries, rate limits and no repeated submissions');
+      const util2 = require('../autopilot/lib/util'); const prevBase = process.env.AUTOPILOT_RETRY_BASE_MS; process.env.AUTOPILOT_RETRY_BASE_MS = '1';
+      let hits = 0; let behave = 'flaky';
+      const probe = http.createServer((req, res) => { hits++; if (behave === 'flaky' && hits <= 2) { res.writeHead(429, { 'Retry-After': '0' }); return res.end('slow down'); } if (behave === 'always429') { res.writeHead(429); return res.end(); } if (behave === 'always500') { res.writeHead(503); return res.end(); } if (behave === '400') { res.writeHead(400); return res.end(); } res.writeHead(200); res.end('ok'); });
+      const probePort = await freePort(); await new Promise((r2) => probe.listen(probePort, '127.0.0.1', r2)); const purl = `http://127.0.0.1:${probePort}/`;
+      let x = await util2.requestRetry(purl, {}); check(x.status === 200 && hits === 3 && x.attempts === 3, 'two 429s then success: retried and succeeded (3 attempts)', `${x.status} ${hits}`);
+      hits = 0; behave = 'always429'; x = await util2.requestRetry(purl, {}); check(x.status === 429 && hits === 3, 'a persistent 429 gives up after a bounded number of attempts (never loops)', `${x.status} ${hits}`);
+      hits = 0; behave = 'always500'; x = await util2.requestRetry(purl, {}); check(x.status === 503 && hits === 3, 'a persistent 5xx gives up after a bounded number of attempts', `${x.status} ${hits}`);
+      hits = 0; behave = '400'; x = await util2.requestRetry(purl, {}); check(x.status === 400 && hits === 1, 'a client error (400) is never retried', `${x.status} ${hits}`);
+      probe.close(); let thrown = null; try { await util2.requestRetry(purl, { timeoutMs: 500 }); } catch (e) { thrown = e; } check(thrown && thrown.attempts === 3, 'a network failure is retried a bounded number of times, then reported', thrown && String(thrown.attempts));
+      if (prevBase === undefined) delete process.env.AUTOPILOT_RETRY_BASE_MS; else process.env.AUTOPILOT_RETRY_BASE_MS = prevBase;
+      s = scenario({}); google.mode = 'flaky'; google.flakyLeft = 2; r = await runCli(site, 'run', s.env, root, s.state); rep = jsonReport(s.state);
+      check(rep.gsc.available === true && rep.gsc.status === 'ok' && google.calls.query > 4, 'transient Google 5xx errors are retried and the run still gets its data', JSON.stringify(rep.gsc) + google.calls.query);
+      s = scenario({}); google.mode = 'quota'; r = await runCli(site, 'run', s.env, root, s.state);
+      check(google.calls.query >= 1 && google.calls.query <= 3 && google.calls.sitemapPut.length === 0, 'a rate-limited Search Console is queried a bounded number of times and nothing is submitted', String(google.calls.query));
+      s = scenario({}); await runCli(site, 'run', s.env, root, s.state); const sitemapPuts = google.calls.sitemapPut.length; await runCli(site, 'run', s.env, root, s.state); await runCli(site, 'run', s.env, root, s.state);
+      check(google.calls.sitemapPut.length === sitemapPuts && inow.posts.length === 0, 'unchanged site: the sitemap and URLs are not re-submitted on later runs');
+
+      section('E13c: run status, exit codes and the run ledger');
+      s = scenario({}); r = await runCli(site, 'run', s.env, root, s.state); rep = jsonReport(s.state); let led = ledgerLast(s.state);
+      check(r.code === 0 && /status=success/.test(r.out) && rep.status === 'success', 'a clean run is SUCCESS with exit code 0', r.out);
+      check(led.runId === rep.runId && led.status === 'success' && led.startedAt && led.endedAt && led.durationMs >= 0 && led.checks.pages === 31 && led.checks.google === 'ok' && 'proposals' in led.actions && Array.isArray(led.errors), 'the ledger records run id, start/end, checks, actions, errors and final status', JSON.stringify(led).slice(0, 300));
+      check((await runCli(site, 'ledger', s.env, root, s.state)).out.includes(rep.runId), 'seo ledger lists the run');
+      check((await runCli(site, 'health', s.env, root, s.state)).code === 0, 'health: exit 0 after a successful recent run');
+      s = scenario({ AUTOPILOT_FETCH_BASE: 'http://127.0.0.1:1' }); r = await runCli(site, 'run', s.env, root, s.state); rep = jsonReport(s.state); led = ledgerLast(s.state);
+      check(r.code === 1 && /FAILED/.test(r.out) && rep.status === 'failed' && led.status === 'failed', 'an unreachable site is a FAILED run: exit code 1, never reported as success', r.out);
+      check((await runCli(site, 'health', s.env, root, s.state)).code === 1, 'health: exit 1 when the last run failed');
+      s = scenario({ AUTOPILOT_RUN_TIMEOUT_MS: '1500', AUTOPILOT_HTTP_TIMEOUT_MS: '20000' }); google.mode = 'timeout'; r = await runCli(site, 'run', s.env, root, s.state); led = ledgerLast(s.state);
+      check(r.code === 1 && /watchdog/.test(r.out) && led.status === 'failed' && led.errors.some((e) => /watchdog/.test(e)) && !fs.existsSync(path.join(s.state, 'run.lock')), 'the watchdog stops a hung run: FAILED, recorded, lock released', r.out);
+      s = scenario({}); const state0 = require('../autopilot/lib/state'); const cfg0 = require('../autopilot/config').loadConfig({ AUTOPILOT_STATE_DIR: s.state, AUTOPILOT_ENV_FILE: '/nonexistent' }); state0.init(cfg0);
+      state0.recordRun(cfg0, { runId: 'old', date: '2026-10-01', startedAt: new Date(Date.now() - 80 * 3600000).toISOString(), endedAt: new Date(Date.now() - 80 * 3600000).toISOString(), status: 'success' });
+      check((await runCli(site, 'health', s.env, root, s.state)).code === 4, 'health: exit 4 when no run happened for over 50 hours (scheduler problem)');
+      s = scenario({}); fs.mkdirSync(s.state, { recursive: true }); fs.writeFileSync(path.join(s.state, 'state.json'), JSON.stringify({ lastRun: { at: new Date(Date.now() - 72 * 3600000).toISOString() } })); r = await runCli(site, 'run', s.env, root, s.state); rep = jsonReport(s.state);
+      check(rep.health.some((i) => i.id === 'scheduler' && i.level === 'warn') && rep.status === 'degraded', 'a missed scheduled run is detected and reported', JSON.stringify(rep.health.filter((i) => i.level !== 'ok')));
+
+      section('E13d: duplicate-run protection');
+      const lockCfg = require('../autopilot/config').loadConfig({ AUTOPILOT_STATE_DIR: path.join(root, 'lockstate'), AUTOPILOT_ENV_FILE: '/nonexistent' }); const st2 = require('../autopilot/lib/state'); const lockFile = st2.paths(lockCfg).lock;
+      check(st2.acquireLock(lockCfg) === true && st2.acquireLock(lockCfg) === false, 'a second acquire while a live run holds the lock is refused');
+      st2.releaseLock(lockCfg); fs.writeFileSync(lockFile, JSON.stringify({ pid: 2000000000, at: new Date().toISOString() })); check(st2.acquireLock(lockCfg) === true, 'a lock left by a dead process is reclaimed'); st2.releaseLock(lockCfg);
+      fs.writeFileSync(lockFile, JSON.stringify({ pid: process.pid, at: new Date(Date.now() - 3 * 3600000).toISOString() })); check(st2.acquireLock(lockCfg) === true, 'a lock older than the longest allowed run is reclaimed even if the PID exists'); st2.releaseLock(lockCfg);
+      fs.writeFileSync(lockFile, '{not json'); check(st2.acquireLock(lockCfg) === true, 'a corrupt lock file is reclaimed'); st2.releaseLock(lockCfg);
+      s = scenario({}); fs.mkdirSync(s.state, { recursive: true }); fs.writeFileSync(path.join(s.state, 'run.lock'), JSON.stringify({ pid: process.pid, at: new Date().toISOString() })); r = await runCli(site, 'run', s.env, root, s.state);
+      check(r.code === 3 && /in progress/.test(r.out) && fs.existsSync(path.join(s.state, 'run.lock')) && fs.readdirSync(path.join(s.state, 'reports')).length === 0, 'CLI: a run is refused (exit 3) while another is in progress, and does not touch the other run\'s lock', r.out);
+      s = scenario({}); const both = await Promise.all([runCli(site, 'run', s.env, root, s.state), runCli(site, 'run', s.env, root, s.state)]); const codes = both.map((b) => b.code).sort();
+      check(codes[0] === 0 && codes[1] === 3, 'two simultaneous starts: exactly one runs, the other exits 3 (atomic lock)', JSON.stringify(codes) + both.map((b) => b.out.slice(0, 80)).join(' | '));
+      check(fs.readdirSync(path.join(s.state, 'reports')).filter((n) => /^report-.*[.]json$/.test(n)).length === 1, 'only one report was produced by the two simultaneous starts');
+
+      section('E13e: alerts are useful, quiet when nothing changed, and never contain secrets');
+      const hook = await startWebhook(); cleanups.push(() => hook.server.close());
+      s = scenario({ AUTOPILOT_ALERT_WEBHOOK: hook.base }); google.mode = 'authfail'; r = await runCli(site, 'run', s.env, root, s.state);
+      check(hook.posts.length === 1 && /DEGRADED/.test(hook.posts[0].text) && /auth_invalid/.test(hook.posts[0].text) && /Re-authorise/.test(hook.posts[0].text), 'an OAuth failure sends one alert that says what is wrong and what to do', JSON.stringify(hook.posts));
+      check(!JSON.stringify(hook.posts).includes(SECRET) && !JSON.stringify(hook.posts).includes('csecret-0123456789'), 'the alert contains no credential');
+      await runCli(site, 'run', s.env, root, s.state); check(hook.posts.length === 1, 'the same problem on the next run does not alert again (no daily spam)');
+      google.mode = 'ok'; await runCli(site, 'run', s.env, root, s.state); check(hook.posts.length === 2 && /SUCCESS/.test(hook.posts[1].text) && /recovered/i.test(hook.posts[1].text), 'recovery is announced once, as SUCCESS', JSON.stringify(hook.posts));
+      s = scenario({ AUTOPILOT_ALERT_WEBHOOK: 'http://127.0.0.1:1/hook' }); google.mode = 'authfail'; r = await runCli(site, 'run', s.env, root, s.state);
+      check(r.code === 0 && jsonReport(s.state).status === 'degraded', 'a failing alert webhook never fails or hides the run');
+      s = scenario({ AUTOPILOT_AI_MODE: 'openai' }); r = await runCli(site, 'run', s.env, root, s.state); rep = jsonReport(s.state);
+      check(rep.health.some((i) => i.id === 'ai' && i.level === 'warn' && /needs AUTOPILOT_AI_BASE_URL/.test(i.detail)) && rep.status === 'degraded' && rep.changes.length === 0, 'AI configured but incomplete: reported, runs deterministic audits only, nothing proposed');
+      const healthLib = require('../autopilot/lib/health');
+      const txt = healthLib.alertText({ date: '2026-10-13', status: 'degraded', runId: 'abc', health: [{ level: 'fail', title: 'Search Console unavailable', detail: `refresh_token=${SECRET} Authorization: Bearer abcdefghijklmnop0123`, remedy: 'x' }] }, ['test']);
+      check(!txt.includes(SECRET) && !/abcdefghijklmnop0123/.test(txt), 'alert text is redacted even if a detail accidentally contained a secret');
+      check(healthLib.alertReasons({ status: 'degraded', dryRun: true, health: [{ id: 'google', level: 'fail' }], rollbacks: [], changes: [] }, null, Date.now()).length === 0, 'dry runs never alert');
+
+      section('E13f: weekly trend report');
+      const weekly = require('../autopilot/lib/weekly'); const wcfg = { timezone: 'Asia/Kolkata' };
+      check(weekly.due(wcfg, { lastWeekly: null }, new Date('2026-10-18T22:00:00Z')) === '2026-10-19', 'first weekly report is due on the first run of a Monday (India time)');
+      check(weekly.due(wcfg, { lastWeekly: null }, new Date('2026-10-20T04:00:00Z')) === null, 'not due on a Tuesday when none has been built yet');
+      check(weekly.due(wcfg, { lastWeekly: '2026-10-19' }, new Date('2026-10-25T10:00:00Z')) === null && weekly.due(wcfg, { lastWeekly: '2026-10-19' }, new Date('2026-10-26T04:00:00Z')) === '2026-10-26', 'then one report every 7 days');
+      s = scenario({}); const wc = require('../autopilot/config').loadConfig({ AUTOPILOT_STATE_DIR: s.state, AUTOPILOT_ENV_FILE: '/nonexistent' }); const wf = state0.init(wc);
+      const mk = (date, clicks, impr, pos, crit) => ({ runId: 'r' + date, date, dryRun: false, gsc: { available: true, status: 'ok', totals: { current: { clicks, impressions: impr, ctr: clicks / impr, position: pos }, previous: { clicks: 1, impressions: 10, ctr: 0.1, position: 20 } } }, auditSummary: { critical: crit, high: 1, medium: 2, low: 3 }, inventory: { pageCount: 31 }, pageMovement: [{ path: '/products/besan', current: 90, previous: 40, change: 50 }], risingCommercial: [{ query: 'bulk besan supplier india', impressions: 60, position: 14 }], opportunities: [{ query: 'maida wholesale supplier', bestPage: '/products/maida', action: 'improve existing page', score: 55, position: 18 }], inspections: [{ verdict: 'PASS' }, { verdict: 'PASS' }, { verdict: 'NEUTRAL' }] });
+      for (const [d, c, i] of [['2026-09-21', 10, 400], ['2026-09-28', 14, 480], ['2026-10-05', 20, 600], ['2026-10-12', 30, 800]]) { fs.writeFileSync(path.join(wf.reports, `report-${d}-x.json`), JSON.stringify(mk(d, c, i, 15, d === '2026-10-05' ? 1 : 0))); state0.recordRun(wc, { runId: 'r' + d, date: d, startedAt: d + 'T22:00:00Z', endedAt: d + 'T22:05:00Z', status: d === '2026-10-12' ? 'degraded' : 'success', health: d === '2026-10-12' ? ['google'] : [] }); }
+      const out = weekly.build(wc, wf, { history: [{ date: '2026-10-10', page: '/wholesale-flour-supplier', status: 'proposed', branch: 'seo-autopilot/x' }] }, '2026-10-13');
+      check(/\| 2026-10-12 \| 30 \| 800 \|/.test(out.markdown) && /\| 2026-10-05 \| 20 \| 600 \|/.test(out.markdown) && /clicks \+50%, impressions \+33%/.test(out.markdown), 'weekly report: a 28-day rolling trend table with the week-over-week change', out.markdown.slice(0, 900));
+      check(/\/products\/besan: 40 -> 90 \(\+50\)/.test(out.markdown) && /bulk besan supplier india/.test(out.markdown) && /maida wholesale supplier -> \/products\/maida/.test(out.markdown), 'weekly report: page movement, rising commercial queries and opportunities');
+      check(/PASS: 2, NEUTRAL: 1/.test(out.markdown) && /google \(1 run\)/.test(out.markdown) && /wholesale-flour-supplier: proposed/.test(out.markdown), 'weekly report: indexing status, operational problems and proposals');
+      check(/guarantee/i.test(out.markdown) && !/rank(s|ing)? (will|guaranteed)/i.test(out.markdown.replace(/Nothing here predicts or guarantees rankings or indexing\./, '')), 'weekly report makes no ranking or indexing promises');
+      r = await runCli(site, 'weekly', s.env, root, s.state); check(r.code === 0 && /weekly report:/.test(r.out) && fs.readdirSync(wf.reports).some((n) => /^weekly-\d{4}-\d{2}-\d{2}\.md$/.test(n)), 'seo weekly builds the report on demand');
+      section('E13g: review fixes (monitoring file, scheduler gap, webhook secrecy, inspection quota, undelivered alerts)');
+      s = scenario({}); await runCli(site, 'run', s.env, root, s.state); const realId = ledgerLast(s.state).runId; await runCli(site, 'dry-run', s.env, root, s.state);
+      check(ledgerLast(s.state).runId === realId && (await runCli(site, 'ledger', s.env, root, s.state)).out.split('\n').filter((l) => l.includes('"dryRun":true')).length === 1, 'a manual dry run is recorded in the ledger but never overwrites last-run.json (the monitoring file)');
+      s = scenario({}); const gcfg = require('../autopilot/config').loadConfig({ AUTOPILOT_STATE_DIR: s.state, AUTOPILOT_ENV_FILE: '/nonexistent' }); state0.init(gcfg);
+      fs.writeFileSync(path.join(s.state, 'state.json'), JSON.stringify({ lastRun: { at: new Date(Date.now() - 72 * 3600000).toISOString() } }));
+      state0.recordRun(gcfg, { runId: 'recentfail', date: '2026-10-13', startedAt: new Date(Date.now() - 6 * 3600000).toISOString(), endedAt: new Date(Date.now() - 6 * 3600000).toISOString(), status: 'failed' });
+      r = await runCli(site, 'run', s.env, root, s.state); rep = jsonReport(s.state);
+      check(!rep.health.some((i) => i.id === 'scheduler'), 'a recent FAILED run counts as "the timer fired": no false "missed run" warning after an outage', JSON.stringify(rep.health.filter((i) => i.level !== 'ok')));
+      util2.registerSecrets({ AUTOPILOT_ALERT_WEBHOOK: 'https://hooks.example.test/services/T000/B000/XXXXsecretpathXXXX' });
+      check(!util2.redact('alert failed for https://hooks.example.test/services/T000/B000/XXXXsecretpathXXXX').includes('XXXXsecretpath'), 'the alert webhook URL is redacted from logs and errors');
+      s = scenario({}); google.mode = 'inspect429'; google.calls.inspect429 = 0; r = await runCli(site, 'run', s.env, root, s.state); rep = jsonReport(s.state);
+      check(google.calls.inspect429 === 1 && rep.gsc.available === true, 'URL Inspection is never retried on a 429: one call, then the run moves on and still completes', String(google.calls.inspect429));
+      const hook2 = await startWebhook(); cleanups.push(() => hook2.server.close()); hook2.status = 500;
+      s = scenario({ AUTOPILOT_ALERT_WEBHOOK: hook2.base }); google.mode = 'authfail'; await runCli(site, 'run', s.env, root, s.state);
+      hook2.status = 200; await runCli(site, 'run', s.env, root, s.state); const afterFix = hook2.posts.length; await runCli(site, 'run', s.env, root, s.state);
+      check(afterFix === 2 && hook2.posts.length === 2 && /could not be delivered/.test(hook2.posts[1].text), 'an alert that could not be delivered is retried on the next run, then not repeated', JSON.stringify(hook2.posts.map((x) => (x.text || '').slice(0, 120))));
+      untouched('E13');
     }
 
     // ---- E12 optional: real project suites as gates

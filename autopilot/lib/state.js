@@ -8,7 +8,7 @@ const { ensureDir, readJson, writeJson, today, redact, addDays, daysBetween } = 
 function paths(cfg) {
   const d = cfg.stateDir;
   return { dir: d, state: path.join(d, 'state.json'), lastmod: path.join(d, 'lastmod.json'), disabled: path.join(d, 'DISABLED'), lock: path.join(d, 'run.lock'),
-    reports: path.join(d, 'reports'), snapshots: path.join(d, 'snapshots'), cache: path.join(d, 'cache'), auditDir: path.join(d, 'audit'), indexnowState: path.join(d, 'indexnow-state.json'), indexnowLog: path.join(d, 'indexnow.log') };
+    reports: path.join(d, 'reports'), snapshots: path.join(d, 'snapshots'), cache: path.join(d, 'cache'), auditDir: path.join(d, 'audit'), indexnowState: path.join(d, 'indexnow-state.json'), indexnowLog: path.join(d, 'indexnow.log'), ledger: path.join(d, 'runs.jsonl'), lastRun: path.join(d, 'last-run.json') };
 }
 
 function init(cfg) {
@@ -17,7 +17,7 @@ function init(cfg) {
   return p;
 }
 
-const EMPTY = () => ({ version: 1, initialAuditDone: false, createdAt: new Date().toISOString(), hashes: {}, pageCount: null, history: [], inspections: {}, lastRun: null, lastNewPageAt: null });
+const EMPTY = () => ({ version: 1, initialAuditDone: false, createdAt: new Date().toISOString(), hashes: {}, pageCount: null, history: [], inspections: {}, lastRun: null, lastNewPageAt: null, lastHealth: null, lastWeekly: null });
 
 function load(cfg) { return Object.assign(EMPTY(), readJson(paths(cfg).state, {})); }
 function save(cfg, st) { writeJson(paths(cfg).state, st); }
@@ -31,16 +31,22 @@ function setEnabled(cfg, on) {
   if (on) { try { fs.unlinkSync(p.disabled); } catch (e) { /* already enabled */ } } else fs.writeFileSync(p.disabled, `disabled ${new Date().toISOString()}\n`);
 }
 
-// Single-run lock; a lock whose process is gone is stale and is replaced.
+// Single-run lock, created atomically (O_EXCL), so two simultaneous starts can never both win. A lock is stale, and is
+// replaced, when its process is gone OR it is older than the longest run the watchdog allows (a hung/reused PID).
+const LOCK_MAX_AGE_MS = 2 * 3600 * 1000;
 function acquireLock(cfg) {
   const p = init(cfg);
-  try {
-    const cur = JSON.parse(fs.readFileSync(p.lock, 'utf8'));
-    let alive = false; try { process.kill(cur.pid, 0); alive = true; } catch (e) { alive = e.code === 'EPERM'; }
-    if (alive) return false;
-  } catch (e) { /* no lock or unreadable */ }
-  fs.writeFileSync(p.lock, JSON.stringify({ pid: process.pid, at: new Date().toISOString() }));
-  return true;
+  const payload = JSON.stringify({ pid: process.pid, at: new Date().toISOString() });
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try { fs.writeFileSync(p.lock, payload, { flag: 'wx', mode: 0o640 }); return true; } catch (e) { if (e.code !== 'EEXIST') throw e; }
+    let cur = null; try { cur = JSON.parse(fs.readFileSync(p.lock, 'utf8')); } catch (e) { /* unreadable lock is treated as stale */ }
+    const age = cur && cur.at ? Date.now() - Date.parse(cur.at) : Infinity;
+    let alive = false;
+    if (cur && cur.pid) { try { process.kill(cur.pid, 0); alive = true; } catch (e) { alive = e.code === 'EPERM'; } }
+    if (alive && age < LOCK_MAX_AGE_MS) return false;
+    try { fs.unlinkSync(p.lock); } catch (e) { /* someone else reclaimed it first; the next wx decides */ }
+  }
+  return false;
 }
 function releaseLock(cfg) { try { fs.unlinkSync(paths(cfg).lock); } catch (e) { /* ignore */ } }
 
@@ -58,6 +64,26 @@ function readAudit(cfg, limit) {
   const lines = [];
   for (const f of files.slice(-3)) lines.push(...fs.readFileSync(path.join(p.auditDir, f), 'utf8').split('\n').filter(Boolean));
   return lines.slice(-(limit || 50)).map((l) => { try { return JSON.parse(l); } catch (e) { return { raw: l }; } });
+}
+
+// ---- run ledger: one JSON line per run (id, times, checks, actions, errors, final status) + last-run.json for monitoring
+function recordRun(cfg, entry) {
+  const p = init(cfg);
+  const line = redact(JSON.stringify(entry));
+  fs.appendFileSync(p.ledger, line + '\n', { mode: 0o640 });
+  if (!entry.dryRun) writeJson(p.lastRun, JSON.parse(line)); // a manual dry run must never mask a failed scheduled run
+}
+function readLedger(cfg, limit) {
+  const p = paths(cfg); let lines = [];
+  try { lines = fs.readFileSync(p.ledger, 'utf8').split('\n').filter(Boolean); } catch (e) { return []; }
+  return lines.slice(-(limit || 50)).map((l) => { try { return JSON.parse(l); } catch (e) { return { raw: l }; } });
+}
+function trimLedger(cfg, keep) {
+  const p = paths(cfg); let lines = [];
+  try { lines = fs.readFileSync(p.ledger, 'utf8').split('\n').filter(Boolean); } catch (e) { return 0; }
+  if (lines.length <= keep) return 0;
+  const tmp = `${p.ledger}.${process.pid}.tmp`; fs.writeFileSync(tmp, lines.slice(-keep).join('\n') + '\n', { mode: 0o640 }); fs.renameSync(tmp, p.ledger);
+  return lines.length - keep;
 }
 
 // ---- edit limits (max pages per day, per-page cooldown, new-page window)
@@ -84,7 +110,8 @@ function rotate(cfg, dateStr) {
       if (d < cutoff) { try { fs.unlinkSync(path.join(dir, n)); removed++; } catch (e) { /* ignore */ } }
     }
   }
+  removed += trimLedger(cfg, Math.max(400, cfg.retentionDays * 3));
   return removed;
 }
 
-module.exports = { paths, init, load, save, loadLastmod, saveLastmod, isDisabled, setEnabled, acquireLock, releaseLock, audit, readAudit, limitStatus, onCooldown, newPageAllowed, rotate, appliedOn };
+module.exports = { LOCK_MAX_AGE_MS, recordRun, readLedger, trimLedger, paths, init, load, save, loadLastmod, saveLastmod, isDisabled, setEnabled, acquireLock, releaseLock, audit, readAudit, limitStatus, onCooldown, newPageAllowed, rotate, appliedOn };
