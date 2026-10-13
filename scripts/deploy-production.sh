@@ -348,7 +348,10 @@ secret_scan() {
   local hits names
   # high-signal patterns only (private keys, cloud/API tokens, assigned secrets with a real-looking value)
   local rx='-----BEGIN [A-Z ]*PRIVATE KEY-----|AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}|sk-[A-Za-z0-9]{32,}|(SMTP_PASSWORD|SMTP_PASS|API_KEY|SECRET_KEY|ACCESS_TOKEN|AUTH_TOKEN)[[:space:]]*[=:][[:space:]]*["'"'"']?[A-Za-z0-9/+_.@-]{12,}'
-  hits="$(git grep -I -n -E -e "$rx" HEAD -- . 2>/dev/null | head -5)"
+  # A value that is just a process.env.* reference is code reading a secret, not a hardcoded one.
+  # -o prints each match on its own, so a real secret on the same line as a reference is still reported.
+  local envref='[=:][[:space:]]*["'"'"']?process\.env([^A-Za-z0-9_]|$)'
+  hits="$(git grep -I -n -o -E -e "$rx" HEAD -- . 2>/dev/null | grep -Ev -e "$envref" | head -5)"
   if [ -z "$hits" ]; then ok "secret scan: no private keys, tokens or assigned secrets in tracked files"
   else fail "secret scan: possible secrets in tracked files (values hidden):"; printf '%s\n' "$hits" | sed -E 's/^(HEAD:[^:]+:[0-9]+:).*/        \1 <redacted>/'; fi
   names="$(git ls-files | grep -E '(^|/)\.env($|\.)|\.pem$|\.key$|\.p12$|\.pfx$|(^|/)id_(rsa|ed25519)|(^|/)data/(enquiries|newsletter)\.json$' || true)"
