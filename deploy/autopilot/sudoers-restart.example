@@ -1,0 +1,15 @@
+# OPTIONAL. Only needed if the website's PM2 daemon runs under a DIFFERENT account than the autopilot's service user.
+# (If both are the same account, use AUTOPILOT_RESTART_CMD="pm2 restart mamta-bhoj" and skip this file.)
+#
+# It lets the service user run exactly ONE command as the PM2 owner, without a password, and nothing else:
+#   - no shell, no wildcard, no other pm2 sub-command, no other app name.
+# Replace SERVICEUSER and PM2OWNER, check the pm2 path with `command -v pm2`, then install and validate it as root:
+#
+#   sudo install -m 0440 deploy/autopilot/sudoers-restart.example /etc/sudoers.d/mamta-autopilot-restart
+#   sudo visudo -cf /etc/sudoers.d/mamta-autopilot-restart        # must print "parsed OK"; delete the file if it does not
+#
+# Then set in /etc/mamta-autopilot/autopilot.env:
+#   AUTOPILOT_RESTART_CMD=sudo -n -u PM2OWNER /usr/bin/pm2 restart mamta-bhoj
+# and note that systemd's NoNewPrivileges=true in the base unit blocks sudo: in that case run the restart through a path that
+# does not need sudo (same-user PM2), or relax NoNewPrivileges for this one unit deliberately, after review.
+SERVICEUSER ALL=(PM2OWNER) NOPASSWD: /usr/bin/pm2 restart mamta-bhoj

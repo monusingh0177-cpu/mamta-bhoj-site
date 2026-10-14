@@ -87,7 +87,7 @@ async function runGates(cfg, ctx) {
     add('page-count', !ctx.baseline || inv.sitemapPaths.length === ctx.baseline.sitemapPaths.length, `${inv.sitemapPaths.length} URLs (baseline ${ctx.baseline ? ctx.baseline.sitemapPaths.length : 'n/a'})`);
     const cp = checkChangedPages(inv, ctx.changedPaths || [], cfg.siteOrigin);
     add('changed-pages', cp.length === 0, cp.join('; ') || (ctx.changedPaths || []).join(', '));
-    const after = auditInventory(inv, { origin: cfg.siteOrigin });
+    const after = auditInventory(inv, { origin: cfg.siteOrigin, minInlinks: cfg.minInlinks });
     const before = new Set((ctx.baselineAudit || []).map(key));
     const fresh = after.filter((f) => ['critical', 'high'].includes(f.severity) && !before.has(key(f)));
     add('no-new-seo-defects', fresh.length === 0, fresh.slice(0, 4).map((f) => `${f.path} ${f.code}`).join('; '));

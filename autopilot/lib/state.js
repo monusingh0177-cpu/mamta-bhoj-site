@@ -17,7 +17,7 @@ function init(cfg) {
   return p;
 }
 
-const EMPTY = () => ({ version: 1, initialAuditDone: false, createdAt: new Date().toISOString(), hashes: {}, pageCount: null, history: [], inspections: {}, lastRun: null, lastNewPageAt: null, lastHealth: null, lastWeekly: null });
+const EMPTY = () => ({ version: 1, initialAuditDone: false, createdAt: new Date().toISOString(), hashes: {}, pageCount: null, history: [], inspections: {}, lastRun: null, lastNewPageAt: null, lastHealth: null, lastWeekly: null, autoPaused: null });
 
 function load(cfg) { return Object.assign(EMPTY(), readJson(paths(cfg).state, {})); }
 function save(cfg, st) { writeJson(paths(cfg).state, st); }
@@ -78,6 +78,25 @@ function readLedger(cfg, limit) {
   try { lines = fs.readFileSync(p.ledger, 'utf8').split('\n').filter(Boolean); } catch (e) { return []; }
   return lines.slice(-(limit || 50)).map((l) => { try { return JSON.parse(l); } catch (e) { return { raw: l }; } });
 }
+// ---- change ledger: one JSON line per ATTEMPTED change (published, rolled back, rejected, left as a proposal): what the old and
+// new values were, which commit/release, how it was verified and what the rollback did. Append-only, outside the web root.
+const changesFile = (cfg) => path.join(cfg.stateDir, 'changes.jsonl');
+function recordChange(cfg, entry) {
+  ensureDir(cfg.stateDir);
+  fs.appendFileSync(changesFile(cfg), redact(JSON.stringify(Object.assign({ at: new Date().toISOString() }, entry))) + '\n', { mode: 0o640 });
+}
+function readChanges(cfg, n) {
+  let lines = []; try { lines = fs.readFileSync(changesFile(cfg), 'utf8').split('\n').filter(Boolean); } catch (e) { return []; }
+  const out = []; for (const l of lines.slice(-(n || 100))) { try { out.push(JSON.parse(l)); } catch (e) { /* skip a damaged line */ } }
+  return out;
+}
+function trimChanges(cfg, keep) {
+  let lines = []; try { lines = fs.readFileSync(changesFile(cfg), 'utf8').split('\n').filter(Boolean); } catch (e) { return 0; }
+  if (lines.length <= keep) return 0;
+  const tmp = changesFile(cfg) + '.' + process.pid + '.tmp'; fs.writeFileSync(tmp, lines.slice(-keep).join('\n') + '\n', { mode: 0o640 }); fs.renameSync(tmp, changesFile(cfg));
+  return lines.length - keep;
+}
+
 function trimLedger(cfg, keep) {
   const p = paths(cfg); let lines = [];
   try { lines = fs.readFileSync(p.ledger, 'utf8').split('\n').filter(Boolean); } catch (e) { return 0; }
@@ -87,8 +106,10 @@ function trimLedger(cfg, keep) {
 }
 
 // ---- edit limits (max pages per day, per-page cooldown, new-page window)
-const COUNTED = ['proposed', 'applied'];
-function appliedOn(st, date) { return st.history.filter((h) => COUNTED.includes(h.status) && h.date === date); }
+const COUNTED = ['proposed', 'applied', 'published'];
+// deterministic internal-link fixes (kind 'related') have their own daily budget (cfg.limits.fixesPerDay) and do not use up the content-edit budget
+function appliedOn(st, date) { return st.history.filter((h) => COUNTED.includes(h.status) && h.date === date && h.kind !== 'related'); }
+function fixesToday(st, date) { return st.history.filter((h) => COUNTED.includes(h.status) && h.date === date && h.kind === 'related').length; }
 function limitStatus(cfg, st, date) {
   const todayPages = new Set(appliedOn(st, date).map((h) => h.page));
   return { pagesToday: todayPages.size, remainingToday: Math.max(0, cfg.limits.pagesPerDay - todayPages.size) };
@@ -111,7 +132,8 @@ function rotate(cfg, dateStr) {
     }
   }
   removed += trimLedger(cfg, Math.max(400, cfg.retentionDays * 3));
+  removed += trimChanges(cfg, 5000);
   return removed;
 }
 
-module.exports = { LOCK_MAX_AGE_MS, recordRun, readLedger, trimLedger, paths, init, load, save, loadLastmod, saveLastmod, isDisabled, setEnabled, acquireLock, releaseLock, audit, readAudit, limitStatus, onCooldown, newPageAllowed, rotate, appliedOn };
+module.exports = { LOCK_MAX_AGE_MS, recordChange, readChanges, recordRun, readLedger, trimLedger, paths, init, load, save, loadLastmod, saveLastmod, isDisabled, setEnabled, acquireLock, releaseLock, audit, readAudit, limitStatus, fixesToday, onCooldown, newPageAllowed, rotate, appliedOn };

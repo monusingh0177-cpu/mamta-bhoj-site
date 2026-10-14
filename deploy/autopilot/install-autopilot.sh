@@ -9,7 +9,7 @@
 set -euo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SERVICE_USER=""; STATE="/var/lib/mamta-autopilot"; NODE_BIN="$(command -v node || true)"
-PREFIX=""; DRY=0; START=1
+PREFIX=""; DRY=0; START=1; AUTO=0; PM2HOME=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --user) SERVICE_USER="$2"; shift 2 ;;
@@ -19,6 +19,8 @@ while [ $# -gt 0 ]; do
     --prefix) PREFIX="$2"; shift 2 ;;   # install into a scratch root (tests); skips systemctl
     --dry-run) DRY=1; shift ;;
     --no-start) START=0; shift ;;
+    --auto-publish) AUTO=1; shift ;;     # also install the narrow write-access drop-in that automatic publishing needs
+    --pm2-home) PM2HOME="$2"; shift 2 ;; # PM2 home of the service user (default /home/<user>/.pm2)
     -h|--help) sed -n '2,9p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "unknown option: $1" >&2; exit 2 ;;
   esac
@@ -44,6 +46,15 @@ for u in mamta-autopilot.service mamta-autopilot.timer; do
     sed -e "s#@REPO@#$REPO#g" -e "s#@USER@#$SERVICE_USER#g" -e "s#@STATE@#$STATE#g" -e "s#@NODE@#$NODE_BIN#g" "$REPO/deploy/autopilot/$u" > "$UNITS/$u"; chmod 644 "$UNITS/$u"; say "wrote $UNITS/$u"
   fi
 done
+if [ "$AUTO" -eq 1 ]; then
+  [ -n "$PM2HOME" ] || PM2HOME="/home/$SERVICE_USER/.pm2"
+  DROPIN="$UNITS/mamta-autopilot.service.d"
+  if [ "$DRY" -eq 1 ]; then say "[dry-run] write $DROPIN/auto-publish.conf (extra write access: $REPO/views and $PM2HOME only)"; else
+    mkdir -p "$DROPIN"
+    sed -e "s#@REPO@#$REPO#g" -e "s#@PM2HOME@#$PM2HOME#g" "$REPO/deploy/autopilot/auto-publish.conf" > "$DROPIN/auto-publish.conf"; chmod 644 "$DROPIN/auto-publish.conf"; say "wrote $DROPIN/auto-publish.conf"
+  fi
+  say "This only grants write access. Publishing stays OFF until AUTOPILOT_MODE=auto is set AND: node $REPO/autopilot/cli.js activate-auto passes (docs/seo-autopilot.md)"
+fi
 if [ -z "$PREFIX" ]; then
   do_ "systemctl daemon-reload"
   if [ "$START" -eq 1 ]; then do_ "systemctl enable --now mamta-autopilot.timer"; else say "timer installed but NOT enabled (run: sudo systemctl enable --now mamta-autopilot.timer)"; fi

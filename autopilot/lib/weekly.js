@@ -79,6 +79,18 @@ function build(cfg, files, st, istDate) {
     J.audit = { now: sevNow, weekAgo: sevThen };
   }
 
+  // keywords (latest daily report)
+  if (latest && (latest.keywords || []).length) {
+    L.push('', '## Target keywords (latest settled 28 days vs previous 28)', '');
+    for (const k of latest.keywords) L.push(k.status === 'data' ? `- ${k.keyword}: impressions ${k.current.impressions} (${k.change.impressions >= 0 ? '+' : ''}${k.change.impressions}), clicks ${k.current.clicks}, position ${fx(k.current.position)}${k.mismatch ? ' [page mismatch]' : ''}` : `- ${k.keyword}: ${k.status === 'unavailable' ? 'UNAVAILABLE' : 'no impressions'}`);
+    J.keywords = latest.keywords.map((k) => ({ keyword: k.keyword, status: k.status, impressions: k.current ? k.current.impressions : null, change: k.change ? k.change.impressions : null }));
+  }
+
+  // changes made this week (from the persistent change ledger)
+  const chg = state.readChanges(cfg, 500).filter((c) => c.date && c.date >= since);
+  J.changes = chg.map((c) => ({ date: c.date, id: c.id, outcome: c.outcome, commit: c.commit, released: c.releasedCommit }));
+  L.push('', '## Changes this week', '', ...(chg.length ? chg.map((c) => `- ${c.date} ${c.page}: ${c.outcome}${c.releasedCommit ? ' (release ' + String(c.releasedCommit).slice(0, 8) + ')' : ''}${c.rollback && c.rollback.attempted ? ' - rollback ' + (c.rollback.ok ? 'succeeded' : 'FAILED') : ''} - ${c.reason || ''}`) : ['No change was attempted.']));
+
   // proposals this week
   const prop = (st.history || []).filter((h) => h.date >= since);
   J.proposals = prop.map((h) => ({ date: h.date, page: h.page, status: h.status }));

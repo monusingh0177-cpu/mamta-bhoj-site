@@ -28,9 +28,10 @@ function parsePage(html, path, origin) {
     let h = decode(m[1]); if (/^(mailto:|tel:|javascript:|#)/i.test(h)) continue;
     try { const u = new URL(h, origin + path); if (u.origin === origin || u.hostname === new URL(origin).hostname) links.add(u.pathname.replace(/(.)\/$/, '$1')); } catch (e) { /* skip */ }
   }
+  const ogTag = (html.match(/<meta[^>]*property="og:url"[^>]*>/i) || [])[0] || '';
   const metaRobots = (attr(robotsTag, 'content') || '').toLowerCase();
   return {
-    title, description: attr(descTag, 'content') || '', h1: h1s, headings: heads, canonical: attr(canonTag, 'href'), metaRobots,
+    title, description: attr(descTag, 'content') || '', ogUrl: attr(ogTag, 'content'), h1: h1s, headings: heads, canonical: attr(canonTag, 'href'), metaRobots,
     words: text ? text.split(' ').length : 0, text, contentHash: sha1(text),
     jsonLdTypes: ld.map((n) => [].concat(n['@type']).join('+')), jsonLdNodes: ld, jsonLdErrors: ldErrors,
     imgCount: imgs.length, imgMissingAlt: imgs.filter((i) => !/\balt="[^"]+"/i.test(i)).length,

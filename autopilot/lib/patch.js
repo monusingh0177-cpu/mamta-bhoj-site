@@ -1,5 +1,7 @@
 'use strict';
-// Patch objects: { page, kind: 'title'|'description'|'copy', file, find, replace, rationale, confidence }.
+// Patch objects: { page, kind: 'title'|'description'|'copy'|'related', file, find, replace, rationale, confidence }.
+// kind 'related' is the deterministic internal-link fix: it appends exactly one existing guide slug to a guide's
+// `related: [...]` list (see fixers.js); it is validated much more strictly than free text.
 // A patch is an exact, single-occurrence text replacement inside an allow-listed source file and inside the
 // block that belongs to the target page. Everything is validated before anything is written.
 const fs = require('fs');
@@ -8,7 +10,10 @@ const { checkClaims } = require('./claims');
 
 const ALLOWED_FILES = ['views/b2b-pages.js', 'views/links.js', 'views/product-content.js', 'views/product-detail.js', 'views/guides.js', 'views/guides-more.js', 'views/guides-phase3.js'];
 const PROTECTED_RE = /^(data\/|public\/uploads\/|\.env|lib\/(mailer|auth|session|persist-paths|store|admin)[^/]*\.js$|middleware\/|routes\/admin[^/]*\.js$|views\/admin[^/]*\.js$|public\/(js|css)\/admin\.(js|css)$|.*payroll.*)/i;
-const KINDS = ['title', 'description', 'copy'];
+const KINDS = ['title', 'description', 'copy', 'related'];
+const RELATED_MAX = 6;
+const RELATED_LIST = /^related: \[((?:'[a-z0-9-]+'(?:, )?)*)\]$/;
+const slugList = (m) => (m ? (m[1].match(/'([a-z0-9-]+)'/g) || []).map((x) => x.slice(1, -1)) : null);
 const HELPER_RE = /\$\{(B2BLINK|PRODLINK|GUIDELINK)\('([a-z0-9-]+)',\s*'([A-Za-z0-9 \/&-]{3,70})'\)\}/g;
 const isProtected = (f) => PROTECTED_RE.test(String(f).replace(/\\/g, '/'));
 
@@ -27,6 +32,14 @@ function sourceBlock(repoDir, pagePath) {
     const j = s.indexOf('sections:', i); const end = j < 0 ? i + 2200 : j; return { file: f, start: i, end, text: s.slice(i, end) };
   }
   return null;
+}
+
+function guideSlugs(repoDir) {
+  const set = new Set();
+  for (const f of ['views/guides.js', 'views/guides-more.js', 'views/guides-phase3.js']) {
+    try { for (const m of fs.readFileSync(path.join(repoDir, f), 'utf8').matchAll(/slug: *'([a-z0-9-]+)'/g)) set.add(m[1]); } catch (e) { /* skip */ }
+  }
+  return set;
 }
 
 function knownSlugs(repoDir) {
@@ -65,6 +78,19 @@ function validate(patch, ctx) {
   const known = ctx.knownSlugs || knownSlugs(ctx.repoDir);
   const withoutHelpers = p.replace.replace(HELPER_RE, (m, helper, slug) => { if (!known.has(slug)) fail(`link to unknown page "${slug}"`); if (!content.includes(helper)) fail(`${helper} is not available in ${file}`); return ' '; });
   if (/\$\{|\}/.test(withoutHelpers) && !/\$\{|\}/.test(p.find)) fail('replace contains template interpolation other than a page-link helper');
+  if (p.kind === 'related') {
+    const before = slugList(p.find.match(RELATED_LIST)); const after = slugList(p.replace.match(RELATED_LIST));
+    const own = p.page.startsWith('/guides/') ? p.page.slice('/guides/'.length) : '';
+    if (!own) fail('related links can only be added to a guide page');
+    else if (!before || !after) fail('related patch must be a related: [...] list of guide slugs');
+    else {
+      const added = after.filter((x) => !before.includes(x));
+      if (after.length !== before.length + 1 || added.length !== 1 || after.slice(0, before.length).join() !== before.join()) fail('related patch must append exactly one slug and change nothing else');
+      else if (added[0] === own) fail('a guide cannot list itself as related');
+      else if (!guideSlugs(ctx.repoDir).has(added[0])) fail(`related slug "${added[0]}" is not an existing guide`);
+      if (after.length > RELATED_MAX) fail(`a guide may list at most ${RELATED_MAX} related guides`);
+    }
+  }
   const delta = p.replace.length - p.find.length;
   const maxGrow = p.kind === 'copy' ? 320 : 60;
   if (delta > maxGrow) fail(`replacement grows the text by ${delta} characters (max ${maxGrow})`);
@@ -77,4 +103,4 @@ function validate(patch, ctx) {
 function apply(v, patch) { fs.writeFileSync(v.abs, v.content.slice(0, v.index) + patch.replace + v.content.slice(v.index + patch.find.length)); return { file: v.file, original: v.content }; }
 function revert(abs, original) { fs.writeFileSync(abs, original); }
 
-module.exports = { ALLOWED_FILES, PROTECTED_RE, isProtected, sourceBlock, knownSlugs, validate, apply, revert };
+module.exports = { ALLOWED_FILES, PROTECTED_RE, isProtected, sourceBlock, knownSlugs, guideSlugs, validate, apply, revert, RELATED_MAX };

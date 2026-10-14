@@ -91,13 +91,24 @@ function create(cfg, cacheDir) {
     return { ok: true };
   }
 
+  // What Google says about our sitemap (read-only): when it was last downloaded, errors and warnings, URLs submitted vs indexed.
+  // "submitted: false" means Google has no record of this sitemap (a normal answer, not an error).
+  async function sitemapStatus(sitemapUrl) {
+    try {
+      const j = await call(`${g.apiBase}/sites/${siteUrl}/sitemaps/${encodeURIComponent(sitemapUrl)}`, { method: 'GET' });
+      const web = (j.contents || []).filter((c) => c.type === 'web');
+      return { submitted: true, path: j.path || sitemapUrl, isPending: Boolean(j.isPending), lastSubmitted: j.lastSubmitted || null, lastDownloaded: j.lastDownloaded || null,
+        errors: Number(j.errors || 0), warnings: Number(j.warnings || 0), urlsSubmitted: web.length ? web.reduce((a, c) => a + Number(c.submitted || 0), 0) : null, urlsIndexed: web.length ? web.reduce((a, c) => a + Number(c.indexed || 0), 0) : null };
+    } catch (e) { if (e.kind === 'not_found') return { submitted: false, path: sitemapUrl }; throw e; }
+  }
+
   async function inspect(url) {
     const j = await call(`${g.inspectBase}/urlInspection/index:inspect`, { method: 'POST', body: JSON.stringify({ inspectionUrl: url, siteUrl: cfg.gscSite }) }, { retries: 0 }); // quota-limited status check: never retried
     const r = (j.inspectionResult || {}).indexStatusResult || {};
     return { verdict: r.verdict || null, coverageState: r.coverageState || null, indexingState: r.indexingState || null, robotsTxtState: r.robotsTxtState || null, pageFetchState: r.pageFetchState || null, lastCrawlTime: r.lastCrawlTime || null, googleCanonical: r.googleCanonical || null, userCanonical: r.userCanonical || null };
   }
 
-  return { configured, accessToken, verify, query, submitSitemap, inspect };
+  return { configured, accessToken, verify, query, submitSitemap, sitemapStatus, inspect };
 }
 
 module.exports = { create, GscError, REMEDY };

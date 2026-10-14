@@ -14,6 +14,11 @@
 //   health       exit status for external monitoring: 0 healthy, 1 last run failed, 4 no recent run (scheduler problem)
 //   weekly       build the weekly trend report now
 //   ledger       show the latest run records (id, times, checks, actions, final status)
+//   resume-auto  clear the automatic-publishing pause that follows a rolled-back release (AUTOPILOT_MODE=auto)
+//   activate-auto    run every readiness check and, only if all pass, record the activation that automatic publishing requires
+//                    (--test-restart also runs the restart command once). Without a valid activation AUTOPILOT_MODE=auto never publishes.
+//   deactivate-auto  remove the activation (publishing stops immediately)
+//   changes      show the change ledger: every attempted change with old/new value, commit, verification and rollback outcome
 //
 // Exit codes for `run`: 0 completed (success, degraded or skipped; degraded is stated on the last line and alerted),
 // 1 the run FAILED (could not complete, crashed or hit the watchdog), 3 another run is in progress.
@@ -70,6 +75,16 @@ async function main(argv) {
     case 'rollback': { const r = await rollbackLast(cfg); out(JSON.stringify(r, null, 2)); return 0; }
     case 'audit-log': for (const e of state.readAudit(cfg, lim)) out(JSON.stringify(e)); return 0;
     case 'ledger': for (const e of state.readLedger(cfg, lim)) out(JSON.stringify(e)); return 0;
+    case 'resume-auto': { const st = state.load(cfg); const was = st.autoPaused; st.autoPaused = null; state.save(cfg, st); state.audit(cfg, 'resume', 'auto_resumed', { was }); out(was ? `automatic publishing resumed (it was paused since ${String(was.at).slice(0, 10)}: ${was.reason})` : 'automatic publishing was not paused'); return 0; }
+    case 'activate-auto': {
+      const r = await require('./lib/activation').activate(cfg, { testRestart: argv.includes('--test-restart') });
+      for (const c of r.checks) out(`${c.ok ? 'PASS' : 'FAIL'} ${c.name}: ${c.detail}`);
+      if (!r.activated) { out('NOT ACTIVATED: fix the failing check(s) above, then run activate-auto again. Automatic publishing stays off.'); return 1; }
+      out(`ACTIVATED at ${r.record.at} for ${cfg.repoDir} (${cfg.auto.remote}/${cfg.auto.branch}), service user ${r.record.user}. It also needs AUTOPILOT_MODE=auto; it is void if the repository path, branch, remote or restart command changes.`);
+      state.audit(cfg, 'activate', 'auto_activated', { user: r.record.user, head: r.record.head, restartTested: r.record.restartTested }); return 0;
+    }
+    case 'deactivate-auto': { const was = require('./lib/activation').deactivate(cfg); state.audit(cfg, 'deactivate', 'auto_deactivated', { was }); out(was ? 'automatic publishing deactivated' : 'it was not activated'); return 0; }
+    case 'changes': for (const e of state.readChanges(cfg, lim)) out(JSON.stringify(e)); return 0;
     case 'baseline': { const r = await acceptBaseline(cfg); out(`baseline accepted: ${r.pages} pages`); return 0; }
     case 'verify-google': {
       const v = await gscLib.create(cfg, files.cache).verify();
@@ -87,10 +102,10 @@ async function main(argv) {
     }
     case 'status': {
       const st = state.load(cfg);
-      out(JSON.stringify({ enabled: !state.isDisabled(cfg), mode: cfg.mode, publish: cfg.publish, aiMode: cfg.ai.mode, gscConfigured: Boolean(cfg.google.clientId && cfg.google.clientSecret && cfg.google.refreshToken), alertWebhookConfigured: Boolean(cfg.alertWebhook), initialAuditDone: st.initialAuditDone, lastRun: st.lastRun, lastHealth: st.lastHealth, lastWeekly: st.lastWeekly, stateDir: cfg.stateDir, repoDir: cfg.repoDir, fetchBase: cfg.fetchBase, envFile: cfg.envFileUsed, openProposals: st.history.filter((h) => h.status === 'proposed').map((h) => ({ page: h.page, branch: h.branch, date: h.date })) }, null, 2));
+      out(JSON.stringify({ enabled: !state.isDisabled(cfg), mode: cfg.mode, publish: cfg.publish, autoPublish: { configured: cfg.mode === 'auto' && !require('./lib/publish').misconfigured(cfg), activated: require('./lib/activation').status(cfg).ok, paused: st.autoPaused || null, restartCommandSet: Boolean(cfg.auto.restartCmd), maxPerDay: cfg.auto.maxPerDay }, aiMode: cfg.ai.mode, gscConfigured: Boolean(cfg.google.clientId && cfg.google.clientSecret && cfg.google.refreshToken), alertWebhookConfigured: Boolean(cfg.alertWebhook), initialAuditDone: st.initialAuditDone, lastRun: st.lastRun, lastHealth: st.lastHealth, lastWeekly: st.lastWeekly, stateDir: cfg.stateDir, repoDir: cfg.repoDir, fetchBase: cfg.fetchBase, envFile: cfg.envFileUsed, openProposals: st.history.filter((h) => h.status === 'proposed').map((h) => ({ page: h.page, branch: h.branch, date: h.date })) }, null, 2));
       return 0;
     }
-    default: out('usage: node autopilot/cli.js <run|dry-run|report|enable|disable|rollback|audit-log|ledger|baseline|status|verify-google|health|weekly>'); return 2;
+    default: out('usage: node autopilot/cli.js <run|dry-run|report|enable|disable|rollback|audit-log|ledger|changes|baseline|status|verify-google|health|weekly|resume-auto|activate-auto|deactivate-auto>'); return 2;
   }
 }
 

@@ -39,13 +39,13 @@ function pageFit(queryTokens, page) {
   return qs.length ? score / (qs.length * 9) : 0;
 }
 
-function mapToPages(query, inv, gscPages) {
+function mapToPages(query, inv, gscPages, limit) {
   const qt = tokens(query);
   const cands = Object.entries(inv.pages).filter(([, p]) => p.indexable && p.inSitemap).map(([path, p]) => {
     const g = gscPages && gscPages[path];
     return { path, fit: pageFit(qt, p) + (g ? 0.1 * Math.min(1, g.impressions / 20) : 0), gscImpressions: g ? g.impressions : 0 };
   }).sort((a, b) => b.fit - a.fit);
-  return cands.slice(0, 3);
+  return cands.slice(0, limit || 3);
 }
 
 // 0..1: how likely two existing pages are competing for this query
@@ -68,7 +68,7 @@ function score(q, cls, risk) {
 }
 
 // rows: [{keys:[query,page],clicks,impressions,ctr,position}] for the current and previous windows
-function analyse(currentRows, previousRows, inv, cfg) {
+function analyse(currentRows, previousRows, inv, cfg, targets) {
   const agg = (rows) => {
     const m = new Map();
     for (const r of rows || []) {
@@ -97,9 +97,11 @@ function analyse(currentRows, previousRows, inv, cfg) {
     const top = cands[0];
     const wrongPage = cls.relevant && top && Object.keys(q.pages).length && !q.pages[top.path] && top.fit > 0.3 ? `Google shows ${Object.keys(q.pages)[0]} but ${top.path} fits better` : null;
     if (wrongPage) flags.push('ranking for the wrong page');
-    const sc = cls.relevant ? score(q, cls, can.risk) : 0;
+    const targetKeyword = cls.relevant ? ((targets && targets.match) ? targets.match(q.query) : null) : null;
+    if (targetKeyword) flags.push('target keyword');
+    const sc = cls.relevant ? Math.min(100, Math.round(score(q, cls, can.risk) * (targetKeyword ? 1.15 : 1) * 10) / 10) : 0;
     out.push({ query: q.query, kind: cls.kind, relevant: cls.relevant, reason: cls.reason, clicks: q.clicks, impressions: q.impressions, ctr: Math.round(q.ctr * 10000) / 10000, position: Math.round(pos * 10) / 10, prevImpressions: q.prevImpressions, prevPosition: q.prevPosition == null ? null : Math.round(q.prevPosition * 10) / 10, flags, score: sc, bestPage: top ? top.path : null, bestPageFit: top ? Math.round(top.fit * 100) / 100 : 0, alternatives: cands.slice(1).map((c) => c.path), cannibalRisk: Math.round(can.risk * 100) / 100, cannibalReasons: can.reasons, wrongPage,
-      action: !cls.relevant ? 'ignore' : can.risk >= 0.5 ? 'consolidate on the strongest page / adjust internal links (no new page)' : !top || top.fit < 0.15 ? 'possible content gap: needs human review (new page only if every gate passes)' : sc >= cfg.limits.minScore ? 'improve existing page' : 'monitor' });
+      targetKeyword, action: !cls.relevant ? 'ignore' : can.risk >= 0.5 ? 'consolidate on the strongest page / adjust internal links (no new page)' : !top || top.fit < 0.15 ? 'possible content gap: needs human review (new page only if every gate passes)' : sc >= cfg.limits.minScore ? 'improve existing page' : 'monitor' });
   }
   out.sort((a, b) => b.score - a.score || b.impressions - a.impressions);
   return out;
