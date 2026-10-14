@@ -23,9 +23,12 @@ const SRC = path.resolve(__dirname, '..');
 const args = process.argv.slice(2);
 const FULL = args.includes('--full');
 const ONLY = args.includes('--only') ? args[args.indexOf('--only') + 1] : '';
-let passed = 0; let failed = 0;
+let passed = 0; let failed = 0; let skipped = 0;
 const check = (c, name, detail) => { if (c) passed++; else failed++; console.log(`  ${c ? 'PASS' : 'FAIL'}  ${name}${c || !detail ? '' : '  -> ' + String(detail).slice(0, 260)}`); };
 const section = (t) => console.log(`\n== ${t}`);
+// A skip is only for something this platform genuinely cannot test (never to hide a failure); the reason is always printed and counted.
+const skip = (name, why) => { skipped++; console.log(`  SKIP  ${name}  -> ${why}`); };
+const WIN = process.platform === 'win32';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const want = (n) => !ONLY || ONLY === n;
 const SECRET = 'rt-SECRET-refresh-token-0123456789';
@@ -837,13 +840,38 @@ const cleanBranches = (repo) => { try { git(repo, 'worktree', 'prune'); } catch 
       check(/User=deploy/.test(svc) && /ExecStart=.*autopilot\/cli\.js run/.test(svc) && /Type=oneshot/.test(svc), 'service: one-shot run of the CLI as the service user');
       check(/OnCalendar=\*-\*-\* 03:30:00 Asia\/Kolkata/.test(tim) && /Persistent=true/.test(tim), 'timer: once a day at 03:30 India time');
       check(!/pm2|nginx|systemctl restart|git (merge|push)/i.test(svc.split('\n').filter((l) => !l.trim().startsWith('#')).join('\n')), 'the service contains no PM2, nginx, merge or push commands');
-      check((fs.statSync(path.join(pre, 'etc/mamta-autopilot/autopilot.env')).mode & 0o777) === 0o600, 'the credentials file is created with mode 600');
+      check(/install -m 600 .*autopilot\.env/.test(sh('install-autopilot.sh', ['--user', 'deploy', '--dry-run', '--prefix', path.join(root, 'plan-only'), '--node', process.execPath, '--repo', SRC]).stdout), 'the installer plan creates the credentials file with mode 600 (checked on every platform)');
+      if (WIN) skip('the credentials file is created with mode 600', 'Windows/NTFS cannot hold POSIX permission bits (Git Bash reports 644); asserted on Linux, where the CI job and the server run it');
+      else check((fs.statSync(path.join(pre, 'etc/mamta-autopilot/autopilot.env')).mode & 0o777) === 0o600, 'the credentials file is created with mode 600');
       check(/AUTOPILOT_MODE=report/.test(fs.readFileSync(path.join(pre, 'etc/mamta-autopilot/autopilot.env'), 'utf8')), 'the default mode is report-only');
       fs.writeFileSync(path.join(pre, 'etc/mamta-autopilot/autopilot.env'), 'AUTOPILOT_MODE=propose\n'); sh('install-autopilot.sh', ['--user', 'deploy', '--prefix', pre, '--node', process.execPath, '--repo', SRC]);
       check(/AUTOPILOT_MODE=propose/.test(fs.readFileSync(path.join(pre, 'etc/mamta-autopilot/autopilot.env'), 'utf8')), 're-running the installer keeps an existing credentials file');
       const an = spawnSync('systemd-analyze', ['verify', path.join(pre, 'etc/systemd/system/mamta-autopilot.timer'), path.join(pre, 'etc/systemd/system/mamta-autopilot.service')], { encoding: 'utf8' });
-      if (an.error) console.log('  (systemd-analyze not available here; unit syntax verified structurally only)'); else check(!/fatal|Unknown|error/i.test((an.stdout || '') + (an.stderr || '')), 'systemd-analyze verify accepts the rendered units', (an.stdout || '') + (an.stderr || ''));
+      if (an.error) skip('systemd-analyze verify accepts the rendered units', 'systemd-analyze is not installed on this machine; the units are only checked structurally here'); else check(!/fatal|Unknown|error/i.test((an.stdout || '') + (an.stderr || '')), 'systemd-analyze verify accepts the rendered units', (an.stdout || '') + (an.stderr || ''));
       check(!fs.existsSync(path.join(pre, 'etc/systemd/system/mamta-autopilot.service.d')), 'a default install adds NO write-access drop-in (automatic publishing is opt-in)');
+      // ---- least privilege and robustness of the installer
+      check(/^User=deploy$/m.test(svc) && !/^User=(root|0)\b/m.test(svc) && /^NoNewPrivileges=true$/m.test(svc) && /^ProtectSystem=strict$/m.test(svc) && !/\bsudo\b/.test(svc.split('\n').filter((l) => !l.trim().startsWith('#')).join('\n')) && /^ReadWritePaths=\S+ \S+\/\.git$/m.test(svc), 'the unit runs as the unprivileged service user with NoNewPrivileges, a read-only file system (ProtectSystem=strict), no sudo, and write access only to the state directory and .git');
+      r = sh('install-autopilot.sh', ['--user', 'root', '--dry-run', '--node', process.execPath, '--repo', SRC]); check(r.status === 2 && /refused/.test(r.stderr), 'the installer refuses --user root', r.stderr);
+      r = sh('install-autopilot.sh', ['--user', 'bad user;x', '--dry-run', '--node', process.execPath, '--repo', SRC]); check(r.status === 2, 'the installer refuses an invalid account name');
+      const spaced = path.join(root, 'repo with space'); fs.mkdirSync(path.join(spaced, 'autopilot'), { recursive: true }); fs.writeFileSync(path.join(spaced, 'autopilot/cli.js'), '');
+      r = sh('install-autopilot.sh', ['--user', 'deploy', '--node', process.execPath, '--repo', spaced]); check(r.status === 2 && /unsafe path/.test(r.stderr) && !/sudo/.test(r.stderr), 'a real install refuses a repository path that would break the systemd unit (checked before anything is written)', r.stderr);
+      const odd = path.join(root, 'odd&dir#x'); fs.mkdirSync(path.join(odd, 'autopilot'), { recursive: true }); fs.mkdirSync(path.join(odd, 'deploy/autopilot'), { recursive: true }); fs.writeFileSync(path.join(odd, 'autopilot/cli.js'), '');
+      for (const f of fs.readdirSync(U)) fs.copyFileSync(path.join(U, f), path.join(odd, 'deploy/autopilot', f));
+      const preOdd = path.join(root, 'prefix-odd'); r = sh('install-autopilot.sh', ['--user', 'deploy', '--prefix', preOdd, '--node', process.execPath, '--repo', odd]); const svcOdd = fs.existsSync(path.join(preOdd, 'etc/systemd/system/mamta-autopilot.service')) ? fs.readFileSync(path.join(preOdd, 'etc/systemd/system/mamta-autopilot.service'), 'utf8') : '';
+      check(r.status === 0 && svcOdd.includes('odd&dir#x') && svcOdd.includes(process.execPath), 'paths containing &, # (and, on Windows, backslashes and spaces) are rendered into the unit literally: the root cause of the former "one-shot run" failure', svcOdd.split('\n').filter((l) => /ExecStart/.test(l)).join());
+
+      // ---- one-shot execution of the unit's exact command line (what systemd would run), against the local test site
+      git(site.repo, 'reset', '-q', '--hard', baseHead); cleanBranches(site.repo); await site.restart();
+      const unitEnv = {}; for (const l of svc.split('\n')) { const m = l.match(/^Environment=([A-Z0-9_]+)=(.*)$/); if (m) unitEnv[m[1]] = m[2]; }
+      const exec = (svc.match(/^ExecStart=(.*)$/m) || [])[1] || ''; const nodeBin = process.execPath; const cliArgs = [path.join(SRC, 'autopilot/cli.js'), 'run'];
+      check(/\/autopilot\/cli\.js run$/.test(exec) && unitEnv.AUTOPILOT_STATE_DIR === '/var/lib/mamta-autopilot' && unitEnv.AUTOPILOT_REPO_DIR != null, 'the unit command line and environment are well formed: node cli.js run with the repository and state directories', exec);
+      const oneShotState = path.join(root, 'oneshot-state'); const oneShotEnv = Object.assign({}, process.env, { AUTOPILOT_ENV_FILE: path.join(pre, 'etc/mamta-autopilot/autopilot.env'), AUTOPILOT_REPO_DIR: site.repo, AUTOPILOT_STATE_DIR: oneShotState, AUTOPILOT_FETCH_BASE: site.base, AUTOPILOT_SITE_ORIGIN: 'https://devmamflourishfoods.com', AUTOPILOT_GATE_HARDCHECK: '0', AUTOPILOT_GATE_ENQUIRY: '0', AUTOPILOT_HTTP_TIMEOUT_MS: '3000' });
+      for (const k of Object.keys(oneShotEnv)) if (/^AUTOPILOT_(MODE|PUBLISH|RESTART_CMD|GOOGLE|AI_MODE|ALERT|TARGET)/.test(k) && !['AUTOPILOT_ENV_FILE'].includes(k)) delete oneShotEnv[k];
+      const asUid = typeof process.getuid === 'function' ? process.getuid() : null; const svcAcct = spawnSync('id', ['-u', 'deploy'], { encoding: 'utf8' }); const canSwitch = asUid === 0 && svcAcct.status === 0;
+      const cmd = canSwitch ? ['runuser', ['-u', 'deploy', '--', nodeBin, ...cliArgs]] : [nodeBin, cliArgs];
+      const one = await new Promise((resolve) => { const c = spawn(cmd[0], cmd[1], { env: oneShotEnv, stdio: ['ignore', 'pipe', 'pipe'] }); let o = ''; c.stdout.on('data', (d) => (o += d)); c.stderr.on('data', (d) => (o += d)); c.on('close', (code) => resolve({ code, out: o })); });
+      check(one.code === 0 && /SEO autopilot run \w+: status=\w+; mode=report-only/.test(one.out) && fs.existsSync(path.join(oneShotState, 'state.json')) && fs.existsSync(path.join(oneShotState, 'runs.jsonl')) && git(site.repo, 'rev-parse', 'HEAD') === baseHead && branches(site.repo).length === 0, 'the unit\'s command runs one report-only audit to completion: exit 0, state and run ledger written, no branch, production commit unchanged', one.out.slice(-400));
+      if (!canSwitch) skip('the one-shot run as the configured service user account', asUid === 0 ? 'running as root but no "deploy" account exists here' : 'switching to the service user needs root and that account (here it ran as the current unprivileged user); systemd does this on the server; a root-capable Linux run (container or server) executes it');
       const pre2 = path.join(root, 'prefix-auto'); r = sh('install-autopilot.sh', ['--user', 'deploy', '--prefix', pre2, '--node', process.execPath, '--repo', SRC, '--auto-publish', '--pm2-home', '/home/deploy/.pm2']);
       const dropin = path.join(pre2, 'etc/systemd/system/mamta-autopilot.service.d/auto-publish.conf'); const di = fs.existsSync(dropin) ? fs.readFileSync(dropin, 'utf8') : '';
       const rw = (di.match(/^ReadWritePaths=(.*)$/m) || [])[1] || '';
@@ -855,6 +883,6 @@ const cleanBranches = (repo) => { try { git(repo, 'worktree', 'prune'); } catch 
     }
   } catch (e) { failed++; console.log('  FAIL  test harness error: ' + (e.stack || e.message)); }
   finally { for (const f of cleanups) { try { f(); } catch (e) { /* ignore */ } } try { fs.rmSync(root, { recursive: true, force: true }); } catch (e) { /* ignore */ } }
-  console.log(`\nAUTOPILOT TESTS: ${passed} passed, ${failed} failed`);
+  console.log(`\nAUTOPILOT TESTS: ${passed} passed, ${failed} failed, ${skipped} skipped${WIN ? ' (Windows: POSIX file-mode and service-user checks are skipped, see SKIP lines)' : ''}`);
   process.exit(failed ? 1 : 0);
 })();
