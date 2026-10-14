@@ -30,3 +30,11 @@ services:
       # Sender address (must be on a domain verified in ZeptoMail).
       - key: SMTP_FROM_EMAIL
         sync: false
+      # Spam protection (see README section 4). Optional Cloudflare Turnstile: set BOTH keys to enable.
+      # ENQUIRY_FORM_SECRET signs the anti-bot form token (any long random string).
+      - key: TURNSTILE_SITE_KEY
+        sync: false
+      - key: TURNSTILE_SECRET_KEY
+        sync: false
+      - key: ENQUIRY_FORM_SECRET
+        generateValue: true

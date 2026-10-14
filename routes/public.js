@@ -3,6 +3,7 @@ const store = require('../lib/store');
 const { layout, breadcrumbNav } = require('../lib/render');
 const { parseForm, sendHtml, sendJson, redirect, slugify, escapeHtml } = require('../lib/http-utils');
 const { validateEnquiry, isRecentDuplicate, forget, MESSAGES } = require('../lib/enquiry');
+const guard = require('../lib/spam-guard');
 const { renderHome } = require('../views/home');
 const { renderAbout } = require('../views/about');
 const { renderProducts } = require('../views/products');
@@ -423,9 +424,22 @@ router.post('/contact', async (req, res) => {
   const wantsJson = /application\/json/i.test(String(req.headers.accept || ''));
   const fail = (status, code, message, fields) => {
     if (wantsJson) return sendJson(res, status, { ok: false, error: code, message, fields: fields || undefined });
-    return redirect(res, code === 'validation' ? '/contact?error=1' : '/contact?error=server');
+    return redirect(res, code === 'validation' ? '/contact?error=1' : code === 'server' || code === 'storage' || code === 'unexpected' ? '/contact?error=server' : '/contact?error=' + code);
   };
   try {
+    // Rate limit first, before any parsing or work: every POST from an address counts.
+    const ip = guard.clientIp(req);
+    const rate = guard.rateLimit(ip);
+    if (rate.limited) {
+      console.warn('[enquiry] rate limit hit; request refused');
+      if (wantsJson) {
+        res.setHeader('Retry-After', String(rate.retryAfterSec));
+        return sendJson(res, 429, { ok: false, error: 'rate_limited', message: MESSAGES.rateLimited });
+      }
+      res.setHeader('Retry-After', String(rate.retryAfterSec));
+      return redirect(res, '/contact?error=rate_limited');
+    }
+
     let body;
     try {
       body = await parseForm(req);
@@ -434,10 +448,33 @@ router.post('/contact', async (req, res) => {
       return fail(400, 'bad_request', MESSAGES.invalid);
     }
 
+    if (!body || typeof body !== 'object' || Array.isArray(body)) return fail(400, 'bad_request', MESSAGES.invalid);
+
+    // Honeypot: real visitors never see this field.
+    if (guard.honeypotTripped(body)) {
+      console.warn('[enquiry] rejected: honeypot field filled');
+      return fail(422, 'spam', MESSAGES.spam);
+    }
+    // Signed form token: proves the form was served by this site and not submitted instantly.
+    const tok = guard.checkFormToken(body[guard.TOKEN_FIELD]);
+    if (!tok.ok) {
+      console.warn(`[enquiry] rejected: form token ${tok.reason}`);
+      return fail(422, tok.reason === 'too_fast' ? 'too_fast' : 'expired', tok.reason === 'too_fast' ? MESSAGES.tooFast : MESSAGES.expired);
+    }
+
     const products = siteProducts();
     const checked = validateEnquiry(body, products.map((p) => p.name));
     if (!checked.ok) return fail(422, 'validation', MESSAGES.invalid, checked.fields);
     const data = checked.data;
+
+    // Cloudflare Turnstile (only when both keys are configured), verified with Cloudflare, never trusted from the client.
+    // Checked after validation so a typo does not use up the visitor's one-time CAPTCHA token.
+    const cap = await guard.verifyTurnstile(body[guard.TURNSTILE_FIELD], ip);
+    if (!cap.ok) {
+      console.warn(`[enquiry] rejected: captcha ${cap.reason}`);
+      return cap.reason === 'unavailable' ? fail(503, 'captcha_unavailable', MESSAGES.captchaDown) : fail(422, 'captcha', MESSAGES.captcha);
+    }
+    if (cap.degraded) console.warn('[enquiry] Turnstile unreachable; accepted under TURNSTILE_FAIL_OPEN=1');
 
     // Same enquiry again within two minutes (double click, retry after a slow page): acknowledge, store nothing new.
     if (isRecentDuplicate(data)) {

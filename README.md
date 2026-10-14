@@ -236,6 +236,13 @@ Never commit these values.
 
 Test the whole pipeline with a fake API server (no real credentials needed): `npm run test:enquiry`.
 
+**Spam protection.** The form also has a hidden honeypot field, a signed form token with a minimum fill time,
+a per-IP rate limit, strict Indian mobile validation (`^[6-9][0-9]{9}$`, enforced in the browser *and* on the server)
+and optional Cloudflare Turnstile (`TURNSTILE_SITE_KEY` + `TURNSTILE_SECRET_KEY`; off, with a logged warning, until both are set).
+Recommended production variables: `ENQUIRY_FORM_SECRET` (long random string), and the Turnstile pair. Everything else has a safe default.
+Full variable list, nginx requirement, Turnstile set-up and the OTP design: [docs/enquiry-spam-protection.md](docs/enquiry-spam-protection.md).
+Tests: `npm run test:enquiry-unit`.
+
 ---
 
 ## 5. Project structure

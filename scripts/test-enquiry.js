@@ -79,8 +79,8 @@ async function startApp(env) {
   fs.writeFileSync(path.join(dir, 'data', 'enquiries.json'), '[]');
   const port = await freePort();
   const clean = Object.assign({}, process.env);
-  ['PERSIST_DIR', 'FORCE_HTTPS', 'SMTP_HOST', 'SMTP_PORT', 'SMTP_SECURE', 'SMTP_USER', 'SMTP_PASSWORD', 'SMTP_FROM_EMAIL', 'SMTP_TIMEOUT_MS', 'ZEPTOMAIL_API_TOKEN', 'ZEPTOMAIL_API_URL', 'ZEPTOMAIL_TIMEOUT_MS', 'ENQUIRY_TO_EMAIL', 'ENQUIRY_EMAIL_WAIT_MS'].forEach((k) => delete clean[k]);
-  const child = spawn(process.execPath, ['server.js'], { cwd: dir, env: Object.assign(clean, { PORT: String(port) }, env) });
+  ['PERSIST_DIR', 'FORCE_HTTPS', 'SMTP_HOST', 'SMTP_PORT', 'SMTP_SECURE', 'SMTP_USER', 'SMTP_PASSWORD', 'SMTP_FROM_EMAIL', 'SMTP_TIMEOUT_MS', 'ZEPTOMAIL_API_TOKEN', 'ZEPTOMAIL_API_URL', 'ZEPTOMAIL_TIMEOUT_MS', 'ENQUIRY_TO_EMAIL', 'ENQUIRY_EMAIL_WAIT_MS', 'ENQUIRY_MIN_FILL_MS', 'ENQUIRY_FORM_MAX_AGE_MS', 'ENQUIRY_FORM_SECRET', 'ENQUIRY_RATE_LIMIT_MAX', 'ENQUIRY_RATE_LIMIT_WINDOW_MS', 'ENQUIRY_CLIENT_IP_HEADER', 'TURNSTILE_SITE_KEY', 'TURNSTILE_SECRET_KEY', 'TURNSTILE_VERIFY_URL', 'TURNSTILE_TIMEOUT_MS', 'TURNSTILE_FAIL_OPEN', 'ENQUIRY_OTP_ENABLED', 'ENQUIRY_OTP_PROVIDER'].forEach((k) => delete clean[k]);
+  const child = spawn(process.execPath, ['server.js'], { cwd: dir, env: Object.assign(clean, { PORT: String(port), ENQUIRY_MIN_FILL_MS: '0', ENQUIRY_RATE_LIMIT_MAX: '1000', ENQUIRY_FORM_SECRET: 'integration-test-secret' }, env) });
   const log = []; child.stdout.on('data', (d) => log.push(String(d))); child.stderr.on('data', (d) => log.push(String(d)));
   for (let i = 0; i < 60; i++) { try { await request(port, 'GET', '/robots.txt'); break; } catch (e) { await sleep(150); } }
   return { dir, port, child, log, rows: () => JSON.parse(fs.readFileSync(path.join(dir, 'data', 'enquiries.json'), 'utf8')), stop: () => { child.kill(); try { fs.rmSync(dir, { recursive: true, force: true }); } catch (e) { /* ignore */ } } };
@@ -99,7 +99,18 @@ function request(port, method, p, { body, json, headers } = {}) {
 }
 
 const VALID = { name: 'Website Test', phone: '9999999999', type: 'General Product Enquiry', productInterest: 'All Products', message: 'TEST ENQUIRY - please ignore' };
-const post = (app, body, json = true, headers) => request(app.port, 'POST', '/contact', { body, json, headers });
+// The form carries a signed token (hidden field form_token) that the page issues; tests fetch one like a browser does.
+async function formToken(app) {
+  const page = await request(app.port, 'GET', '/contact');
+  const m = /name="form_token" value="([^"]+)"/.exec(page.text);
+  return m ? m[1] : '';
+}
+// Adds a real token unless the body already has one (or is a raw string, or opts out with token === false).
+async function post(app, body, json = true, headers, token) {
+  let b = body;
+  if (b && typeof b === 'object' && token !== false && b.form_token === undefined) b = Object.assign({}, b, { form_token: token || await formToken(app) });
+  return request(app.port, 'POST', '/contact', { body: b, json, headers });
+}
 const parse = (r) => { try { return JSON.parse(r.text); } catch (e) { return null; } };
 const noLeaks = (app) => { const all = app.log.join(''); return !all.includes(TEST_PASS) && !/\bat .*\.js:\d+/.test(all) && !/Error: [^\n]+\n\s+at /.test(all); };
 const API_ENV = (port, extra) => Object.assign({ ZEPTOMAIL_API_URL: `http://127.0.0.1:${port}/v1.1/email`, ZEPTOMAIL_API_TOKEN: TEST_PASS, SMTP_FROM_EMAIL: SENDER, ENQUIRY_TO_EMAIL: TO, ENQUIRY_EMAIL_WAIT_MS: '1500', ZEPTOMAIL_TIMEOUT_MS: '4000' }, extra || {});
@@ -153,6 +164,9 @@ const API_ENV = (port, extra) => Object.assign({ ZEPTOMAIL_API_URL: `http://127.
       ['name too short', Object.assign({}, VALID, { name: 'A' }), ['name']],
       ['phone with letters', Object.assign({}, VALID, { phone: 'call me' }), ['phone']],
       ['phone too short', Object.assign({}, VALID, { phone: '12345' }), ['phone']],
+      ['phone 11 digits', Object.assign({}, VALID, { phone: '98765432101' }), ['phone']],
+      ['phone invalid first digit', Object.assign({}, VALID, { phone: '5876543210' }), ['phone']],
+      ['phone with +91', Object.assign({}, VALID, { phone: '+919876543210' }), ['phone']],
       ['unknown enquiry type', Object.assign({}, VALID, { type: 'Hack the planet' }), ['type']],
       ['unknown product', Object.assign({}, VALID, { productInterest: 'Gold' }), ['productInterest']],
       ['bad monthly range', Object.assign({}, VALID, { monthlyRequirement: 'lots' }), ['monthlyRequirement']],
@@ -169,7 +183,7 @@ const API_ENV = (port, extra) => Object.assign({ ZEPTOMAIL_API_URL: `http://127.
     check(evil.status === 201 && row && !/[\r\n\u0000\u0007]/.test(row.name) && row.message.length <= 2000 && !/\u0000/.test(row.message), 'control characters and line breaks stripped, long text capped at 2000');
     const bad = await request(app.port, 'POST', '/contact', { body: '{"name": ', json: true, headers: { 'Content-Type': 'application/json' } });
     check(bad.status === 400 && parse(bad) && parse(bad).ok === false && !/SyntaxError|at /.test(bad.text), 'malformed JSON -> 400 friendly JSON, no parser error leaked', `${bad.status} ${bad.text.slice(0, 120)}`);
-    const jsonOk = await request(app.port, 'POST', '/contact', { body: JSON.stringify(Object.assign({}, VALID, { name: 'Json Body' })), json: true, headers: { 'Content-Type': 'application/json' } });
+    const jsonOk = await request(app.port, 'POST', '/contact', { body: JSON.stringify(Object.assign({}, VALID, { name: 'Json Body', form_token: await formToken(app) })), json: true, headers: { 'Content-Type': 'application/json' } });
     check(jsonOk.status === 201, 'a JSON request body is accepted too', String(jsonOk.status));
     check(noLeaks(app), 'logs contain no stack traces');
     app.stop();
@@ -257,6 +271,108 @@ const API_ENV = (port, extra) => Object.assign({ ZEPTOMAIL_API_URL: `http://127.
     const other = await post(app, Object.assign({}, VALID, { message: 'A different enquiry' }));
     check(other.status === 201 && app.rows().length === 2, 'a genuinely different enquiry is still accepted');
     app.stop();
+  }
+
+  if (run('spam')) {
+    section('F. Spam protection (honeypot, signed form token, timing, rate limit)');
+    smtp.state.mode = 'ok'; smtp.state.requests.length = 0;
+    const app = await startApp(API_ENV(smtp.port, { ENQUIRY_MIN_FILL_MS: '1500', ENQUIRY_RATE_LIMIT_MAX: '30' })); cleanup.push(app.stop);
+    const page = await request(app.port, 'GET', '/contact');
+    check(/type="tel" id="f-phone" name="phone"/.test(page.text) && /inputmode="numeric"/.test(page.text) && /maxlength="10"/.test(page.text) && /pattern="\[6-9\]\[0-9\]\{9\}"/.test(page.text) && /autocomplete="tel-national"/.test(page.text), 'phone input has type=tel, inputmode=numeric, maxlength=10, pattern and autocomplete');
+    check(/name="company_website"[^>]*tabindex="-1"[^>]*autocomplete="off"/.test(page.text) && /class="hp-field" aria-hidden="true"/.test(page.text), 'honeypot field is present, hidden from assistive tech, not tabbable');
+    check(!/cf-turnstile|challenges\.cloudflare\.com/.test(page.text), 'without keys, no Turnstile widget or Cloudflare script is rendered');
+    check(/phone-validate\.js/.test(page.text), 'frontend validator script is loaded on the page');
+    check(/Cloudflare Turnstile is not configured/.test(app.log.join('')), 'start-up log warns that Turnstile is not configured');
+    check(/hp-field/.test((await request(app.port, 'GET', '/css/style.css')).text), 'honeypot CSS is served');
+
+    const tokenA = await formToken(app);
+    const early = await post(app, VALID, true, null, tokenA);
+    const ej = parse(early);
+    check(early.status === 422 && ej && ej.error === 'too_fast' && /very quick/i.test(ej.message) && app.rows().length === 0, 'submitted instantly (< min fill time) -> friendly "too quick" 422, nothing stored', `${early.status} ${early.text.slice(0, 120)}`);
+    await sleep(1600);
+    const later = await post(app, VALID, true, null, tokenA);
+    check(later.status === 201 && app.rows().length === 1, 'the same visitor resubmitting after the delay is accepted (genuine fast user not lost)', `${later.status} ${later.text.slice(0, 100)}`);
+    await sleep(300);
+    check(smtp.state.requests.length === 1, 'the genuine enquiry triggered the notification email');
+
+    const noTok = await post(app, VALID, true, null, false);
+    check(noTok.status === 422 && parse(noTok).error === 'expired', 'missing form token -> rejected with a reload message', `${noTok.status} ${noTok.text.slice(0, 100)}`);
+    const forged = await post(app, Object.assign({}, VALID, { name: 'Forger', form_token: '1700000000000.' + '0'.repeat(32) }));
+    check(forged.status === 422 && parse(forged).error === 'expired', 'forged token rejected');
+    const garbage = await post(app, Object.assign({}, VALID, { name: 'Forger2', form_token: 'not-a-token' }));
+    check(garbage.status === 422, 'garbage token rejected');
+
+    const tok2 = await formToken(app); await sleep(1600);
+    const hp = await post(app, Object.assign({}, VALID, { name: 'Bot One', company_website: 'http://spam.example' }), true, null, tok2);
+    check(hp.status === 422 && parse(hp).ok === false && !/spam\.example|honeypot/i.test(hp.text) && app.rows().length === 1, 'honeypot filled -> rejected, nothing stored, no hint in the reply', `${hp.status} ${hp.text.slice(0, 120)}`);
+    check(!smtp.state.requests.some((r) => /Bot One/.test(JSON.stringify(r.body))), 'honeypot spam sends no email');
+    const hpPlain = await post(app, Object.assign({}, VALID, { name: 'Bot Two', company_website: 'x' }), false, null, tok2);
+    check(hpPlain.status === 302 && /error=spam/.test(hpPlain.headers.location || ''), 'plain POST with honeypot -> redirect to an error view', `${hpPlain.status} ${hpPlain.headers.location}`);
+    const errPage = await request(app.port, 'GET', '/contact?error=spam');
+    check(/could not accept this submission/.test(errPage.text) && /noindex/.test(errPage.text), 'the error view explains kindly and is noindex');
+    const weird = await request(app.port, 'GET', '/contact?error=%3Cscript%3Ealert(1)%3C/script%3E');
+    check(!/<script>alert/.test(weird.text) && /Please check the highlighted/.test(weird.text), 'an unknown ?error value cannot inject markup');
+
+    const bad11 = await post(app, Object.assign({}, VALID, { name: 'Eleven', phone: '98765432101' }), true, null, tok2);
+    const j11 = parse(bad11);
+    check(bad11.status === 422 && j11 && j11.fields && /too long/.test(j11.fields.phone), '11-digit phone -> 422 with a clear message (backend enforced)', bad11.text.slice(0, 160));
+    const nonObj = await request(app.port, 'POST', '/contact', { body: '[1,2,3]', json: true, headers: { 'Content-Type': 'application/json' } });
+    check(nonObj.status === 400 && parse(nonObj).ok === false, 'a JSON array body -> 400, no crash', `${nonObj.status} ${nonObj.text.slice(0, 100)}`);
+    const spaced = await post(app, Object.assign({}, VALID, { name: 'Spaced Phone', phone: ' 98765 43210 ' }), true, null, tok2);
+    check(spaced.status === 201 && app.rows().some((r) => r.name === 'Spaced Phone' && r.phone === '9876543210'), 'a phone typed with spaces is normalised and stored as 10 digits', `${spaced.status} ${spaced.text.slice(0, 100)}`);
+    check(noLeaks(app) && !/spam\.example|98765432101/.test(app.log.join('')), 'logs contain no stack traces and none of the submitted values');
+    app.stop();
+
+    section('F2. Per-IP rate limit');
+    const rl = await startApp(API_ENV(smtp.port, { ENQUIRY_RATE_LIMIT_MAX: '12', ENQUIRY_RATE_LIMIT_WINDOW_MS: '4000' })); cleanup.push(rl.stop);
+    const outs = [];
+    for (let i = 0; i < 14; i++) outs.push(await request(rl.port, 'POST', '/contact', { body: Object.assign({}, VALID, { name: 'Rate Test ' + i, message: 'm' + i, form_token: 'x' }), json: true }));
+    const codes = outs.map((r) => r.status);
+    check(codes.slice(0, 12).every((c) => c === 422) && codes[12] === 429 && codes[13] === 429, 'the first 12 requests are processed, the 13th and 14th get HTTP 429', codes.join(','));
+    check(Number(outs[12].headers['retry-after']) >= 1 && /Too many/.test((parse(outs[12]) || {}).message || ''), '429 carries Retry-After and a friendly message');
+    check(rl.rows().length === 0, 'rate-limited requests store nothing');
+    const plain = await request(rl.port, 'POST', '/contact', { body: { name: 'x' }, json: false });
+    check(plain.status === 302 && /error=rate_limited/.test(plain.headers.location || ''), 'plain POST while limited -> redirect to an error view', `${plain.status} ${plain.headers.location}`);
+    const spoof = await request(rl.port, 'POST', '/contact', { body: { name: 'x' }, json: true, headers: { 'X-Forwarded-For': '9.9.9.9, 127.0.0.1' } });
+    check(spoof.status === 429, 'a spoofed X-Forwarded-For value does not escape the limit (the proxy-set value is used)', String(spoof.status));
+    await sleep(4200);
+    const after = await post(rl, Object.assign({}, VALID, { name: 'After Window' }));
+    check(after.status === 201, 'the limit expires after the configured window; genuine enquiry accepted again', String(after.status));
+    rl.stop();
+
+    section('F3. Cloudflare Turnstile (fake siteverify)');
+    const verifyCalls = [];
+    const fakeCf = http.createServer((req, res) => {
+      const ch = []; req.on('data', (c) => ch.push(c));
+      req.on('end', () => {
+        const p = new URLSearchParams(Buffer.concat(ch).toString()); verifyCalls.push(Object.fromEntries(p));
+        res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ success: p.get('response') === 'valid-turnstile' && p.get('secret') === 'ts-secret-do-not-log' }));
+      });
+    });
+    await new Promise((r) => fakeCf.listen(0, '127.0.0.1', r)); cleanup.push(() => fakeCf.close());
+    const ts = await startApp(API_ENV(smtp.port, { TURNSTILE_SITE_KEY: 'ts-site-public', TURNSTILE_SECRET_KEY: 'ts-secret-do-not-log', TURNSTILE_VERIFY_URL: `http://127.0.0.1:${fakeCf.address().port}/siteverify` })); cleanup.push(ts.stop);
+    const tpage = await request(ts.port, 'GET', '/contact');
+    check(/class="cf-turnstile" data-sitekey="ts-site-public"/.test(tpage.text) && /challenges\.cloudflare\.com\/turnstile\/v0\/api\.js/.test(tpage.text) && !/ts-secret-do-not-log/.test(tpage.text), 'with keys, the widget is rendered with the PUBLIC site key only');
+    const noCap = await post(ts, VALID);
+    check(noCap.status === 422 && parse(noCap).error === 'captcha' && ts.rows().length === 0, 'no Turnstile response -> refused, nothing stored', `${noCap.status} ${noCap.text.slice(0, 100)}`);
+    const badCap = await post(ts, Object.assign({}, VALID, { 'cf-turnstile-response': 'forged-by-client', captcha_ok: 'true', turnstile_verified: '1' }));
+    check(badCap.status === 422 && parse(badCap).error === 'captcha' && ts.rows().length === 0, 'a forged token / client-supplied "verified" flags are ignored -> refused');
+    const goodCap = await post(ts, Object.assign({}, VALID, { 'cf-turnstile-response': 'valid-turnstile' }));
+    check(goodCap.status === 201 && ts.rows().length === 1, 'a token Cloudflare accepts -> enquiry saved', `${goodCap.status} ${goodCap.text.slice(0, 100)}`);
+    check(verifyCalls.some((c) => c.response === 'valid-turnstile' && c.secret === 'ts-secret-do-not-log' && c.remoteip), 'verification is a server-to-server call carrying the secret and client IP');
+    const callsBefore = verifyCalls.length;
+    const invalidFirst = await post(ts, Object.assign({}, VALID, { name: 'N', 'cf-turnstile-response': 'valid-turnstile' }));
+    check(invalidFirst.status === 422 && (parse(invalidFirst) || {}).fields && verifyCalls.length === callsBefore, 'invalid form fields are rejected before the one-time CAPTCHA token is spent');
+    check(!ts.log.join('').includes('ts-secret-do-not-log') && noLeaks(ts), 'the secret key never reaches the logs');
+    ts.stop();
+    const down = await startApp(API_ENV(smtp.port, { TURNSTILE_SITE_KEY: 'a', TURNSTILE_SECRET_KEY: 'b', TURNSTILE_VERIFY_URL: `http://127.0.0.1:${await freePort()}/x` })); cleanup.push(down.stop);
+    const dr = await post(down, Object.assign({}, VALID, { 'cf-turnstile-response': 'anything' }));
+    check(dr.status === 503 && (parse(dr) || {}).error === 'captcha_unavailable' && down.rows().length === 0 && !/ECONN/.test(dr.text), 'Cloudflare unreachable -> safe 503 (fail closed by default), never a fake success', `${dr.status} ${dr.text.slice(0, 100)}`);
+    down.stop();
+    const open = await startApp(API_ENV(smtp.port, { TURNSTILE_SITE_KEY: 'a', TURNSTILE_SECRET_KEY: 'b', TURNSTILE_FAIL_OPEN: '1', TURNSTILE_VERIFY_URL: `http://127.0.0.1:${await freePort()}/x` })); cleanup.push(open.stop);
+    const orr = await post(open, Object.assign({}, VALID, { 'cf-turnstile-response': 'anything' }));
+    check(orr.status === 201 && open.rows().length === 1 && /accepted under TURNSTILE_FAIL_OPEN/.test(open.log.join('')), 'TURNSTILE_FAIL_OPEN=1 keeps leads flowing when Cloudflare is down, and logs it', `${orr.status} ${orr.text.slice(0, 100)}`);
+    open.stop();
   }
 
   if (run('oversize')) {

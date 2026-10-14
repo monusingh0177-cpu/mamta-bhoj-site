@@ -676,6 +676,9 @@ body{text-rendering:optimizeLegibility;}
 .enquiry-status{margin-bottom:14px;}
 .field-error{display:block;margin-top:4px;color:var(--danger);font-size:.82rem;}
 .field [aria-invalid="true"]{border-color:var(--danger);}
+.field-hint{display:block;margin-top:4px;color:var(--ink-soft);font-size:.8rem;}
+/* Honeypot: kept in the DOM for bots, invisible and unreachable for people and assistive technology */
+.hp-field{position:absolute !important;left:-10000px;top:auto;width:1px;height:1px;overflow:hidden;}
 
 /* Card links: only the title is the link text (short, descriptive anchor); the whole card stays clickable. */
 .promo-card,.guide-card{position:relative;}

@@ -92,6 +92,40 @@
       });
       if (first) first.focus({ preventScroll: true });
     };
+    // Phone: instant feedback with the same rules as the server (public/js/phone-validate.js).
+    var phoneInput = enquiryForm.elements.phone;
+    var showPhoneError = function () {
+      if (!phoneInput || !window.MBPhone) return true;
+      var old = phoneInput.parentNode.querySelector('.field-error');
+      if (old) old.remove();
+      var msg = window.MBPhone.error(phoneInput.value);
+      phoneInput.setCustomValidity(msg);
+      if (msg) {
+        phoneInput.setAttribute('aria-invalid', 'true');
+        var span = document.createElement('span');
+        span.className = 'field-error';
+        span.textContent = msg;
+        phoneInput.parentNode.appendChild(span);
+      } else {
+        phoneInput.removeAttribute('aria-invalid');
+      }
+      return !msg;
+    };
+    if (phoneInput && window.MBPhone) {
+      phoneInput.addEventListener('input', function () {
+        var v = phoneInput.value.replace(/[^0-9]/g, '');
+        if (v !== phoneInput.value) phoneInput.value = v;
+        if (phoneInput.hasAttribute('aria-invalid')) showPhoneError();
+      });
+      phoneInput.addEventListener('paste', function (e) {
+        var text = (e.clipboardData || window.clipboardData || {}).getData ? (e.clipboardData || window.clipboardData).getData('text') : '';
+        if (!text) return;
+        e.preventDefault();
+        phoneInput.value = window.MBPhone.fromPaste(text).replace(/[^0-9]/g, '').slice(0, 10);
+        showPhoneError();
+      });
+      phoneInput.addEventListener('blur', function () { if (phoneInput.value) showPhoneError(); });
+    }
     var failure = function (timedOut) {
       showStatus('error', timedOut
         ? 'This is taking longer than expected. Your enquiry may already have been received, so please check before sending it again, or' + contactHint + '.'
@@ -101,9 +135,11 @@
     enquiryForm.addEventListener('submit', function (e) {
       e.preventDefault();
       if (busy) return; // a second click while the first is in flight does nothing
+      clearErrors();
+      var phoneOk = showPhoneError();
+      if (!phoneOk) { phoneInput.reportValidity(); return; }
       if (!enquiryForm.checkValidity()) { enquiryForm.reportValidity(); return; }
       busy = true;
-      clearErrors();
       submitBtn.disabled = true;
       submitBtn.textContent = 'Sending…';
       enquiryForm.setAttribute('aria-busy', 'true');
@@ -126,6 +162,8 @@
           } else if (r.res.status === 422 && r.data && r.data.fields) {
             markFields(r.data.fields);
             showStatus('error', r.data.message || 'Please check the highlighted details and try again.');
+          } else if (r.data && r.data.message && (r.res.status === 422 || r.res.status === 429 || r.res.status === 503)) {
+            showStatus('error', String(r.data.message)); // safe, server-written wording (rate limit, expired form, security check)
           } else {
             failure(false);
           }
@@ -133,6 +171,7 @@
         .catch(function (err) { failure(Boolean(err && err.name === 'AbortError')); })
         .then(function () {
           clearTimeout(timer);
+          if (window.turnstile) { try { window.turnstile.reset(); } catch (e) { /* widget not ready */ } } // tokens are single-use
           busy = false;
           submitBtn.disabled = false;
           submitBtn.textContent = idleLabel;
