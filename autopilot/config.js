@@ -62,9 +62,12 @@ function loadConfig(overrides) {
     // auto-publish settings (only used when AUTOPILOT_MODE=auto). The restart command is TRUSTED operator input, executed
     // as given (e.g. `pm2 restart mamta-bhoj`); it lives in the root-owned env file, never in the repository or the unit.
     auto: { restartCmd: env.AUTOPILOT_RESTART_CMD || '', remote: env.AUTOPILOT_GIT_REMOTE || 'origin', branch: env.AUTOPILOT_GIT_BRANCH || 'main', maxPerDay: int(env.AUTOPILOT_AUTO_MAX_PER_DAY, 1), verifyTimeoutMs: int(env.AUTOPILOT_VERIFY_TIMEOUT_MS, 90000), restartTimeoutMs: int(env.AUTOPILOT_RESTART_TIMEOUT_MS, 120000), pushTimeoutMs: int(env.AUTOPILOT_PUSH_TIMEOUT_MS, 90000) },
+    semrush: { apiKey: env.AUTOPILOT_SEMRUSH_API_KEY || '', base: (env.AUTOPILOT_SEMRUSH_BASE || 'https://api.semrush.com').replace(/\/$/, ''), database: (env.AUTOPILOT_SEMRUSH_DATABASE || 'in').toLowerCase(), maxKeywords: int(env.AUTOPILOT_SEMRUSH_MAX_KEYWORDS, 19) },
     minInlinks: int(env.AUTOPILOT_MIN_INLINKS, 3),                  // audit: a page with fewer internal links pointing to it is a finding
     opportunityInlinks: int(env.AUTOPILOT_OPPORTUNITY_INLINKS, 5),  // a guide that is the best page for a rising query but has fewer links than this gets one more
-    targetKeywordsFile: env.AUTOPILOT_TARGET_KEYWORDS_FILE ? path.resolve(env.AUTOPILOT_TARGET_KEYWORDS_FILE) : '',
+    // the 19 commercial target keywords are version-controlled in autopilot/target-keywords.txt (override with AUTOPILOT_TARGET_KEYWORDS_FILE)
+    // (set it to an empty value to switch keyword tracking off)
+    targetKeywordsFile: env.AUTOPILOT_TARGET_KEYWORDS_FILE != null ? (env.AUTOPILOT_TARGET_KEYWORDS_FILE ? path.resolve(env.AUTOPILOT_TARGET_KEYWORDS_FILE) : '') : (fs.existsSync(path.join(REPO_DIR, 'autopilot', 'target-keywords.txt')) ? path.join(REPO_DIR, 'autopilot', 'target-keywords.txt') : ''),
     pm2Check: flag(env.AUTOPILOT_PM2_CHECK, false),         // read-only `pm2 jlist` in the smoke test; the autopilot never restarts anything
     pm2App: env.AUTOPILOT_PM2_APP || 'mamta-bhoj',
     dataDir: env.AUTOPILOT_DATA_DIR ? path.resolve(env.AUTOPILOT_DATA_DIR) : null, // production data/ copied (read-only) into previews

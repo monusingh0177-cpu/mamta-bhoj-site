@@ -8,6 +8,7 @@ const patchLib = require('./patch');
 const gates = require('./gates');
 const branchLib = require('./branch');
 const publishLib = require('./publish');
+const activation = require('./activation');
 const inventory = require('./inventory');
 const state = require('./state');
 const { git } = require('./git');
@@ -22,6 +23,7 @@ async function remediate(ctx) {
   if (auto) {
     const mis = publishLib.misconfigured(cfg);
     if (mis) R.auto.reason = mis;
+    else if (!activation.status(cfg).ok) R.auto.reason = activation.status(cfg).reason;
     else if (st.autoPaused) R.auto.reason = `auto-publishing is paused since ${st.autoPaused.at.slice(0, 10)} (${st.autoPaused.reason}); run: node autopilot/cli.js resume-auto`;
     else R.auto.enabled = true;
   } else R.auto.reason = cfg.mode === 'auto' ? 'not publishing in this run (' + (ctx.R.dryRun ? 'dry run' : 'first/baseline run') + ')' : `AUTOPILOT_MODE=${cfg.mode}: fixes are prepared on a branch for review`;
@@ -35,6 +37,7 @@ async function remediate(ctx) {
     const fx = fixes[i]; const out = R.fixes[i];
     const trace = (name, ok, detail) => { out.trace.push({ name, ok, detail: String(detail || '').slice(0, 300) }); A('fix_step', { id: fx.id, name, ok, detail: String(detail || '').slice(0, 300) }); };
     const skip = (reason) => { out.outcome = 'skipped'; out.reason2 = reason; R.notChanged.push({ page: fx.page, reason: `${fx.id}: ${reason}` }); };
+    out.change = fx.patches.map((p) => ({ file: p.file, kind: p.kind, old: p.find, new: p.replace }));
     trace('discover', true, `${fx.source}: ${fx.reason}`);
     if (remaining <= 0) { skip(`daily limit of ${cfg.limits.fixesPerDay} automatic fix(es) reached`); continue; }
     const cd = state.onCooldown(cfg, st, fx.page, date); if (cd) { skip(`page changed on ${cd.last}; cooldown until ${cd.until}`); continue; }
@@ -73,6 +76,7 @@ async function remediate(ctx) {
       // ---- publish (auto mode, everything configured, not paused)
       const res = await publishLib.publishFix(cfg, { sha, changedPages: [fx.page], expect: [fx.expect], baselineAudit: R.findings, onStep: (s) => trace(s.name, s.ok, s.detail) });
       out.release = { prev: res.prev, now: res.now, published: res.published, rolledBack: res.rolledBack };
+      out.rollback = { attempted: res.rolledBack || res.rollbackFailed, ok: res.rolledBack, error: res.rolledBack || res.rollbackFailed ? res.error : null };
       if (res.published) {
         out.outcome = 'published'; remaining--;
         st.history.push({ date, page: fx.page, target: fx.target, status: 'published', branch, sha, kind: fx.kind, source: fx.source, prev: res.prev });
@@ -104,6 +108,14 @@ async function remediate(ctx) {
       trace('error', false, e.message); out.outcome = 'error'; R.errors.push(`fix ${fx.id} failed: ${e.message}`); A('fix_error', { id: fx.id, error: e.message });
       blocked = true; R.stops.push(`fix for ${fx.page} failed; discarded`); break;
     }
+  }
+  // the persistent change ledger: every attempted change (not the ones that were merely skipped), with old/new value, release, verification and rollback
+  for (const out of R.fixes) {
+    if (out.outcome === 'planned' || out.outcome === 'skipped') continue;
+    try {
+      state.recordChange(cfg, { runId, date, id: out.id, kind: out.kind, source: out.source, page: out.page, target: out.target, outcome: out.outcome, reason: out.reason, change: out.change || [], branch: out.branch || null, commit: out.sha || null,
+        previousCommit: (out.release || {}).prev || null, releasedCommit: (out.release || {}).published ? out.release.now : null, published: Boolean((out.release || {}).published), verification: out.trace || [], rollback: out.rollback || { attempted: false } });
+    } catch (e) { R.errors.push(`change ledger write failed: ${e.message}`); }
   }
   return { inv, blocked };
 }

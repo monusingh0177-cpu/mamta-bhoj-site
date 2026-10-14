@@ -78,6 +78,25 @@ function readLedger(cfg, limit) {
   try { lines = fs.readFileSync(p.ledger, 'utf8').split('\n').filter(Boolean); } catch (e) { return []; }
   return lines.slice(-(limit || 50)).map((l) => { try { return JSON.parse(l); } catch (e) { return { raw: l }; } });
 }
+// ---- change ledger: one JSON line per ATTEMPTED change (published, rolled back, rejected, left as a proposal): what the old and
+// new values were, which commit/release, how it was verified and what the rollback did. Append-only, outside the web root.
+const changesFile = (cfg) => path.join(cfg.stateDir, 'changes.jsonl');
+function recordChange(cfg, entry) {
+  ensureDir(cfg.stateDir);
+  fs.appendFileSync(changesFile(cfg), redact(JSON.stringify(Object.assign({ at: new Date().toISOString() }, entry))) + '\n', { mode: 0o640 });
+}
+function readChanges(cfg, n) {
+  let lines = []; try { lines = fs.readFileSync(changesFile(cfg), 'utf8').split('\n').filter(Boolean); } catch (e) { return []; }
+  const out = []; for (const l of lines.slice(-(n || 100))) { try { out.push(JSON.parse(l)); } catch (e) { /* skip a damaged line */ } }
+  return out;
+}
+function trimChanges(cfg, keep) {
+  let lines = []; try { lines = fs.readFileSync(changesFile(cfg), 'utf8').split('\n').filter(Boolean); } catch (e) { return 0; }
+  if (lines.length <= keep) return 0;
+  const tmp = changesFile(cfg) + '.' + process.pid + '.tmp'; fs.writeFileSync(tmp, lines.slice(-keep).join('\n') + '\n', { mode: 0o640 }); fs.renameSync(tmp, changesFile(cfg));
+  return lines.length - keep;
+}
+
 function trimLedger(cfg, keep) {
   const p = paths(cfg); let lines = [];
   try { lines = fs.readFileSync(p.ledger, 'utf8').split('\n').filter(Boolean); } catch (e) { return 0; }
@@ -113,7 +132,8 @@ function rotate(cfg, dateStr) {
     }
   }
   removed += trimLedger(cfg, Math.max(400, cfg.retentionDays * 3));
+  removed += trimChanges(cfg, 5000);
   return removed;
 }
 
-module.exports = { LOCK_MAX_AGE_MS, recordRun, readLedger, trimLedger, paths, init, load, save, loadLastmod, saveLastmod, isDisabled, setEnabled, acquireLock, releaseLock, audit, readAudit, limitStatus, fixesToday, onCooldown, newPageAllowed, rotate, appliedOn };
+module.exports = { LOCK_MAX_AGE_MS, recordChange, readChanges, recordRun, readLedger, trimLedger, paths, init, load, save, loadLastmod, saveLastmod, isDisabled, setEnabled, acquireLock, releaseLock, audit, readAudit, limitStatus, fixesToday, onCooldown, newPageAllowed, rotate, appliedOn };

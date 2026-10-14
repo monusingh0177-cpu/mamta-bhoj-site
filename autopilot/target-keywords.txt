@@ -1,0 +1,23 @@
+# Mamta Bhoj / Devmam Flourish Foods: the 19 commercial target keywords the autopilot monitors.
+# One keyword per line; lines starting with # are comments. Version-controlled on purpose: edit this file in a pull request.
+# The autopilot only MEASURES these (Search Console, 28 days vs the previous 28) and maps each to the page that should serve it.
+# It never invents rankings, and it never creates a page for a keyword (see docs/seo-autopilot.md).
+flour manufacturer India
+flour supplier India
+bulk flour supplier India
+wholesale flour supplier
+institutional flour supplier India
+wheat flour supplier
+flour mill manufacturer India
+atta manufacturer India
+bulk atta supplier
+chakki atta supplier
+maida manufacturer India
+maida flour supplier
+besan manufacturer India
+besan supplier India
+sooji manufacturer India
+sooji supplier
+semolina flour manufacturer
+tandoori atta supplier
+whole wheat flour manufacturer

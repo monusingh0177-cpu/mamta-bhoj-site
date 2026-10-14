@@ -64,11 +64,28 @@ function assess(R, cfg, ctx) {
   const au = R.auto || {};
   if (cfg.mode === 'auto') {
     if (au.paused) add('auto-paused', 'warn', 'Automatic publishing is paused', `paused ${String(au.paused.at || '').slice(0, 10)}: ${au.paused.reason}`, 'Find out why the release was rolled back (report + audit log), fix the cause, then run: node autopilot/cli.js resume-auto');
-    else if (au.effective === 'auto' && !au.enabled) add('auto-config', 'warn', 'Automatic publishing is not active', au.reason, 'Complete the settings in /etc/mamta-autopilot/autopilot.env (see docs/seo-autopilot.md, "Automatic publishing").');
+    else if (au.effective === 'auto' && !au.enabled) add('auto-config', 'warn', 'Automatic publishing is not active', au.reason, 'Complete the settings in /etc/mamta-autopilot/autopilot.env and run node autopilot/cli.js activate-auto, which checks everything first (see docs/seo-autopilot.md, "Automatic publishing").');
   }
   if (au.refused) add('auto-preflight', 'warn', 'Automatic publishing was refused (nothing was changed)', au.refused, 'Bring the production checkout to origin/main (deploy, or push the unpushed commit), then the next run can publish. The fix is waiting on a review branch.');
   for (const x of au.rolledBack || []) add('release', x.ok ? 'warn' : 'fail', x.ok ? 'An automatic release was rolled back' : 'An automatic release was rolled back, but the rollback itself FAILED', `${x.page}: ${x.reason}`, x.ok ? 'The previous version is serving. Auto-publishing is paused until you run: node autopilot/cli.js resume-auto' : 'Check the site NOW: cd the app directory, git status, git log -3, restart the app. Use scripts/deploy-production.sh --rollback <previous SHA> if needed.');
   for (const x of au.published || []) add('release-' + String(x.sha).slice(0, 8), 'note', 'Automatic fix published and verified live', `${x.page} (link to ${x.target}) ${String(x.prev).slice(0, 8)} -> ${String(x.sha).slice(0, 8)}`);
+
+  // Semrush (optional): a configured-but-failing account is visible and never turned into a zero
+  const sem = R.semrush || {};
+  if (sem.status && sem.status !== 'ok' && sem.status !== 'not_configured') add('semrush', sem.status === 'no_units' || sem.status === 'auth_invalid' ? 'warn' : 'note', `Semrush unavailable (${sem.status})`, sem.detail || '', sem.remedy);
+
+  // Google's view of the sitemap / indexing (only when Search Console is connected)
+  const sms = R.sitemapStatus;
+  if (sms && sms.error) add('sitemap-status', 'note', 'Sitemap status could not be read from Google', sms.error);
+  else if (sms && (sms.problems || []).length) add('sitemap-status', sms.errors > 0 ? 'warn' : 'note', 'Google reports a sitemap problem', sms.problems.join(' | '), 'Open Search Console > Sitemaps for details; the autopilot resubmits the sitemap after real content changes. A submission is not a guarantee of crawling or indexing.');
+  const idx = R.indexing || [];
+  if (idx.length) add('indexing', idx.some((x) => x.severity === 'high') ? 'warn' : 'note', `${idx.length} indexing discrepancy(ies) between the site and Google`, idx.slice(0, 3).map((x) => `${x.path}: ${x.message}`).join(' | '), 'See URL Inspection in Search Console. These are status facts, not a promise that a change will get the page indexed.');
+
+  // target keywords: page mismatches and content coverage gaps (facts about the site, never a ranking claim)
+  const kws = R.keywords || [];
+  const mism = kws.filter((k) => k.mismatch); const gaps = kws.filter((k) => k.coverage && k.coverage.level !== 'good');
+  if (mism.length) add('keyword-mismatch', 'note', `${mism.length} target keyword(s) are shown by a different page than the one that fits best`, mism.slice(0, 3).map((k) => `${k.keyword}: ${k.mismatchNote}`).join(' | '), 'Review the Target keywords section of the report; consider internal links to the better-fitting page.');
+  if (gaps.length) add('keyword-coverage', 'note', `${gaps.length} target keyword(s) are only partly covered by an existing page`, gaps.slice(0, 3).map((k) => `${k.keyword}: ${k.coverage.note}`).join(' | '), 'A person decides whether content is needed; the autopilot never creates a page for a keyword.');
 
   // proposals discarded by quality gates
   const discarded = (R.rollbacks || []).filter((x) => !/^release rolled back/.test(x.reason));

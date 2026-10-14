@@ -58,6 +58,7 @@ async function startGoogle() {
       try {
       if (req.url === '/token') { g.calls.token++; return g.mode === 'authfail' ? send(400, { error: 'invalid_grant' }) : g.mode === 'badclient' ? send(401, { error: 'invalid_client' }) : send(200, { access_token: 'fake-access-token-abcdef', expires_in: 3600 }); }
       if (req.headers.authorization !== 'Bearer fake-access-token-abcdef') return send(401, { error: { message: 'unauthorized' } });
+      if (req.method === 'GET' && /\/sitemaps\//.test(req.url)) { g.calls.sitemapGet = (g.calls.sitemapGet || 0) + 1; if (g.mode === 'sitemapnone') return send(404, { error: { message: 'Sitemap not found' } }); const bad = g.mode === 'sitemaperr'; return send(200, { path: decodeURIComponent(req.url.split('/sitemaps/')[1]), lastSubmitted: '2026-10-01T00:00:00Z', lastDownloaded: '2026-10-12T00:00:00Z', isPending: false, errors: bad ? '2' : '0', warnings: '0', contents: [{ type: 'web', submitted: String(g.sitemapCount || 31), indexed: bad ? '20' : String(g.sitemapCount || 31) }] }); }
       if (req.method === 'GET' && /\/sites\/[^/]+$/.test(req.url)) { g.calls.siteGet = (g.calls.siteGet || 0) + 1; return g.mode === 'noaccess' ? send(403, { error: { message: 'User does not have sufficient permission for site' } }) : g.mode === 'nosite' ? send(404, { error: { message: 'Site not found' } }) : send(200, { siteUrl: 'sc-domain:devmamflourishfoods.com', permissionLevel: g.mode === 'unverified' ? 'siteUnverifiedUser' : 'siteOwner' }); }
       if (/searchAnalytics\/query$/.test(req.url) && g.mode === 'quota') { g.calls.query++; res.writeHead(429, { 'Content-Type': 'application/json', 'Retry-After': '0' }); return res.end(JSON.stringify({ error: { message: 'Quota exceeded' } })); }
       if (/searchAnalytics\/query$/.test(req.url) && g.mode === 'flaky' && g.flakyLeft > 0) { g.flakyLeft--; g.calls.query++; return send(500, { error: { message: 'backend error' } }); }
@@ -69,6 +70,7 @@ async function startGoogle() {
       }
       if (/\/sitemaps\//.test(req.url) && req.method === 'PUT') { g.calls.sitemapPut.push(decodeURIComponent(req.url.split('/sitemaps/')[1])); return g.mode === 'sitemap403' ? send(403, { error: { message: 'insufficient scope' } }) : (res.writeHead(204), res.end()); }
       if (/index:inspect$/.test(req.url) && g.mode === 'inspect429') { g.calls.inspect429 = (g.calls.inspect429 || 0) + 1; return send(429, { error: { message: 'Quota exceeded' } }); }
+      if (/index:inspect$/.test(req.url) && g.mode === 'inspectbad') { const j = JSON.parse(body); g.calls.inspect.push(j.inspectionUrl); return send(200, { inspectionResult: { indexStatusResult: { verdict: 'NEUTRAL', coverageState: 'Discovered - currently not indexed', indexingState: 'INDEXING_ALLOWED', robotsTxtState: 'ALLOWED', pageFetchState: 'SUCCESSFUL', lastCrawlTime: null, googleCanonical: 'https://devmamflourishfoods.com/other-page', userCanonical: j.inspectionUrl } } }); }
       if (/index:inspect$/.test(req.url)) { const j = JSON.parse(body); g.calls.inspect.push(j.inspectionUrl); return send(200, { inspectionResult: { indexStatusResult: { verdict: 'PASS', coverageState: 'Submitted and indexed', indexingState: 'INDEXING_ALLOWED', robotsTxtState: 'ALLOWED', pageFetchState: 'SUCCESSFUL', lastCrawlTime: '2026-10-08T03:00:00Z', googleCanonical: j.inspectionUrl, userCanonical: j.inspectionUrl } } }); }
       send(404, {});
       } catch (e) { send(500, { error: { message: 'fake google bug: ' + e.message } }); }
@@ -146,7 +148,7 @@ async function makeSite(root) {
 function runCli(site, cmd, env, root, state) {
   // asynchronous on purpose: the fake Google/AI/IndexNow servers live in THIS process and must keep answering while the CLI runs
   const e = Object.assign({}, process.env, {
-    AUTOPILOT_ENV_FILE: '/nonexistent', AUTOPILOT_REPO_DIR: site.repo, AUTOPILOT_STATE_DIR: state, AUTOPILOT_FETCH_BASE: site.base, AUTOPILOT_SITE_ORIGIN: 'https://devmamflourishfoods.com',
+    AUTOPILOT_ENV_FILE: '/nonexistent', AUTOPILOT_TARGET_KEYWORDS_FILE: '', AUTOPILOT_REPO_DIR: site.repo, AUTOPILOT_STATE_DIR: state, AUTOPILOT_FETCH_BASE: site.base, AUTOPILOT_SITE_ORIGIN: 'https://devmamflourishfoods.com',
     AUTOPILOT_GATE_HARDCHECK: FULL && env.__full ? '1' : '0', AUTOPILOT_GATE_ENQUIRY: FULL && env.__full ? '1' : '0', AUTOPILOT_HTTP_TIMEOUT_MS: '3000', AUTOPILOT_RETRY_BASE_MS: '5', AUTOPILOT_DATA_DIR: path.join(site.repo, 'data'),
   }, env || {});
   delete e.__full;
@@ -568,7 +570,7 @@ const cleanBranches = (repo) => { try { git(repo, 'worktree', 'prune'); } catch 
       fs.writeFileSync(restartJs, "require('http').get('http://127.0.0.1:' + process.argv[2] + '/', (r) => { r.resume(); r.on('end', () => process.exit(r.statusCode === 200 ? 0 : 1)); }).on('error', () => process.exit(1));");
       const RESTART = `node ${restartJs.replace(/\\/g, '/')} ${ctrl.server.address().port}`;
       const autoEnv = (extra) => Object.assign({ AUTOPILOT_MODE: 'auto', AUTOPILOT_RESTART_CMD: RESTART, AUTOPILOT_MIN_INLINKS: '10', AUTOPILOT_VERIFY_TIMEOUT_MS: '20000', AUTOPILOT_NOW: '2026-10-13T04:00:00Z' }, extra || {});
-      const fresh = async (extra) => { const s = scenario(autoEnv(extra)); resetOrigin(); ctrl.queue.length = 0; await site.restart(); return s; };
+      const fresh = async (extra, noActivation) => { const s = scenario(autoEnv(extra)); resetOrigin(); ctrl.queue.length = 0; await site.restart(); if (!noActivation) await runCli(site, 'activate-auto', s.env, root, s.state); return s; };
       const liveBody = async (p) => (await http_(site.base + p)).body;
       const ledgerLast = (st) => JSON.parse(fs.readFileSync(path.join(st, 'last-run.json'), 'utf8'));
       const tracked = git(site.repo, 'ls-files', 'data').split('\n').filter(Boolean)[0];
@@ -678,6 +680,142 @@ const cleanBranches = (repo) => { try { git(repo, 'worktree', 'prune'); } catch 
       resetOrigin();
     }
 
+    // ---- E15 activation gate, change ledger, new audits, indexing monitoring, target keywords, Semrush
+    if (want('e15')) {
+      const keywordsLib = require('../autopilot/lib/keywords'); const semrushLib = require('../autopilot/lib/semrush');
+      const indexingLib = require('../autopilot/lib/indexing'); const { auditInventory } = require('../autopilot/lib/audit'); const oppLib = require('../autopilot/lib/opportunity'); const inventoryLib = require('../autopilot/lib/inventory');
+      const bare = path.join(root, 'origin-e15.git'); git(root, 'init', '-q', '--bare', '-b', 'main', bare);
+      try { git(site.repo, 'remote', 'remove', 'origin'); } catch (e) { /* none yet */ }
+      git(site.repo, 'remote', 'add', 'origin', bare);
+      const resetOrigin = () => git(site.repo, 'push', '-q', '-f', 'origin', `${baseHead}:refs/heads/main`);
+      const prodHead = () => git(site.repo, 'rev-parse', 'HEAD'); const originHead = () => git(bare, 'rev-parse', 'main');
+      const ctrl = { queue: [] };
+      ctrl.server = http.createServer(async (req, res) => { const m = ctrl.queue.length ? ctrl.queue.shift() : 'ok'; if (m === 'norestart') { res.writeHead(200); return res.end('ok'); } await site.restart(); res.writeHead(200); res.end('ok'); });
+      await new Promise((r) => ctrl.server.listen(0, '127.0.0.1', r)); cleanups.push(() => ctrl.server.close());
+      const restartJs = path.join(root, 'restart15.js');
+      fs.writeFileSync(restartJs, "require('http').get('http://127.0.0.1:' + process.argv[2] + '/', (r) => { r.resume(); r.on('end', () => process.exit(r.statusCode === 200 ? 0 : 1)); }).on('error', () => process.exit(1));");
+      const RESTART = `node ${restartJs.replace(/\\/g, '/')} ${ctrl.server.address().port}`;
+      const autoEnv = (extra) => Object.assign({ AUTOPILOT_MODE: 'auto', AUTOPILOT_RESTART_CMD: RESTART, AUTOPILOT_MIN_INLINKS: '10', AUTOPILOT_VERIFY_TIMEOUT_MS: '20000', AUTOPILOT_NOW: '2026-10-13T04:00:00Z' }, extra || {});
+      const fresh = async (extra) => { const s = scenario(autoEnv(extra)); resetOrigin(); ctrl.queue.length = 0; await site.restart(); return s; };
+      const ledgerLast = (st) => JSON.parse(fs.readFileSync(path.join(st, 'last-run.json'), 'utf8'));
+
+      section('E15a: AUTOPILOT_MODE=auto alone never publishes: it needs an activation that passes every readiness check');
+      let s = await fresh(undefined, true); await runCli(site, 'dry-run', s.env, root, s.state); let r = await runCli(site, 'run', s.env, root, s.state); let rep = jsonReport(s.state);
+      check(rep.auto.enabled === false && /activate-auto/.test(rep.auto.reason) && rep.fixes[0].outcome === 'proposed' && prodHead() === baseHead && rep.health.some((i) => i.id === 'auto-config' && /activate-auto/.test(i.remedy)), 'without activation the fix is only a review branch and the report names the command to run', rep.auto.reason);
+      cleanBranches(site.repo); s = await fresh(undefined, true); // a clean state for the activation checks (the run above left a proposal in its history)
+      fs.appendFileSync(path.join(site.repo, 'views/links.js'), '\n// dirty\n'); r = await runCli(site, 'activate-auto', s.env, root, s.state);
+      check(r.code === 1 && /FAIL clean-tree/.test(r.out) && /NOT ACTIVATED/.test(r.out) && !fs.existsSync(path.join(s.state, 'auto-activation.json')), 'activate-auto refuses (exit 1, nothing recorded) when the production tree is modified', r.out); git(site.repo, 'checkout', '--', 'views/links.js');
+      const ahead = git(site.repo, 'commit-tree', 'HEAD^{tree}', '-p', 'HEAD', '-m', 'x'); git(site.repo, 'push', '-q', 'origin', `${ahead}:refs/heads/main`); r = await runCli(site, 'activate-auto', s.env, root, s.state);
+      check(r.code === 1 && /FAIL at-remote-release/.test(r.out), 'activate-auto refuses when production is not at origin/main', r.out); resetOrigin();
+      r = await runCli(site, 'activate-auto', Object.assign({}, s.env, { AUTOPILOT_GIT_REMOTE: 'nonexistent-remote' }), root, s.state);
+      check(r.code === 1 && /FAIL (at-remote-release|push-access)/.test(r.out), 'activate-auto refuses when the remote cannot be reached', r.out);
+      r = await runCli(site, 'activate-auto', Object.assign({}, s.env, { AUTOPILOT_RESTART_CMD: '' }), root, s.state); check(r.code === 1 && /FAIL configuration/.test(r.out), 'activate-auto refuses without a restart command');
+      r = await runCli(site, 'activate-auto', s.env, root, s.state);
+      check(r.code === 0 && /ACTIVATED/.test(r.out) && /PASS push-access/.test(r.out) && /PASS write-access/.test(r.out) && /PASS live-smoke/.test(r.out) && !r.out.includes(RESTART) && fs.existsSync(path.join(s.state, 'auto-activation.json')), 'activate-auto passes all readiness checks, records the activation, and prints no secret/command', r.out);
+      check(originHead() === baseHead && prodHead() === baseHead, 'the readiness checks changed nothing (the push check is a dry run)');
+      let st1 = JSON.parse(await runCli(site, 'status', s.env, root, s.state).then((x) => x.out)); check(st1.autoPublish.activated === true, 'status reports the activation');
+      r = await runCli(site, 'status', Object.assign({}, s.env, { AUTOPILOT_RESTART_CMD: RESTART + ' ' }), root, s.state); check(JSON.parse(r.out).autoPublish.activated === false, 'changing the restart command voids the activation');
+      r = await runCli(site, 'status', Object.assign({}, s.env, { AUTOPILOT_GIT_BRANCH: 'release' }), root, s.state); check(JSON.parse(r.out).autoPublish.activated === false, 'changing the release branch voids the activation');
+      await runCli(site, 'dry-run', s.env, root, s.state); r = await runCli(site, 'run', s.env, root, s.state); rep = jsonReport(s.state);
+      check(rep.auto.enabled && rep.fixes.some((f) => f.outcome === 'published') && originHead() === prodHead() && prodHead() !== baseHead, 'with a valid activation the same configuration publishes, verified live, and origin has the release', r.out + JSON.stringify(rep.auto));
+      r = await runCli(site, 'deactivate-auto', s.env, root, s.state); check(r.code === 0 && !fs.existsSync(path.join(s.state, 'auto-activation.json')), 'deactivate-auto removes the activation immediately');
+
+      section('E15b: persistent change ledger (old/new value, commit, verification, rollback) and weekly summary');
+      const ch = (await runCli(site, 'changes', s.env, root, s.state)).out.split('\n').filter((l) => l.startsWith('{')).map((l) => JSON.parse(l)); const c0 = ch[ch.length - 1] || {};
+      check(ch.length >= 1 && c0.outcome === 'published' && c0.published === true && c0.releasedCommit === prodHead() && /^[0-9a-f]{40}$/.test(c0.previousCommit) && c0.previousCommit === baseHead, 'the ledger records the release commit and the previous commit', JSON.stringify(c0).slice(0, 400));
+      check(c0.change && c0.change[0] && /^related: \[/.test(c0.change[0].old) && /^related: \[/.test(c0.change[0].new) && c0.change[0].new.length > c0.change[0].old.length && c0.change[0].file.startsWith('views/guides'), 'the ledger records the old value and the new value of the change');
+      check(c0.verification.some((v) => v.name === 'verify-live' && v.ok) && c0.verification.some((v) => v.name === 'push' && v.ok) && c0.rollback && c0.rollback.attempted === false, 'the ledger records the verification steps and that no rollback was needed');
+      const wk = await runCli(site, 'weekly', s.env, root, s.state); const wkMd = fs.readdirSync(path.join(s.state, 'reports')).filter((n) => /^weekly-.*\.md$/.test(n)).map((n) => fs.readFileSync(path.join(s.state, 'reports', n), 'utf8')).join('');
+      check(wk.code === 0 && /## Changes this week/.test(wkMd) && /published/.test(wkMd) && wkMd.includes(String(c0.releasedCommit).slice(0, 8)), 'the weekly summary lists the change that was published', wkMd.slice(-500));
+      s = await fresh(); await runCli(site, 'dry-run', s.env, root, s.state); await runCli(site, 'activate-auto', s.env, root, s.state); ctrl.queue.push('norestart'); r = await runCli(site, 'run', s.env, root, s.state);
+      const ch2 = (await runCli(site, 'changes', s.env, root, s.state)).out.split('\n').filter((l) => l.startsWith('{')).map((l) => JSON.parse(l)); const c1 = ch2[ch2.length - 1] || {};
+      check(c1.outcome === 'rolled-back' && c1.published === false && c1.releasedCommit === null && c1.rollback.attempted === true && c1.rollback.ok === true && c1.verification.some((v) => v.name === 'verify-live' && !v.ok) && c1.verification.some((v) => v.name === 'rollback-verify' && v.ok), 'a rolled-back change is ledgered with the failed verification and the successful rollback', JSON.stringify(c1).slice(0, 500));
+      check(prodHead() === baseHead && originHead() === baseHead, 'and production/origin are back at the previous commit');
+      const before = ch2.length; await runCli(site, 'run', s.env, root, s.state); const ch3 = (await runCli(site, 'changes', s.env, root, s.state)).out.split('\n').filter((l) => l.startsWith('{')).length;
+      check(ch3 >= before, 'the change ledger is append-only');
+
+      section('E15c: technical audit detects conflicting and inconsistent metadata');
+      const mk = (over) => Object.assign({ title: 'A reasonable title for this page here', description: 'x'.repeat(130), h1: ['H'], canonical: 'https://devmamflourishfoods.com/a', indexable: true, inSitemap: true, jsonLdTypes: [], jsonLdNodes: [], jsonLdErrors: [], imgMissingAlt: 0, linksIn: 5, linksOut: [], words: 400, metaRobots: 'index,follow', xRobots: '', ogUrl: 'https://devmamflourishfoods.com/a' }, over);
+      const invS = (pages, extra) => Object.assign({ origin: 'https://devmamflourishfoods.com', pages, nonOk: [], sitemapPaths: Object.keys(pages), robotsStatus: 200, robotsTxt: 'User-agent: *\nDisallow: /admin\nSitemap: https://devmamflourishfoods.com/sitemap.xml\n' }, extra || {});
+      const codes = (inv) => auditInventory(inv, { origin: inv.origin }).map((f) => f.code);
+      check(codes(invS({ '/a': mk() })).length === 0, 'a consistent page produces no finding');
+      check(codes(invS({ '/a': mk({ ogUrl: 'https://devmamflourishfoods.com/b' }) })).includes('og-url-mismatch'), 'og:url that disagrees with the canonical is flagged');
+      check(codes(invS({ '/a': mk({ xRobots: 'noindex' }) })).includes('robots-conflict'), 'meta robots "index" with an X-Robots-Tag noindex header is flagged as a conflict');
+      check(codes(invS({ '/a': mk(), '/b': mk({ inSitemap: false, canonical: 'https://devmamflourishfoods.com/b', ogUrl: 'https://devmamflourishfoods.com/b', title: 'Another reasonable title for page b', description: 'y'.repeat(130) }) }, { sitemapPaths: ['/a'] })).includes('indexable-not-in-sitemap'), 'an indexable self-canonical page missing from the sitemap is flagged');
+      check(codes(invS({ '/a': mk() }, { nonOk: [{ path: '/a', status: 301, location: '/c' }] })).includes('sitemap-redirect'), 'a sitemap URL that redirects is flagged');
+      check(codes(invS({ '/a': mk() }, { robotsTxt: 'User-agent: *\nDisallow: /admin\nSitemap: https://other.example/sitemap.xml\n' })).includes('robots-sitemap-line') && codes(invS({ '/a': mk() }, { robotsTxt: 'User-agent: *\nDisallow: /admin\n' })).includes('robots-sitemap-line'), 'robots.txt with a missing or different Sitemap line is flagged');
+      check(codes(invS({ '/a': mk(), '/b': mk({ canonical: 'https://devmamflourishfoods.com/b', ogUrl: 'https://devmamflourishfoods.com/b' }) })).filter((c) => c === 'duplicate-title' || c === 'duplicate-description').length === 2, 'duplicate titles and descriptions are still detected');
+      check(codes(invS({ '/a': mk({ title: '', description: '' }) })).includes('title-missing') && codes(invS({ '/a': mk({ canonical: 'https://devmamflourishfoods.com/zzz' }) })).includes('canonical-mismatch'), 'missing and incorrect metadata are still detected');
+      const liveInv = await inventoryLib.build(site.base, { origin: 'https://devmamflourishfoods.com' }); check(auditInventory(liveInv, { origin: liveInv.origin }).length === 0, 'the real site (served locally) has no finding: the new audits create no false positives');
+
+      section('E15d: Search Console sitemap status and indexing discrepancies');
+      google.sitemapCount = liveInv.sitemapPaths.length;
+      s = scenario({ AUTOPILOT_NOW: '2026-10-13T04:00:00Z' }); await runCli(site, 'dry-run', s.env, root, s.state); r = await runCli(site, 'run', s.env, root, s.state); rep = jsonReport(s.state);
+      check(rep.sitemapStatus && rep.sitemapStatus.submitted === true && rep.sitemapStatus.errors === 0 && rep.sitemapStatus.problems.length === 0 && rep.indexing.length === 0 && !rep.health.some((i) => i.id === 'sitemap-status' || i.id === 'indexing'), 'healthy Search Console state: sitemap known, no errors, no discrepancy', JSON.stringify(rep.sitemapStatus) + JSON.stringify(rep.indexing));
+      google.mode = 'sitemaperr'; s = scenario({ AUTOPILOT_NOW: '2026-10-13T04:00:00Z' }); google.mode = 'sitemaperr'; await runCli(site, 'dry-run', s.env, root, s.state); r = await runCli(site, 'run', s.env, root, s.state); rep = jsonReport(s.state);
+      check(rep.sitemapStatus.errors === 2 && rep.sitemapStatus.problems.some((p) => /2 error/.test(p)) && rep.health.some((i) => i.id === 'sitemap-status' && i.level === 'warn'), 'sitemap errors reported by Google become a visible warning with a remedy', JSON.stringify(rep.sitemapStatus));
+      s = scenario({ AUTOPILOT_NOW: '2026-10-13T04:00:00Z' }); google.mode = 'sitemapnone'; await runCli(site, 'dry-run', s.env, root, s.state); r = await runCli(site, 'run', s.env, root, s.state); rep = jsonReport(s.state);
+      check(rep.sitemapStatus.submitted === false && rep.sitemapStatus.problems.some((p) => /no record/.test(p)), 'a sitemap Google has never seen is reported as such (not an error)');
+      s = scenario({ AUTOPILOT_NOW: '2026-10-13T04:00:00Z' }); google.mode = 'inspectbad'; await runCli(site, 'dry-run', s.env, root, s.state); r = await runCli(site, 'run', s.env, root, s.state); rep = jsonReport(s.state);
+      check(rep.indexing.length >= 1 && rep.indexing.some((x) => x.code === 'not-indexed') && rep.indexing.some((x) => x.code === 'canonical-differs') && rep.health.some((i) => i.id === 'indexing'), 'URL Inspection results that disagree with the site are reported as discrepancies', JSON.stringify(rep.indexing.slice(0, 2)));
+      check(!/guarantee|will be indexed/i.test(JSON.stringify(rep.health.filter((i) => i.id === 'indexing' || i.id === 'sitemap-status').map((i) => i.remedy)).replace(/not a (promise|guarantee)[^"]*/gi, '')), 'no message promises indexing');
+      const dsc = indexingLib.discrepancies([{ url: 'https://devmamflourishfoods.com/a', verdict: 'PASS', googleCanonical: 'https://devmamflourishfoods.com/a', userCanonical: 'https://devmamflourishfoods.com/a', robotsTxtState: 'ALLOWED', pageFetchState: 'SUCCESSFUL', indexingState: 'INDEXING_ALLOWED' }, { url: 'https://devmamflourishfoods.com/b', error: 'quota' }], { pages: { '/a': { indexable: true } } });
+      check(dsc.length === 0, 'inspection errors and passing pages produce no discrepancy');
+
+      section('E15e: the 19 commercial target keywords');
+      const KW = ['flour manufacturer India', 'flour supplier India', 'bulk flour supplier India', 'wholesale flour supplier', 'institutional flour supplier India', 'wheat flour supplier', 'flour mill manufacturer India', 'atta manufacturer India', 'bulk atta supplier', 'chakki atta supplier', 'maida manufacturer India', 'maida flour supplier', 'besan manufacturer India', 'besan supplier India', 'sooji manufacturer India', 'sooji supplier', 'semolina flour manufacturer', 'tandoori atta supplier', 'whole wheat flour manufacturer'];
+      const kfile = require('../autopilot/config').loadConfig({ AUTOPILOT_ENV_FILE: '/nonexistent' }).targetKeywordsFile; const kl = keywordsLib.readKeywords({ targetKeywordsFile: path.join(SRC, 'autopilot/target-keywords.txt') }).list;
+      check(kl.length === 19 && kl.join('|') === KW.map((k) => k.toLowerCase()).join('|'), 'the version-controlled keyword file holds exactly the 19 required keywords, in order', kl.join(', '));
+      check(/target-keywords\.txt$/.test(String(kfile)) && require('../autopilot/config').loadConfig({ AUTOPILOT_ENV_FILE: '/nonexistent', AUTOPILOT_TARGET_KEYWORDS_FILE: '' }).targetKeywordsFile === '', 'the default configuration uses the repository file; an empty AUTOPILOT_TARGET_KEYWORDS_FILE switches tracking off');
+      check(/AUTOPILOT_TARGET_KEYWORDS_FILE=\/var\/www\/mamta-bhoj-site\/autopilot\/target-keywords\.txt/.test(fs.readFileSync(path.join(SRC, 'deploy/autopilot/autopilot.env.example'), 'utf8')), 'the production environment template points AUTOPILOT_TARGET_KEYWORDS_FILE at that file');
+      const kdup = path.join(root, 'kw-dup.txt'); fs.writeFileSync(kdup, '# c\n\nFlour  Supplier India\nflour supplier india\n  besan supplier india  \n'); check(keywordsLib.readKeywords({ targetKeywordsFile: kdup }).list.join('|') === 'flour supplier india|besan supplier india', 'parsing ignores comments, blank lines, case, extra spaces and duplicates');
+      check(keywordsLib.readKeywords({ targetKeywordsFile: path.join(root, 'nope.txt') }).list.length === 0 && /cannot be read/.test(keywordsLib.readKeywords({ targetKeywordsFile: path.join(root, 'nope.txt') }).note), 'a missing keyword file is reported, not silently ignored');
+      check(keywordsLib.matches('flour manufacturer in india', 'flour manufacturer india') && keywordsLib.matches('best bulk atta suppliers', 'bulk atta supplier') && !keywordsLib.matches('maida', 'maida flour supplier') && keywordsLib.matchTarget('wholesale flour supplier in kanpur', KW.map((k) => k.toLowerCase())) === 'wholesale flour supplier', 'query-to-keyword matching: variants match, partial queries do not');
+      const tinv = (pages) => ({ pages: Object.fromEntries(Object.entries(pages).map(([p, v]) => [p, Object.assign({ title: '', description: '', h1: [], headings: [], text: '', indexable: true, inSitemap: true }, v)])) });
+      const supplyPage = { title: 'Bulk flour supplier India', h1: ['Bulk flour supplier India'], description: 'bulk flour supplier', text: 'bulk flour supplier india for bakeries' }; const guidePage = { title: 'Flour supplier India guide', h1: ['Flour supplier India: how to choose a flour supplier'], description: 'flour supplier india guide flour supplier', headings: [{ level: 2, text: 'flour supplier india' }], text: 'flour supplier india flour supplier choose a flour supplier in india' };
+      const cov = keywordsLib.coverage('flour supplier india', tinv({ '/bulk-flour-supplier-india': supplyPage, '/guides/how-to-choose-flour-supplier': guidePage })); check(cov.page === '/bulk-flour-supplier-india' && cov.competingGuide === '/guides/how-to-choose-flour-supplier', 'a supply keyword is mapped to the supply page; a guide that fits better is reported, not chosen', JSON.stringify(cov));
+      check(keywordsLib.coverage('zzz unrelated quantum', tinv({ '/a': supplyPage })).level === 'none', 'a keyword no page fits is reported as a content gap (never creates a page)');
+      const rowsC = [{ keys: ['flour manufacturer in india', 'https://devmamflourishfoods.com/guides/how-flour-is-made'], clicks: 3, impressions: 60, position: 12 }, { keys: ['flour manufacturer india', 'https://devmamflourishfoods.com/'], clicks: 1, impressions: 20, position: 9 }]; const rowsP = [{ keys: ['flour manufacturer india', 'https://devmamflourishfoods.com/'], clicks: 0, impressions: 30, position: 14 }];
+      const tr = keywordsLib.track({ targetKeywordsFile: path.join(SRC, 'autopilot/target-keywords.txt') }, rowsC, rowsP, { available: true }, liveInv); const k0 = tr.find((x) => x.keyword === 'flour manufacturer india');
+      check(tr.length === 19 && k0.status === 'data' && k0.current.impressions === 80 && k0.previous.impressions === 30 && k0.current.exact.impressions === 20 && k0.current.queryCount === 2 && k0.shownPage === '/guides/how-flour-is-made' && k0.mismatch === true && k0.coverage.page === '/flour-manufacturer-india' && k0.change.impressions === 50, 'all 19 keywords tracked: matching-query totals, exact totals, shown page, a page mismatch against the best-fitting page, period change', JSON.stringify(k0).slice(0, 500));
+      check(tr.filter((x) => x.status === 'no_impressions').length === 18 && tr.every((x) => x.coverage), 'the other 18 keywords are a true "no impressions" (not invented), each with a content-coverage verdict');
+      const tu = keywordsLib.track({ targetKeywordsFile: path.join(SRC, 'autopilot/target-keywords.txt') }, [], [], { available: false, status: 'auth_invalid' }, liveInv); check(tu.length === 19 && tu.every((x) => x.status === 'unavailable' && x.coverage.page), 'with unauthenticated Google data every keyword is "unavailable" (not zero) but the content coverage is still reported');
+      const oq = oppLib.analyse(rowsC, rowsP, liveInv, { limits: { minScore: 40 } }, { match: (q) => keywordsLib.matchTarget(q, KW.map((k) => k.toLowerCase())) }); const oq0 = oppLib.analyse(rowsC, rowsP, liveInv, { limits: { minScore: 40 } });
+      check(oq.every((o) => o.targetKeyword) && oq.every((o) => o.flags.includes('target keyword')) && oq[0].score >= oq0.find((o) => o.query === oq[0].query).score, 'opportunity analysis recognises target keywords (flag and a modest score boost)');
+      s = scenario({ AUTOPILOT_TARGET_KEYWORDS_FILE: path.join(SRC, 'autopilot/target-keywords.txt'), AUTOPILOT_NOW: '2026-10-13T04:00:00Z' }); await runCli(site, 'dry-run', s.env, root, s.state); await runCli(site, 'run', s.env, root, s.state); rep = jsonReport(s.state);
+      const md = fs.readFileSync(path.join(s.state, 'reports', fs.readdirSync(path.join(s.state, 'reports')).filter((n) => /^report-.*\.md$/.test(n)).sort().pop()), 'utf8');
+      check(rep.keywords.length === 19 && rep.keywords.every((k) => k.coverage) && /Target keywords/.test(md) && /flour manufacturer india/.test(md), 'a run reports all 19 keywords with Search Console data and content coverage', JSON.stringify(rep.keywords.map((k) => k.status)));
+
+      section('E15f: Semrush (fixtures only): missing key, no units, no data and real data are different states');
+      const smx = { mode: 'ok', calls: 0, urls: [] };
+      smx.server = http.createServer((req, res) => {
+        smx.calls++; smx.urls.push(req.url); const q = new URL(req.url, 'http://x'); const phrase = q.searchParams.get('phrase') || '';
+        if (smx.mode === 'rate') { res.writeHead(429); return res.end('slow down'); }
+        res.writeHead(200, { 'Content-Type': 'text/plain' });
+        if (smx.mode === 'units') return res.end('ERROR 132 :: API UNITS BALANCE IS ZERO');
+        if (smx.mode === 'badkey') return res.end('ERROR 120 :: WRONG KEY - ID PAIR');
+        if (smx.mode === 'nothing' || /zzz/.test(phrase)) return res.end('ERROR 50 :: NOTHING FOUND');
+        res.end(`Keyword;Search Volume;CPC;Competition\n${phrase};${phrase.length * 10};0.5;0.4\n`);
+      });
+      await new Promise((rs) => smx.server.listen(0, '127.0.0.1', rs)); cleanups.push(() => smx.server.close()); smx.base = `http://127.0.0.1:${smx.server.address().port}`;
+      const SKEY = 'semrush-key-0123456789abcdef'; const scfg = (extra) => ({ semrush: Object.assign({ apiKey: SKEY, base: smx.base, database: 'in', maxKeywords: 19 }, extra || {}) });
+      let sc0 = await semrushLib.collect({ semrush: { apiKey: '' } }, KW, null); check(sc0.status === 'not_configured' && sc0.items.length === 0 && smx.calls === 0, 'no API key: not_configured, no request is made, and nothing is reported as zero');
+      const cdir = path.join(root, 'semcache'); smx.calls = 0; let sc1 = await semrushLib.collect(scfg(), ['flour supplier india', 'zzz nothing here'], cdir);
+      check(sc1.status === 'ok' && sc1.items[0].state === 'data' && sc1.items[0].volume === 200 && sc1.items[1].state === 'no_data' && smx.calls === 2, 'ok: a number for a keyword with data, "no_data" for a keyword Semrush has nothing on (ERROR 50 is a genuine absence)', JSON.stringify(sc1));
+      smx.calls = 0; const sc1b = await semrushLib.collect(scfg(), ['flour supplier india', 'zzz nothing here'], cdir); check(smx.calls === 0 && sc1b.items.every((i) => i.cached), 'results are cached 7 days: a second collection spends no API units');
+      smx.mode = 'units'; smx.calls = 0; const sc2 = await semrushLib.collect(scfg(), KW, null); check(sc2.status === 'no_units' && sc2.items.length === 19 && sc2.items.every((i) => i.state === 'unavailable') && smx.calls === 1 && /not a zero/.test(sc2.remedy), 'zero API units: status no_units, every keyword "unavailable" (never 0), and the batch stops after one request', JSON.stringify(sc2).slice(0, 300));
+      smx.mode = 'badkey'; smx.calls = 0; const sc3 = await semrushLib.collect(scfg(), KW, null); check(sc3.status === 'auth_invalid' && smx.calls === 1 && !JSON.stringify(sc3).includes(SKEY), 'wrong key: auth_invalid, one request, and the key is never in the result');
+      smx.mode = 'rate'; smx.calls = 0; process.env.AUTOPILOT_RETRY_BASE_MS = '5'; const sc4 = await semrushLib.collect(scfg(), KW, null); check(sc4.status === 'rate_limited' && smx.calls === 3, 'HTTP 429: bounded retries, then rate_limited', String(smx.calls));
+      const sc5 = await semrushLib.collect(scfg({ base: 'http://127.0.0.1:1' }), KW, null); check(sc5.status === 'network' && sc5.items.every((i) => i.state === 'unavailable'), 'unreachable API: network, all unavailable');
+      check(semrushLib.parse(200, 'ERROR 131 :: LIMIT EXCEEDED').kind === 'rate_limited' && semrushLib.parse(200, 'ERROR 999 :: ???').kind === 'api_error' && semrushLib.parse(200, 'garbage').kind === 'api_error', 'other Semrush answers are classified conservatively');
+      smx.mode = 'ok'; s = scenario({ AUTOPILOT_TARGET_KEYWORDS_FILE: path.join(SRC, 'autopilot/target-keywords.txt'), AUTOPILOT_SEMRUSH_API_KEY: SKEY, AUTOPILOT_SEMRUSH_BASE: smx.base, AUTOPILOT_NOW: '2026-10-13T04:00:00Z' }); await runCli(site, 'dry-run', s.env, root, s.state); r = await runCli(site, 'run', s.env, root, s.state); rep = jsonReport(s.state);
+      check(rep.semrush.status === 'ok' && rep.semrush.items.length === 19 && rep.keywords.every((k) => k.semrush && k.semrush.state === 'data') && !JSON.stringify(rep).includes(SKEY) && !r.out.includes(SKEY), 'a run attaches Semrush volume to the 19 keywords and never writes the key into the report or output');
+      smx.mode = 'units'; s = scenario({ AUTOPILOT_TARGET_KEYWORDS_FILE: path.join(SRC, 'autopilot/target-keywords.txt'), AUTOPILOT_SEMRUSH_API_KEY: SKEY, AUTOPILOT_SEMRUSH_BASE: smx.base, AUTOPILOT_NOW: '2026-10-13T04:00:00Z' }); await runCli(site, 'dry-run', s.env, root, s.state); r = await runCli(site, 'run', s.env, root, s.state); rep = jsonReport(s.state);
+      const md2 = fs.readFileSync(path.join(s.state, 'reports', fs.readdirSync(path.join(s.state, 'reports')).filter((n) => /^report-.*\.md$/.test(n)).sort().pop()), 'utf8');
+      check(rep.semrush.status === 'no_units' && rep.health.some((i) => i.id === 'semrush' && i.level === 'warn') && /NOT MEASURED/.test(md2) && r.code === 0, 'a run with no Semrush units degrades visibly ("NOT MEASURED"), does not fail, and shows no invented volume');
+      untouched('E15'); resetOrigin();
+    }
+
     // ---- E12 optional: real project suites as gates
     if (FULL && want('full')) {
       section('E12: the project\'s real SEO hard check and enquiry tests run as gates in the worktree');
@@ -705,6 +843,12 @@ const cleanBranches = (repo) => { try { git(repo, 'worktree', 'prune'); } catch 
       check(/AUTOPILOT_MODE=propose/.test(fs.readFileSync(path.join(pre, 'etc/mamta-autopilot/autopilot.env'), 'utf8')), 're-running the installer keeps an existing credentials file');
       const an = spawnSync('systemd-analyze', ['verify', path.join(pre, 'etc/systemd/system/mamta-autopilot.timer'), path.join(pre, 'etc/systemd/system/mamta-autopilot.service')], { encoding: 'utf8' });
       if (an.error) console.log('  (systemd-analyze not available here; unit syntax verified structurally only)'); else check(!/fatal|Unknown|error/i.test((an.stdout || '') + (an.stderr || '')), 'systemd-analyze verify accepts the rendered units', (an.stdout || '') + (an.stderr || ''));
+      check(!fs.existsSync(path.join(pre, 'etc/systemd/system/mamta-autopilot.service.d')), 'a default install adds NO write-access drop-in (automatic publishing is opt-in)');
+      const pre2 = path.join(root, 'prefix-auto'); r = sh('install-autopilot.sh', ['--user', 'deploy', '--prefix', pre2, '--node', process.execPath, '--repo', SRC, '--auto-publish', '--pm2-home', '/home/deploy/.pm2']);
+      const dropin = path.join(pre2, 'etc/systemd/system/mamta-autopilot.service.d/auto-publish.conf'); const di = fs.existsSync(dropin) ? fs.readFileSync(dropin, 'utf8') : '';
+      const rw = (di.match(/^ReadWritePaths=(.*)$/m) || [])[1] || '';
+      check(r.status === 0 && /\/views/.test(rw) && /\/home\/deploy\/\.pm2/.test(rw) && rw.trim().split(/\s+/).length === 2 && !/data|uploads|\.env|routes|lib\b|middleware/.test(rw) && !/@[A-Z0-9]+@/.test(di), '--auto-publish installs a drop-in granting write access to exactly two paths (the SEO view files and the service user\'s PM2 home)', r.stdout + r.stderr + di);
+      check(/AUTOPILOT_MODE=auto is set AND/.test(r.stdout) && /MODE=report/.test(fs.readFileSync(path.join(pre2, 'etc/mamta-autopilot/autopilot.env'), 'utf8')) && /^AUTOPILOT_MODE=report/m.test(fs.readFileSync(path.join(pre2, 'etc/mamta-autopilot/autopilot.env'), 'utf8')), 'the installer never switches the mode: it stays report-only and says publishing also needs activate-auto');
       r = sh('uninstall-autopilot.sh', ['--prefix', pre]); check(r.status === 0 && !fs.existsSync(path.join(pre, 'etc/systemd/system/mamta-autopilot.timer')) && fs.existsSync(path.join(pre, 'etc/mamta-autopilot/autopilot.env')), 'uninstall removes the units and keeps credentials and state by default', r.stdout + r.stderr);
       r = sh('uninstall-autopilot.sh', ['--prefix', pre, '--purge', '--state-dir', '/var/lib/mamta-autopilot-test']); check(!fs.existsSync(path.join(pre, 'etc/mamta-autopilot')), 'uninstall --purge removes the credentials directory');
 

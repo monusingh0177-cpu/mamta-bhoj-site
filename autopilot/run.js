@@ -26,6 +26,8 @@ const weekly = require('./lib/weekly');
 const remediateLib = require('./lib/remediate');
 const publishLib = require('./lib/publish');
 const keywordsLib = require('./lib/keywords');
+const indexingLib = require('./lib/indexing');
+const semrushLib = require('./lib/semrush');
 
 const RUNTIME_DATA = /^(data\/|public\/uploads\/)/;
 const IMPORTANT = ['/', '/flour-manufacturer-india', '/bulk-flour-supplier-india', '/wholesale-flour-supplier', '/institutional-flour-supplier', '/supply-distribution-india', '/flour-manufacturer-kanpur', '/products/fresh-chakki-atta', '/products/maida', '/products/besan', '/products/sooji-rava', '/products/tandoori-atta', '/products', '/contact'];
@@ -46,7 +48,7 @@ async function runOnce(cfg, opts) {
   const dryRun = Boolean(o.dryRun);
   const initial = !st.initialAuditDone;
   const effectiveMode = dryRun || initial || cfg.mode === 'report' ? 'report-only' : cfg.mode; // report-only | propose | auto
-  const R = { runId, date, startedAt: new Date().toISOString(), mode: cfg.mode, publish: cfg.publish, effectiveMode, dryRun, initialRun: initial, stops: [], repo: {}, gsc: { available: false, status: 'unknown', reason: '' }, opportunities: [], risingCommercial: [], newQueries: [], pageMovement: [], changes: [], notChanged: [], newPageProposals: [], findings: [], auditSummary: { critical: 0, high: 0, medium: 0, low: 0 }, inventory: {}, indexnow: { keyVerified: false, keyDetail: '', submissions: [] }, sitemapSubmission: { status: 'not attempted' }, inspections: [], rollbacks: [], gates: [], smoke: [], ai: { note: '', status: cfg.ai.mode === 'none' ? 'none' : 'unused' }, errors: [], fixes: [], keywords: [], lostQueries: [], auto: { mode: cfg.mode, effective: effectiveMode, enabled: false, reason: '', paused: st.autoPaused || null, published: [], rolledBack: [] } };
+  const R = { runId, date, startedAt: new Date().toISOString(), mode: cfg.mode, publish: cfg.publish, effectiveMode, dryRun, initialRun: initial, stops: [], repo: {}, gsc: { available: false, status: 'unknown', reason: '' }, opportunities: [], risingCommercial: [], newQueries: [], pageMovement: [], changes: [], notChanged: [], newPageProposals: [], findings: [], auditSummary: { critical: 0, high: 0, medium: 0, low: 0 }, inventory: {}, indexnow: { keyVerified: false, keyDetail: '', submissions: [] }, sitemapSubmission: { status: 'not attempted' }, inspections: [], rollbacks: [], semrush: { status: 'not_configured', items: [] }, indexing: [], sitemapStatus: null, gates: [], smoke: [], ai: { note: '', status: cfg.ai.mode === 'none' ? 'none' : 'unused' }, errors: [], fixes: [], keywords: [], lostQueries: [], auto: { mode: cfg.mode, effective: effectiveMode, enabled: false, reason: '', paused: st.autoPaused || null, published: [], rolledBack: [] } };
   const A = (event, data) => state.audit(cfg, runId, event, data);
   A('run_start', { mode: cfg.mode, effectiveMode, dryRun, initial, publish: cfg.publish });
   if (cfg.envFileWarning) R.errors.push(cfg.envFileWarning);
@@ -138,7 +140,8 @@ async function runOnce(cfg, opts) {
 
   // ---- opportunities
   if (R.gsc.available) {
-    const all = opp.analyse(curRows, prevRows, inv, cfg);
+    const targetList = keywordsLib.readKeywords(cfg).list;
+    const all = opp.analyse(curRows, prevRows, inv, cfg, { match: (q) => keywordsLib.matchTarget(q, targetList) });
     R.opportunities = all.filter((x) => x.relevant).slice(0, 25);
     R.risingCommercial = all.filter((x) => x.kind === 'commercial' && x.flags.includes('rising impressions')).slice(0, 10);
     R.newQueries = all.filter((x) => x.prevImpressions == null).slice(0, 10);
@@ -149,7 +152,10 @@ async function runOnce(cfg, opts) {
     }));
     R.lostQueries = keywordsLib.lostQueries(curRows, prevRows);
   } else R.ai.note = 'No Search Console data, so no opportunities were scored.';
-  R.keywords = keywordsLib.track(cfg, curRows, prevRows, R.gsc);
+  R.keywords = keywordsLib.track(cfg, curRows, prevRows, R.gsc, inv);
+  // optional Semrush market data (estimated volume only; separate states for no key / no units / no data)
+  R.semrush = await semrushLib.collect(cfg, R.keywords.map((k) => k.keyword), files.cache);
+  for (const it of R.semrush.items) { const k = R.keywords.find((x) => x.keyword === it.keyword); if (k) k.semrush = { state: it.state, volume: it.volume == null ? null : it.volume }; }
   if (R.gsc.status === 'ok_no_data') R.ai.note = 'Search Console is connected but returned no traffic data for the window (not an error), so no opportunities were scored.';
 
   // ---- proposals (separate branch only)
@@ -242,6 +248,13 @@ async function runOnce(cfg, opts) {
       try { const r = await gsc.inspect(url); st.inspections[p] = { at: Date.now(), result: r }; R.inspections.push(Object.assign({ url }, r)); n++; }
       catch (e) { R.inspections.push({ url, error: e.message }); if (/429|403/.test(e.message)) break; }
     }
+  }
+
+  // ---- Google's view of the sitemap and of key pages (read-only): problems are reported, never assumed
+  if (gsc.configured() && R.gsc.available) {
+    try { R.sitemapStatus = await gsc.sitemapStatus(`${cfg.siteOrigin}/sitemap.xml`); R.sitemapStatus.problems = indexingLib.sitemapProblems(R.sitemapStatus, inv).problems; }
+    catch (e) { R.sitemapStatus = { error: e.message, problems: [] }; }
+    R.indexing = indexingLib.discrepancies(R.inspections, inv);
   }
 
   if (!R.ai.note) R.ai.note = cfg.ai.mode === 'none' ? 'No AI integration configured: patch generation is report-only.' : `AI mode: ${cfg.ai.mode}. The model only receives the minimal page/query context; its output is a validated patch object.`;
