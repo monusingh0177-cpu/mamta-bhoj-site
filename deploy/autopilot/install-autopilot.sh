@@ -26,9 +26,21 @@ while [ $# -gt 0 ]; do
   esac
 done
 [ -n "$SERVICE_USER" ] || { echo "ERROR: --user <account that owns $REPO> is required" >&2; exit 2; }
+# least privilege: the service must be an ordinary account, never root
+case "$SERVICE_USER" in root|0) echo "ERROR: --user root is refused: the autopilot must run as an unprivileged account (least privilege)" >&2; exit 2 ;; esac
+[[ "$SERVICE_USER" =~ ^[A-Za-z_][A-Za-z0-9._-]*$ ]] || { echo "ERROR: --user '$SERVICE_USER' is not a valid account name" >&2; exit 2; }
 [ -n "$NODE_BIN" ] && [ -x "$NODE_BIN" ] || { echo "ERROR: node not found; pass --node /path/to/node" >&2; exit 2; }
 [ -f "$REPO/autopilot/cli.js" ] || { echo "ERROR: $REPO/autopilot/cli.js not found" >&2; exit 2; }
+# A real install writes these paths into a systemd unit (ExecStart= is split on spaces and expands % and $), so refuse
+# anything that is not plain. (A scratch --prefix install or a --dry-run only renders text, so it is not restricted.)
+if [ "$DRY" -eq 0 ] && [ -z "$PREFIX" ]; then
+  for v in "$REPO" "$STATE" "$NODE_BIN"; do
+    [[ "$v" =~ ^/[A-Za-z0-9._/+@:-]*$ ]] || { echo "ERROR: unsafe path for a systemd unit: '$v' (use an absolute path without spaces or shell/systemd special characters)" >&2; exit 2; }
+  done
+fi
 if [ "$DRY" -eq 0 ] && [ -z "$PREFIX" ] && [ "$(id -u)" -ne 0 ]; then echo "ERROR: run with sudo (or use --dry-run)" >&2; exit 2; fi
+# values substituted into the unit files: escape the characters sed treats specially (backslash, &, and the # delimiter)
+sedq() { printf '%s' "$1" | sed -e 's/[\\&#]/\\&/g'; }
 ETC="$PREFIX/etc/mamta-autopilot"; UNITS="$PREFIX/etc/systemd/system"; STATE_DIR="$PREFIX$STATE"
 say() { echo "  $*"; }
 do_() { if [ "$DRY" -eq 1 ]; then say "[dry-run] $*"; else eval "$@"; fi; }
@@ -43,7 +55,7 @@ else say "keeping existing $ETC/autopilot.env"; fi
 [ -n "$PREFIX" ] || do_ "chown '$SERVICE_USER' '$STATE_DIR' && chmod 750 '$STATE_DIR'"
 for u in mamta-autopilot.service mamta-autopilot.timer; do
   if [ "$DRY" -eq 1 ]; then say "[dry-run] write $UNITS/$u"; else
-    sed -e "s#@REPO@#$REPO#g" -e "s#@USER@#$SERVICE_USER#g" -e "s#@STATE@#$STATE#g" -e "s#@NODE@#$NODE_BIN#g" "$REPO/deploy/autopilot/$u" > "$UNITS/$u"; chmod 644 "$UNITS/$u"; say "wrote $UNITS/$u"
+    sed -e "s#@REPO@#$(sedq "$REPO")#g" -e "s#@USER@#$(sedq "$SERVICE_USER")#g" -e "s#@STATE@#$(sedq "$STATE")#g" -e "s#@NODE@#$(sedq "$NODE_BIN")#g" "$REPO/deploy/autopilot/$u" > "$UNITS/$u"; chmod 644 "$UNITS/$u"; say "wrote $UNITS/$u"
   fi
 done
 if [ "$AUTO" -eq 1 ]; then
@@ -51,7 +63,7 @@ if [ "$AUTO" -eq 1 ]; then
   DROPIN="$UNITS/mamta-autopilot.service.d"
   if [ "$DRY" -eq 1 ]; then say "[dry-run] write $DROPIN/auto-publish.conf (extra write access: $REPO/views and $PM2HOME only)"; else
     mkdir -p "$DROPIN"
-    sed -e "s#@REPO@#$REPO#g" -e "s#@PM2HOME@#$PM2HOME#g" "$REPO/deploy/autopilot/auto-publish.conf" > "$DROPIN/auto-publish.conf"; chmod 644 "$DROPIN/auto-publish.conf"; say "wrote $DROPIN/auto-publish.conf"
+    sed -e "s#@REPO@#$(sedq "$REPO")#g" -e "s#@PM2HOME@#$(sedq "$PM2HOME")#g" "$REPO/deploy/autopilot/auto-publish.conf" > "$DROPIN/auto-publish.conf"; chmod 644 "$DROPIN/auto-publish.conf"; say "wrote $DROPIN/auto-publish.conf"
   fi
   say "This only grants write access. Publishing stays OFF until AUTOPILOT_MODE=auto is set AND: node $REPO/autopilot/cli.js activate-auto passes (docs/seo-autopilot.md)"
 fi
