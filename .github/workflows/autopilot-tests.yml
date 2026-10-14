@@ -1,0 +1,42 @@
+name: autopilot-tests
+
+# Linux coverage for the SEO autopilot: the full test suite (installer, unit file, systemd-analyze, credentials-file mode, one-shot
+# run) plus the secret-scan and shell-syntax checks. Nothing here deploys, touches a server or needs a secret: the suite uses fake
+# Google/AI/IndexNow services and a throw-away git repository.
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main, 'fix/**', 'feature/**']
+  workflow_dispatch:
+
+# least privilege: the default token can only read the repository
+permissions:
+  contents: read
+
+# a newer push to the same branch or PR supersedes an older run
+concurrency:
+  group: autopilot-tests-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Linux (Ubuntu) autopilot tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Shell syntax
+        run: |
+          for f in scripts/*.sh deploy/autopilot/*.sh; do bash -n "$f"; done
+      - name: Secret-scan tests
+        run: bash scripts/test-secret-scan.sh
+      - name: Autopilot tests (installer, systemd-analyze, file modes, one-shot run)
+        run: node scripts/test-autopilot.js
