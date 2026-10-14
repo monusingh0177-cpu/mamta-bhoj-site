@@ -17,7 +17,7 @@ function init(cfg) {
   return p;
 }
 
-const EMPTY = () => ({ version: 1, initialAuditDone: false, createdAt: new Date().toISOString(), hashes: {}, pageCount: null, history: [], inspections: {}, lastRun: null, lastNewPageAt: null, lastHealth: null, lastWeekly: null });
+const EMPTY = () => ({ version: 1, initialAuditDone: false, createdAt: new Date().toISOString(), hashes: {}, pageCount: null, history: [], inspections: {}, lastRun: null, lastNewPageAt: null, lastHealth: null, lastWeekly: null, autoPaused: null });
 
 function load(cfg) { return Object.assign(EMPTY(), readJson(paths(cfg).state, {})); }
 function save(cfg, st) { writeJson(paths(cfg).state, st); }
@@ -87,8 +87,10 @@ function trimLedger(cfg, keep) {
 }
 
 // ---- edit limits (max pages per day, per-page cooldown, new-page window)
-const COUNTED = ['proposed', 'applied'];
-function appliedOn(st, date) { return st.history.filter((h) => COUNTED.includes(h.status) && h.date === date); }
+const COUNTED = ['proposed', 'applied', 'published'];
+// deterministic internal-link fixes (kind 'related') have their own daily budget (cfg.limits.fixesPerDay) and do not use up the content-edit budget
+function appliedOn(st, date) { return st.history.filter((h) => COUNTED.includes(h.status) && h.date === date && h.kind !== 'related'); }
+function fixesToday(st, date) { return st.history.filter((h) => COUNTED.includes(h.status) && h.date === date && h.kind === 'related').length; }
 function limitStatus(cfg, st, date) {
   const todayPages = new Set(appliedOn(st, date).map((h) => h.page));
   return { pagesToday: todayPages.size, remainingToday: Math.max(0, cfg.limits.pagesPerDay - todayPages.size) };
@@ -114,4 +116,4 @@ function rotate(cfg, dateStr) {
   return removed;
 }
 
-module.exports = { LOCK_MAX_AGE_MS, recordRun, readLedger, trimLedger, paths, init, load, save, loadLastmod, saveLastmod, isDisabled, setEnabled, acquireLock, releaseLock, audit, readAudit, limitStatus, onCooldown, newPageAllowed, rotate, appliedOn };
+module.exports = { LOCK_MAX_AGE_MS, recordRun, readLedger, trimLedger, paths, init, load, save, loadLastmod, saveLastmod, isDisabled, setEnabled, acquireLock, releaseLock, audit, readAudit, limitStatus, fixesToday, onCooldown, newPageAllowed, rotate, appliedOn };

@@ -23,6 +23,9 @@ const git = require('./lib/git');
 const { today, addDays, writeJson, zonedDate } = require('./lib/util');
 const health = require('./lib/health');
 const weekly = require('./lib/weekly');
+const remediateLib = require('./lib/remediate');
+const publishLib = require('./lib/publish');
+const keywordsLib = require('./lib/keywords');
 
 const RUNTIME_DATA = /^(data\/|public\/uploads\/)/;
 const IMPORTANT = ['/', '/flour-manufacturer-india', '/bulk-flour-supplier-india', '/wholesale-flour-supplier', '/institutional-flour-supplier', '/supply-distribution-india', '/flour-manufacturer-kanpur', '/products/fresh-chakki-atta', '/products/maida', '/products/besan', '/products/sooji-rava', '/products/tandoori-atta', '/products', '/contact'];
@@ -42,8 +45,8 @@ async function runOnce(cfg, opts) {
   const date = today(cfg.now);
   const dryRun = Boolean(o.dryRun);
   const initial = !st.initialAuditDone;
-  const effectiveMode = dryRun || initial || cfg.mode !== 'propose' ? 'report-only' : 'propose';
-  const R = { runId, date, startedAt: new Date().toISOString(), mode: cfg.mode, publish: cfg.publish, effectiveMode, dryRun, initialRun: initial, stops: [], repo: {}, gsc: { available: false, status: 'unknown', reason: '' }, opportunities: [], risingCommercial: [], newQueries: [], pageMovement: [], changes: [], notChanged: [], newPageProposals: [], findings: [], auditSummary: { critical: 0, high: 0, medium: 0, low: 0 }, inventory: {}, indexnow: { keyVerified: false, keyDetail: '', submissions: [] }, sitemapSubmission: { status: 'not attempted' }, inspections: [], rollbacks: [], gates: [], smoke: [], ai: { note: '', status: cfg.ai.mode === 'none' ? 'none' : 'unused' }, errors: [] };
+  const effectiveMode = dryRun || initial || cfg.mode === 'report' ? 'report-only' : cfg.mode; // report-only | propose | auto
+  const R = { runId, date, startedAt: new Date().toISOString(), mode: cfg.mode, publish: cfg.publish, effectiveMode, dryRun, initialRun: initial, stops: [], repo: {}, gsc: { available: false, status: 'unknown', reason: '' }, opportunities: [], risingCommercial: [], newQueries: [], pageMovement: [], changes: [], notChanged: [], newPageProposals: [], findings: [], auditSummary: { critical: 0, high: 0, medium: 0, low: 0 }, inventory: {}, indexnow: { keyVerified: false, keyDetail: '', submissions: [] }, sitemapSubmission: { status: 'not attempted' }, inspections: [], rollbacks: [], gates: [], smoke: [], ai: { note: '', status: cfg.ai.mode === 'none' ? 'none' : 'unused' }, errors: [], fixes: [], keywords: [], lostQueries: [], auto: { mode: cfg.mode, effective: effectiveMode, enabled: false, reason: '', paused: st.autoPaused || null, published: [], rolledBack: [] } };
   const A = (event, data) => state.audit(cfg, runId, event, data);
   A('run_start', { mode: cfg.mode, effectiveMode, dryRun, initial, publish: cfg.publish });
   if (cfg.envFileWarning) R.errors.push(cfg.envFileWarning);
@@ -72,7 +75,7 @@ async function runOnce(cfg, opts) {
   };
 
   if (!o.manual && state.isDisabled(cfg)) { A('skipped', { reason: 'autopilot is disabled' }); R.stops.push('autopilot is disabled (run npm run seo:enable)'); R.skipped = true; return finish(); }
-  if (cfg.publish === 'auto') R.stops.push('publish=auto (autonomous publishing) is not available in this build: patches are only proposed on a separate branch');
+  if (cfg.publish === 'auto') R.stops.push('AUTOPILOT_PUBLISH=auto (autonomous publishing) is not a switch: automatic publication is enabled only by AUTOPILOT_MODE=auto together with AUTOPILOT_RESTART_CMD; nothing is proposed or published until AUTOPILOT_PUBLISH is removed');
 
   // ---- preflight: production repository must be clean (runtime data/uploads are ignored) and untouched by us
   try {
@@ -90,7 +93,7 @@ async function runOnce(cfg, opts) {
   R.inventory = { pageCount: inv.sitemapPaths.length, indexablePages: Object.values(inv.pages).filter((p) => p.indexable).length, nonOk: inv.nonOk };
   writeJson(`${files.snapshots}/inventory-${date}.json`, inventory.compact(inv));
   if (st.pageCount != null && st.pageCount !== inv.sitemapPaths.length) R.stops.push(`page count changed unexpectedly (${st.pageCount} -> ${inv.sitemapPaths.length}); review it, then run: node autopilot/cli.js baseline`);
-  R.findings = auditInventory(inv, { origin: cfg.siteOrigin });
+  R.findings = auditInventory(inv, { origin: cfg.siteOrigin, minInlinks: cfg.minInlinks });
   for (const f of R.findings) R.auditSummary[f.severity] = (R.auditSummary[f.severity] || 0) + 1;
   const critical = R.findings.filter((f) => f.severity === 'critical');
   if (critical.length) R.stops.push(`critical audit finding(s): ${critical.slice(0, 3).map((f) => `${f.path} ${f.code}`).join('; ')}`);
@@ -144,17 +147,29 @@ async function runOnce(cfg, opts) {
       query: x.query, verdict: 'proposal only: a person must supply the facts and approve; new pages are never created automatically',
       gates: [{ name: 'high-confidence cluster', ok: x.score >= cfg.limits.minScore && x.impressions >= 10 }, { name: 'no cannibalisation', ok: x.cannibalRisk < 0.3 && x.bestPageFit < 0.15 }, { name: 'commercially relevant', ok: x.kind === 'commercial' || x.kind === 'product' }, { name: 'no location/doorway intent', ok: checkClaims(x.query, '/').length === 0 }, { name: 'rate limit (1 per 7 days)', ok: state.newPageAllowed(cfg, st, date) }, { name: 'real facts available (human check)', ok: false }],
     }));
+    R.lostQueries = keywordsLib.lostQueries(curRows, prevRows);
   } else R.ai.note = 'No Search Console data, so no opportunities were scored.';
+  R.keywords = keywordsLib.track(cfg, curRows, prevRows, R.gsc);
   if (R.gsc.status === 'ok_no_data') R.ai.note = 'Search Console is connected but returned no traffic data for the window (not an error), so no opportunities were scored.';
 
   // ---- proposals (separate branch only)
-  let blocked = R.stops.length > 0 || effectiveMode !== 'propose';
+  let blocked = R.stops.length > 0 || effectiveMode === 'report-only';
   if (initial) R.notChanged.push({ page: '(all)', reason: 'first run: audit and baseline only, nothing is proposed' });
   if (dryRun) R.notChanged.push({ page: '(all)', reason: 'dry run: no branch, no submission, no lastmod' });
+  // ---- deterministic remediation (no AI): audit finding / opportunity -> validated patch -> gates -> [auto] publish + live verification
+  if (effectiveMode !== 'report-only') {
+    const hard = R.stops.filter((x) => !/^(Google API auth is unavailable|IndexNow key cannot)/.test(x));
+    if (hard.length) { R.auto.reason = 'stop conditions block remediation: ' + hard[0]; }
+    else {
+      const rr = await remediateLib.remediate({ cfg, R, st, inv, date, runId, A, remaining: state.limitStatus(cfg, st, date).remainingToday, effectiveMode, changedUrls });
+      inv = rr.inv; if (rr.blocked) blocked = true;
+    }
+  } else R.auto.reason = dryRun ? 'dry run: nothing is applied' : initial ? 'first run: audit and baseline only' : `AUTOPILOT_MODE=${cfg.mode}: report only`;
+
   if (!blocked) {
     const openBranches = (() => { try { return branchLib.list(cfg); } catch (e) { return []; } })();
     let remaining = state.limitStatus(cfg, st, date).remainingToday; const chosen = new Set();
-    for (const op of R.opportunities.filter((x) => /improve existing page/.test(x.action))) {
+    for (const op of (blocked ? [] : R.opportunities.filter((x) => /improve existing page/.test(x.action)))) {
       const page = op.bestPage; if (!page || chosen.has(page)) continue;
       if (remaining <= 0) { R.notChanged.push({ query: op.query, reason: `daily limit of ${cfg.limits.pagesPerDay} proposed pages reached` }); continue; }
       const cd = state.onCooldown(cfg, st, page, date); if (cd) { R.notChanged.push({ page, reason: `proposal on ${cd.last}; cooldown until ${cd.until}` }); continue; }

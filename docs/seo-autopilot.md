@@ -20,7 +20,10 @@ Node tool in `autopilot/` and does not change that architecture.
 |---|---|
 | `AUTOPILOT_MODE=report` (default) | audit + report + IndexNow/sitemap/URL Inspection. No patches. |
 | `AUTOPILOT_MODE=propose` | additionally generates a patch with the AI, validates it, applies it **in a separate git worktree**, runs all quality gates and commits it **only to a branch** `seo-autopilot/<date>-<page>-<id>`. |
-| `AUTOPILOT_PUBLISH=auto` | reserved for a future, separately reviewed feature. This build refuses it and reports a stop condition. |
+| `AUTOPILOT_MODE=auto` | everything `propose` does, **and** publishes the eligible fixes without approval: gates -> fast-forward -> restart -> live verification -> push, with automatic rollback (see "Automatic publishing" below). Needs `AUTOPILOT_RESTART_CMD` and extra write access; until both exist it behaves like `propose` and says so in the report. |
+| `AUTOPILOT_PUBLISH=auto` | **not a switch.** It is refused and reported as a stop condition; use `AUTOPILOT_MODE=auto`. |
+
+`propose` and `auto` also run the deterministic fixer (no AI needed) described below. Every mode is report-only for the very first run and for `dry-run`.
 
 The first run is always audit-only: it builds the inventory, verifies IndexNow and Google access, saves the baseline and
 must pass before any proposal is allowed.
@@ -74,6 +77,44 @@ Check it any time, without printing a credential: `node autopilot/cli.js verify-
 
 **Weekly trend report.** `weekly-YYYY-MM-DD.md/.json` in the reports folder, created on the first run of each week (Monday, India time) from the stored daily reports: 28-day rolling Search Console totals and week-over-week change, pages gaining/losing impressions, rising commercial queries, top opportunities, indexing status of key pages, audit trend, operational problems and proposals. `node autopilot/cli.js weekly` builds it on demand. It contains no ranking or indexing promises.
 
+## Automatic remediation and publishing
+
+**Discovery -> proposal.** `lib/fixers.js` turns facts into patches without an AI. Implemented fixer, `related-link`: a guide with fewer internal links pointing to it than `AUTOPILOT_MIN_INLINKS` (audit finding `few-inlinks`, default 3), or the best page for a rising commercial query with fewer than `AUTOPILOT_OPPORTUNITY_INLINKS` (default 5), is added to the `related: [...]` list of the most topically close guide (shared product topic) that does not link to it yet. That list renders real `<a href>` links. The patch appends exactly one existing guide slug, never exceeds 5 entries, and is checked by `patch.validate` (allow-listed file, inside that guide's block, slug exists, no self link, nothing removed, claims check). No new wording is created. One fix per day by default (`AUTOPILOT_MAX_FIXES_PER_DAY`), per-page and per-target cooldown (`AUTOPILOT_COOLDOWN_DAYS`), nothing is re-applied.
+
+**Proposal -> gates.** The patch is applied in an isolated git worktree and must pass every gate (allow-listed unprotected files only, syntax, rendered preview, sitemap/robots, page count, no new critical/high audit defect, schema, the project's SEO hard check and enquiry tests). A failing fix is discarded and nothing is applied.
+
+**Gates -> publication (`AUTOPILOT_MODE=auto` only).** `lib/publish.js`:
+
+1. *preflight* - production checkout on `main`, tracked tree clean (`data/` and uploads are ignored, so the server's modified `data/admin.json` and its backups never block and are never touched), `git fetch` and `HEAD == origin/main`, the fix is exactly one commit on top of `HEAD`, 1-3 files, all allow-listed and none protected (`data/`, uploads, `.env*`, auth, session, mailer, admin, middleware, payroll). Any failure: nothing changes, the fix stays a review branch.
+2. *merge* - `git merge --ff-only` (never reset/clean/stash).
+3. *restart* - `AUTOPILOT_RESTART_CMD`.
+4. *verify-live* - the site answers, the public smoke test passes, the changed page really contains the new link, no new critical/high audit defect on the live site, and (when `AUTOPILOT_GATE_HARDCHECK` is on) `scripts/seo-health-check.sh` passes against the live URL.
+5. *push* - `git push origin <sha>:main`, so GitHub only ever receives a commit that was verified live.
+
+Then the changed URL is submitted to IndexNow and the sitemap to Google as before (a submission, not a promise of crawling or indexing).
+
+**Failure -> rollback.** If merge, restart, live verification or push fails, `git reset --keep <previous commit>` (refuses to overwrite local edits), restart, verify the old site is serving. The run is `degraded` with a "release rolled back" item and an alert, **publishing is paused** (circuit breaker) until a person has looked and run `node autopilot/cli.js resume-auto`, and while paused fixes are only prepared as review branches. If the rollback itself fails, the run is `failed` (exit 1) with a "fail" item and an alert. Releases per day: `AUTOPILOT_AUTO_MAX_PER_DAY` (default 1).
+
+**Trace.** Each fix records `discover, propose, gates, preflight, merge, restart, verify-live, push` (or the rollback steps) in the report, the audit log and the ledger. `node autopilot/cli.js ledger` and the daily report show the whole path.
+
+**What must exist on the server before `AUTOPILOT_MODE=auto` can work** (none of it is done by this repository; the report says "Automatic publishing is not active" with the reason until it is):
+
+- `AUTOPILOT_RESTART_CMD` in `/etc/mamta-autopilot/autopilot.env` (e.g. `pm2 restart mamta-bhoj`), runnable by the service user. PM2 is per-user: the service user must be the user whose PM2 runs the site.
+- Write access. The unit keeps the file system read-only (`ProtectSystem=strict`, writable: state dir and `<repo>/.git`). Publishing also needs a drop-in granting exactly two more paths: the SEO view files and the service user's PM2 home. Review and install it yourself, for example `/etc/systemd/system/mamta-autopilot.service.d/auto-publish.conf`:
+  ```
+  [Service]
+  ReadWritePaths=<repo>/views /home/<service-user>/.pm2
+  ```
+  then `sudo systemctl daemon-reload`. `data/`, `public/uploads/`, `.env`, `routes/`, `lib/` and `middleware/` remain read-only to the service.
+- Git credentials for `git fetch` and `git push origin main` as the service user (a read/write deploy key limited to this repository, with the GitHub host already in `known_hosts`). Branch protection that forbids direct pushes to `main` will make the push step fail, which rolls the release back; if you use it, allow this one key to push or stay on `propose`.
+- The production checkout must sit at `origin/main`. After any manual deployment that is already true; if someone commits on the server only, the autopilot refuses to publish and says why.
+
+Recommended order: `report` -> check a few days of reports -> `propose` (look at the branches) -> `auto`. Roll back to `report` by editing one line.
+
+## Target keywords and query movement
+
+`AUTOPILOT_TARGET_KEYWORDS_FILE` (one keyword per line, `#` comments) adds a section to the daily report with, for each keyword, the settled 28-day totals against the previous 28 days from authenticated Search Console data. States: measured values, `no impressions` (Search Console answered; a real zero) and `UNAVAILABLE` (the data could not be read; never shown as zero). Queries that had visibility in the previous window and none in the current one are listed only when both windows have data. The windows end three days before the run because Search Console data settles late.
+
 ## Install later (nothing is installed by this repository)
 
 ```bash
@@ -103,6 +144,7 @@ Remove it with `sudo deploy/autopilot/uninstall-autopilot.sh` (add `--purge` to 
 | `node autopilot/cli.js ledger` | the run ledger: id, times, checks, actions, errors, final status |
 | `node autopilot/cli.js health` | exit code for monitoring: 0 healthy, 1 last run failed, 4 no recent run |
 | `node autopilot/cli.js weekly` | build the weekly trend report now |
+| `node autopilot/cli.js resume-auto` | clear the automatic-publishing pause that follows a rolled-back release |
 
 On the server run them as the service user with the state directory, for example:
 `sudo -u deploy AUTOPILOT_STATE_DIR=/var/lib/mamta-autopilot npm run seo:dry-run`
@@ -133,6 +175,7 @@ redaction), a dry run, a full proposal, rejected and gate-failing patches, rollb
 daily limits and cooldowns, real-change detection with lastmod / IndexNow / sitemap submission, URL Inspection caching,
 enable/disable, timeouts and failures, and the installer. `node scripts/test-autopilot.js --full` also runs the project's real
 SEO hard check and enquiry tests as gates. Scenario `E13` covers operations: every Google failure class and zero-traffic handling, retries and rate limits, status and exit codes, the ledger, the watchdog, duplicate-run locking (including two simultaneous starts), alerts (quiet, recovery, redaction, failing webhook), and the weekly report.
+Scenario `E14` covers automatic remediation end to end against a throw-away repository with a real bare `origin`: fix proposed without an AI, published and verified live, the full step trace, `data/admin.json` preserved byte for byte, rollback when live verification fails / the site is down / the restart command fails / the push is rejected / the rollback itself fails, the circuit breaker and `resume-auto`, idempotence across days, the protected-path and clean-tree guards, misconfiguration, AI changes never auto-publishing, patch validation, and target-keyword handling.
 On Windows, two installer checks (service user, file mode 600) cannot pass; they pass on Linux.
 
 ## Known limits
@@ -140,5 +183,5 @@ On Windows, two installer checks (service user, file mode 600) cannot pass; they
 - New pages are never created automatically (a proposal checklist is reported instead).
 - Search Console data lags about three days and low-traffic sites have few queries; the report says so when there is nothing to act on.
 - The AI is optional; without it, patch generation is report-only. A configured but incomplete or failing AI is reported (degraded) and never blocks the audits.
-- Automatic remediation is limited to the validated patch pipeline on a separate branch. There is no deterministic auto-fixer yet: the audit currently finds nothing that can be fixed provably safely without a person, so none was invented. Content publishing, redirects, robots/canonical changes, schema claims and template changes stay manual.
-- Nothing deploys: merging, pushing and restarting remain manual (`AUTOPILOT_PUBLISH=auto` is refused). If a safe deployment cannot be established the autopilot's answer is a reviewable branch plus a report, never a deployment.
+- The only automatically **publishable** fix is the internal-link fixer (below). Title/description wording, body copy, new pages, redirects, robots/canonical changes, schema claims and template changes need business facts or judgement, so they stay with the AI proposal path (always a review branch, even in `auto` mode) or with a person. The audit currently finds nothing for the fixer to do on the live site (when this was written every guide had at least 6 internal links; the audit flags fewer than 3), so a healthy site gets no changes: the autopilot does not change pages for the sake of it.
+- Publishing happens only in `AUTOPILOT_MODE=auto`, after every gate, on top of the released commit, with live verification and rollback. If a safe release cannot be established the answer is a reviewable branch plus a report.

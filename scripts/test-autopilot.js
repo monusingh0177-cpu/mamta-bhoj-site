@@ -44,8 +44,9 @@ function copyTree(src, dst, skip) {
 function http_(url, opts) { return new Promise((res, rej) => { const o = opts || {}; const u = new URL(url); const r = http.request(u, { method: o.method || 'GET', headers: o.headers || {} }, (x) => { let d = ''; x.on('data', (c) => (d += c)); x.on('end', () => res({ status: x.statusCode, body: d })); }); r.on('error', rej); if (o.body) r.write(o.body); r.end(); }); }
 
 // ------------------------------------------------------------------ fake Google
+let GOOGLE = null; // the fake Google server in use: its current/previous window boundary follows the CLI's clock (AUTOPILOT_NOW or real time), so the suite does not depend on today's date
 async function startGoogle() {
-  const g = { mode: 'ok', calls: { token: 0, query: 0, sitemapPut: [], inspect: [] }, rows: null };
+  const g = { mode: 'ok', calls: { token: 0, query: 0, sitemapPut: [], inspect: [] }, rows: null }; GOOGLE = g;
   const mk = (q, p, i, pos, c) => ({ keys: [q, 'https://devmamflourishfoods.com' + p], clicks: c, impressions: i, ctr: c / i, position: pos });
   const CUR = [mk('bulk besan supplier india', '/products/besan', 60, 14, 1), mk('maida wholesale supplier', '/products/maida', 45, 18, 0), mk('besan', '/products/besan', 25, 9, 1), mk('flourish', '/', 10, 3, 2), mk('gata', '/contact', 4, 50, 0), mk('how is wheat made into flour', '/guides/how-flour-is-made', 12, 22, 0), mk('tandoori atta supplier', '/products/tandoori-atta', 30, 16, 0)];
   const PREV = [mk('bulk besan supplier india', '/products/besan', 10, 20, 0), mk('besan', '/products/besan', 20, 10, 1)];
@@ -149,6 +150,7 @@ function runCli(site, cmd, env, root, state) {
     AUTOPILOT_GATE_HARDCHECK: FULL && env.__full ? '1' : '0', AUTOPILOT_GATE_ENQUIRY: FULL && env.__full ? '1' : '0', AUTOPILOT_HTTP_TIMEOUT_MS: '3000', AUTOPILOT_RETRY_BASE_MS: '5', AUTOPILOT_DATA_DIR: path.join(site.repo, 'data'),
   }, env || {});
   delete e.__full;
+  if (GOOGLE) GOOGLE.curStart = new Date((e.AUTOPILOT_NOW ? Date.parse(e.AUTOPILOT_NOW) : Date.now()) - 31 * 86400000).toISOString().slice(0, 10);
   return new Promise((resolve) => {
     const c = spawn(process.execPath, [path.join(SRC, 'autopilot/cli.js'), cmd], { cwd: SRC, env: e, stdio: ['ignore', 'pipe', 'pipe'] });
     let out = ''; c.stdout.on('data', (d) => (out += d)); c.stderr.on('data', (d) => (out += d));
@@ -542,6 +544,138 @@ const cleanBranches = (repo) => { try { git(repo, 'worktree', 'prune'); } catch 
       hook2.status = 200; await runCli(site, 'run', s.env, root, s.state); const afterFix = hook2.posts.length; await runCli(site, 'run', s.env, root, s.state);
       check(afterFix === 2 && hook2.posts.length === 2 && /could not be delivered/.test(hook2.posts[1].text), 'an alert that could not be delivered is retried on the next run, then not repeated', JSON.stringify(hook2.posts.map((x) => (x.text || '').slice(0, 120))));
       untouched('E13');
+    }
+
+    // ---- E14 automatic remediation: discover -> proposal -> gates -> publish -> live verification -> rollback
+    if (want('e14')) {
+      const publishLib = require('../autopilot/lib/publish'); const keywordsLib = require('../autopilot/lib/keywords'); const fixersLib = require('../autopilot/lib/fixers'); const patchLib2 = require('../autopilot/lib/patch');
+      const bare = path.join(root, 'origin.git');
+      git(root, 'init', '-q', '--bare', '-b', 'main', bare);
+      try { git(site.repo, 'remote', 'remove', 'origin'); } catch (e) { /* none yet */ }
+      git(site.repo, 'remote', 'add', 'origin', bare);
+      const resetOrigin = () => git(site.repo, 'push', '-q', '-f', 'origin', `${baseHead}:refs/heads/main`);
+      const prodHead = () => git(site.repo, 'rev-parse', 'HEAD'); const originHead = () => git(bare, 'rev-parse', 'main');
+      const ctrl = { queue: [], calls: 0 };
+      ctrl.server = http.createServer(async (req, res) => {
+        ctrl.calls++; const m = ctrl.queue.length ? ctrl.queue.shift() : 'ok';
+        if (m === 'fail') { res.writeHead(500); return res.end('boom'); }
+        if (m === 'norestart') { res.writeHead(200); return res.end('ok'); }
+        if (m === 'crash') { site.stop(); await sleep(300); res.writeHead(200); return res.end('ok'); }
+        await site.restart(); res.writeHead(200); res.end('ok');
+      });
+      await new Promise((r) => ctrl.server.listen(0, '127.0.0.1', r)); cleanups.push(() => ctrl.server.close());
+      const restartJs = path.join(root, 'restart.js');
+      fs.writeFileSync(restartJs, "require('http').get('http://127.0.0.1:' + process.argv[2] + '/', (r) => { r.resume(); r.on('end', () => process.exit(r.statusCode === 200 ? 0 : 1)); }).on('error', () => process.exit(1));");
+      const RESTART = `node ${restartJs.replace(/\\/g, '/')} ${ctrl.server.address().port}`;
+      const autoEnv = (extra) => Object.assign({ AUTOPILOT_MODE: 'auto', AUTOPILOT_RESTART_CMD: RESTART, AUTOPILOT_MIN_INLINKS: '10', AUTOPILOT_VERIFY_TIMEOUT_MS: '20000', AUTOPILOT_NOW: '2026-10-13T04:00:00Z' }, extra || {});
+      const fresh = async (extra) => { const s = scenario(autoEnv(extra)); resetOrigin(); ctrl.queue.length = 0; await site.restart(); return s; };
+      const liveBody = async (p) => (await http_(site.base + p)).body;
+      const ledgerLast = (st) => JSON.parse(fs.readFileSync(path.join(st, 'last-run.json'), 'utf8'));
+      const tracked = git(site.repo, 'ls-files', 'data').split('\n').filter(Boolean)[0];
+      const adminFile = path.join(site.repo, tracked || 'data/admin.json');
+      const relatedLists = () => ['views/guides.js', 'views/guides-more.js', 'views/guides-phase3.js'].flatMap((f) => (fs.readFileSync(path.join(site.repo, f), 'utf8').match(/related: \[[^\]]*\]/g) || []));
+      const noDupes = () => relatedLists().every((l) => { const xs = l.match(/'([a-z0-9-]+)'/g) || []; return new Set(xs).size === xs.length; });
+
+      section('E14a: deterministic fixer proposes a validated internal-link fix without any AI; production untouched');
+      let s = scenario({ AUTOPILOT_MODE: 'propose', AUTOPILOT_MIN_INLINKS: '10', AUTOPILOT_NOW: '2026-10-13T04:00:00Z' }); resetOrigin(); await site.restart();
+      await runCli(site, 'dry-run', s.env, root, s.state); let r = await runCli(site, 'run', s.env, root, s.state); let rep = jsonReport(s.state); let bs = branches(site.repo);
+      check(r.code === 0 && rep.fixes.length >= 1 && rep.fixes[0].outcome === 'proposed' && bs.length === 1 && ai.calls === 0, 'AUTOPILOT_MODE=propose: one fix is prepared on a review branch, with no AI configured or called', r.out + JSON.stringify(rep.fixes && rep.fixes.map((f) => [f.id, f.outcome])));
+      const df = bs[0] ? git(site.repo, 'diff', `main...${bs[0]}`) : '';
+      check(/^-\s+related: \[/m.test(df) && /^\+\s+related: \[/m.test(df) && git(site.repo, 'diff', '--name-only', `main...${bs[0]}`).split('\n').filter(Boolean).length === 1, 'the fix is exactly one changed related: [...] list in one guide source file', df.slice(0, 300));
+      check(prodHead() === baseHead && git(site.repo, 'status', '--porcelain', '--untracked-files=no') === '' && originHead() === baseHead, 'production branch, working tree and origin are unchanged by a proposal');
+      check(rep.fixes[0].trace.map((t) => t.name).join() === 'discover,propose,gates,publish', 'the trace shows discover -> propose -> gates -> (not published)', JSON.stringify(rep.fixes[0].trace.map((t) => t.name)));
+      check(rep.auto.enabled === false && rep.status !== 'failed', 'propose mode never publishes');
+
+      section('E14b: auto mode - discovery to live verification, traced, with protected data preserved');
+      s = await fresh(); fs.appendFileSync(adminFile, '\n'); const adminBefore = fs.readFileSync(adminFile); const adminStat = git(site.repo, 'status', '--porcelain', '--', path.relative(site.repo, adminFile).replace(/\\/g, '/'));
+      await runCli(site, 'dry-run', s.env, root, s.state); const before = prodHead(); r = await runCli(site, 'run', s.env, root, s.state); rep = jsonReport(s.state); const fx = rep.fixes[0] || {};
+      check(r.code === 0 && fx.outcome === 'published' && rep.auto.published.length === 1, 'the fix is published automatically (no approval step)', r.out + JSON.stringify(rep.fixes && rep.fixes.map((f) => [f.id, f.outcome, f.trace])));
+      check(fx.trace && fx.trace.map((t) => t.name).join() === 'discover,propose,gates,preflight,merge,restart,verify-live,push' && fx.trace.every((t) => t.ok), 'every step is traced in order: discover, propose, gates, preflight, merge, restart, verify-live, push', JSON.stringify((fx.trace || []).map((t) => [t.name, t.ok])));
+      check(git(site.repo, 'rev-list', '--count', `${before}..HEAD`) === '1' && prodHead() === originHead() && prodHead() !== before, 'production moved exactly one commit, and origin/main has the same verified commit');
+      const changed = git(site.repo, 'diff', '--name-only', before, 'HEAD').split('\n').filter(Boolean);
+      check(changed.length === 1 && /^views\/guides[a-z0-9-]*\.js$/.test(changed[0]), 'only one allow-listed guide source file changed', changed.join(','));
+      const body = await liveBody(rep.auto.published[0].page); check(body.includes(`href="${rep.auto.published[0].target}"`), 'the new internal link is LIVE on the published page (fetched from the running site)');
+      check(fs.readFileSync(adminFile).equals(adminBefore) && git(site.repo, 'status', '--porcelain', '--', path.relative(site.repo, adminFile).replace(/\\/g, '/')) === adminStat, 'the server-modified data/admin.json is byte-identical and still shown as locally modified');
+      check(rep.status === 'success' && rep.health.some((i) => /^release-/.test(i.id)), 'run status success; the release is recorded as a health note', rep.status);
+      const led = ledgerLast(s.state); check(led.actions && led.actions.published === 1 && led.status === 'success', 'the run ledger records the published fix');
+      check(inow.posts.length > 0 && JSON.stringify(inow.posts).includes(rep.auto.published[0].page) && google.calls.sitemapPut.length >= 1, 'the changed URL is submitted to IndexNow and the sitemap is submitted to Google');
+      check(/fix_published/.test(auditText(s.state)) && /fix_step/.test(auditText(s.state)), 'the audit log has the step-by-step record');
+      check(git(site.repo, 'branch', '--list', 'seo-autopilot/*').trim() === '' && git(site.repo, 'worktree', 'list').split('\n').length === 1, 'no leftover proposal branch or worktree');
+      const r2 = await runCli(site, 'run', s.env, root, s.state); const rep2 = jsonReport(s.state);
+      check(prodHead() === before || git(site.repo, 'rev-list', '--count', `${before}..HEAD`) === '1', 'a second run the same day publishes nothing more (daily limit)', JSON.stringify(rep2.fixes && rep2.fixes.map((f) => [f.id, f.outcome, f.reason2])));
+      check(noDupes(), 'no related list contains a duplicate slug');
+      const s3 = { state: s.state, env: Object.assign({}, s.env, { AUTOPILOT_NOW: '2026-10-14T04:00:00Z' }) }; await runCli(site, 'run', s3.env, root, s3.state); const rep3 = jsonReport(s3.state);
+      check(noDupes() && !rep3.fixes.some((f) => f.id === fx.id && f.outcome === 'published'), 'the next day the same fix is not applied again (idempotent, cooldown)', JSON.stringify(rep3.fixes.map((f) => [f.id, f.outcome])));
+
+      section('E14c: live verification fails -> automatic rollback, nothing reaches origin, publishing is paused, alert sent');
+      const hook = await startWebhook(); cleanups.push(() => hook.server.close());
+      s = await fresh({ AUTOPILOT_ALERT_WEBHOOK: hook.base }); fs.appendFileSync(adminFile, '\n'); const adminB2 = fs.readFileSync(adminFile);
+      await runCli(site, 'dry-run', s.env, root, s.state); ctrl.queue.push('norestart'); r = await runCli(site, 'run', s.env, root, s.state); rep = jsonReport(s.state);
+      check(rep.fixes[0] && rep.fixes[0].outcome === 'rolled-back' && prodHead() === baseHead && originHead() === baseHead, 'the release is rolled back to the previous commit and origin never received it', r.out + JSON.stringify(rep.fixes && rep.fixes[0] && rep.fixes[0].trace));
+      check(git(site.repo, 'status', '--porcelain', '--untracked-files=no').split('\n').filter((l) => l && !/ data\//.test(l)).length === 0 && fs.readFileSync(adminFile).equals(adminB2), 'the working tree is restored and data/admin.json is untouched by the rollback');
+      const tn = rep.fixes[0].trace.map((t) => t.name + ':' + t.ok).join(); check(/merge:true,restart:true,verify-live:false,rollback-code:true,rollback-restart:true,rollback-verify:true/.test(tn), 'trace: merge, restart, verify-live FAILED, then rollback-code, rollback-restart and rollback-verify all succeed', tn);
+      check(r.code === 0 && rep.status === 'degraded' && rep.health.some((i) => i.id === 'release') && rep.health.some((i) => i.id === 'auto-paused'), 'status degraded (exit 0) with a "release rolled back" item and a "publishing paused" item with its remedy', rep.status);
+      check(JSON.parse(fs.readFileSync(path.join(s.state, 'state.json'), 'utf8')).autoPaused != null, 'auto-publishing is paused (circuit breaker)');
+      check(hook.posts.some((p) => /rolled back/.test(p.text)), 'a failure alert was sent', JSON.stringify(hook.posts.map((p) => (p.text || '').slice(0, 120))));
+      check((await liveBody('/')).length > 1000 && !(await liveBody(rep.fixes[0].page)).includes(`href="${rep.fixes[0].target}"`), 'the live site serves the previous version');
+      cleanBranches(site.repo); const r4 = await runCli(site, 'run', s.env, root, s.state); const rep4 = jsonReport(s.state);
+      check(rep4.auto.enabled === false && /paused/.test(rep4.auto.reason) && (rep4.fixes[0] || {}).outcome === 'proposed' && prodHead() === baseHead && rep4.health.some((i) => i.id === 'auto-paused'), 'while paused, the next run only prepares a review branch and reports the pause with its remedy', r4.out + rep4.auto.reason);
+      cleanBranches(site.repo); s.env.AUTOPILOT_NOW = '2026-10-14T04:00:00Z'; const rs = await runCli(site, 'resume-auto', s.env, root, s.state); const r5 = await runCli(site, 'run', s.env, root, s.state); const rep5 = jsonReport(s.state);
+      check(rs.code === 0 && /resumed/.test(rs.out) && rep5.fixes.some((f) => f.outcome === 'published'), 'resume-auto clears the pause and the next run publishes (next day: the daily fix budget and page cooldown apply)', rs.out + JSON.stringify(rep5.fixes && rep5.fixes.map((f) => [f.id, f.outcome])));
+
+      section('E14d: site down after restart, restart command failure, push failure, failed rollback');
+      s = await fresh(); await runCli(site, 'dry-run', s.env, root, s.state); ctrl.queue.push('crash'); r = await runCli(site, 'run', s.env, root, s.state); rep = jsonReport(s.state);
+      check(rep.fixes[0].outcome === 'rolled-back' && prodHead() === baseHead && (await http_(site.base + '/robots.txt')).status === 200, 'site down after the restart -> rolled back, restarted and serving again', JSON.stringify(rep.fixes[0].trace));
+      s = await fresh(); await runCli(site, 'dry-run', s.env, root, s.state); ctrl.queue.push('fail'); r = await runCli(site, 'run', s.env, root, s.state); rep = jsonReport(s.state);
+      check(rep.fixes[0].outcome === 'rolled-back' && prodHead() === baseHead && originHead() === baseHead && rep.fixes[0].trace.some((t) => t.name === 'restart' && !t.ok), 'a failing restart command -> rolled back, origin untouched', JSON.stringify(rep.fixes[0].trace));
+      s = await fresh(); await runCli(site, 'dry-run', s.env, root, s.state); const hookFile = path.join(bare, 'hooks', 'pre-receive'); fs.writeFileSync(hookFile, '#!/bin/sh\nexit 1\n'); fs.chmodSync(hookFile, 0o755);
+      r = await runCli(site, 'run', s.env, root, s.state); rep = jsonReport(s.state); fs.rmSync(hookFile, { force: true });
+      check(rep.fixes[0].outcome === 'rolled-back' && prodHead() === baseHead && originHead() === baseHead && rep.fixes[0].trace.some((t) => t.name === 'push' && !t.ok), 'push rejected by origin -> the live release is withdrawn so server and origin stay consistent', JSON.stringify(rep.fixes[0].trace));
+      check(!(await liveBody(rep.fixes[0].page)).includes(`href="${rep.fixes[0].target}"`), 'after the withdrawn release the live site serves the previous version');
+      s = await fresh({ AUTOPILOT_ALERT_WEBHOOK: hook.base }); await runCli(site, 'dry-run', s.env, root, s.state); ctrl.queue.push('norestart', 'fail'); const nPosts = hook.posts.length; r = await runCli(site, 'run', s.env, root, s.state); rep = jsonReport(s.state);
+      check(r.code === 1 && rep.status === 'failed' && rep.fixes[0].outcome === 'rollback-failed' && rep.health.some((i) => i.id === 'release' && i.level === 'fail') && hook.posts.length > nPosts, 'a FAILED rollback is a failed run: exit code 1, a "fail" health item and an alert', r.out + rep.status);
+      check(prodHead() === baseHead, 'even when the restart cannot be completed, the code on disk is back at the previous commit');
+
+      section('E14e: guards - not at the remote release commit, not configured, protected paths, AI patches never auto-publish');
+      s = await fresh(); await runCli(site, 'dry-run', s.env, root, s.state);
+      const ahead = git(site.repo, 'commit-tree', 'HEAD^{tree}', '-p', 'HEAD', '-m', 'someone else deployed'); git(site.repo, 'push', '-q', 'origin', `${ahead}:refs/heads/main`);
+      r = await runCli(site, 'run', s.env, root, s.state); rep = jsonReport(s.state);
+      check(rep.fixes[0].outcome === 'proposed' && prodHead() === baseHead && originHead() === ahead && !JSON.parse(fs.readFileSync(path.join(s.state, 'state.json'), 'utf8')).autoPaused && rep.fixes[0].trace.some((t) => t.name === 'preflight' && !t.ok && /differs/.test(t.detail)), 'production HEAD != origin/main -> nothing is changed or restarted, the fix stays a review branch, no pause', JSON.stringify(rep.fixes[0].trace));
+      check(rep.health.some((i) => i.id === 'auto-preflight'), 'a refused publication is a visible health item with a remedy');
+      s = await fresh(); await runCli(site, 'dry-run', s.env, root, s.state); const local = git(site.repo, 'commit-tree', 'HEAD^{tree}', '-p', 'HEAD', '-m', 'unpushed release'); git(site.repo, 'update-ref', 'refs/heads/main', local);
+      r = await runCli(site, 'run', s.env, root, s.state); rep = jsonReport(s.state);
+      check(rep.fixes[0].outcome === 'proposed' && prodHead() === local && originHead() === baseHead && rep.fixes[0].trace.some((t) => t.name === 'preflight' && !t.ok && /AHEAD of .*unpushed/.test(t.detail)), 'unpushed commits on the server (an interrupted release) are detected, explained, and nothing is published on top of them', JSON.stringify(rep.fixes[0].trace));
+      s = await fresh({ AUTOPILOT_RESTART_CMD: '' }); await runCli(site, 'dry-run', s.env, root, s.state); r = await runCli(site, 'run', s.env, root, s.state); rep = jsonReport(s.state);
+      check(rep.auto.enabled === false && /AUTOPILOT_RESTART_CMD/.test(rep.auto.reason) && rep.fixes[0].outcome === 'proposed' && prodHead() === baseHead && rep.health.some((i) => i.id === 'auto-config') && ctrl.calls >= 0, 'auto mode without a restart command is reported as misconfigured and never publishes', rep.auto.reason);
+      const mkCommit = (file, text) => { git(site.repo, 'checkout', '-q', '-b', 'tmp-guard', baseHead); fs.appendFileSync(path.join(site.repo, file), text); git(site.repo, 'add', '--', file); git(site.repo, 'commit', '-q', '-m', 'guard test'); const sha = git(site.repo, 'rev-parse', 'HEAD'); git(site.repo, 'checkout', '-q', 'main'); git(site.repo, 'branch', '-D', 'tmp-guard'); git(site.repo, 'update-ref', `refs/test/${sha.slice(0, 8)}`, sha); return sha; };
+      s = await fresh(); const cfgG = require('../autopilot/config').loadConfig({ AUTOPILOT_ENV_FILE: '/nonexistent', AUTOPILOT_REPO_DIR: site.repo, AUTOPILOT_STATE_DIR: s.state, AUTOPILOT_FETCH_BASE: site.base, AUTOPILOT_RESTART_CMD: RESTART, AUTOPILOT_GATE_HARDCHECK: '0' });
+      for (const [file, label] of [['lib/mailer.js', 'a protected mail file'], ['routes/admin.js', 'an admin route'], ['package.json', 'a file outside the SEO allow-list']]) {
+        if (!fs.existsSync(path.join(site.repo, file))) continue; const sha = mkCommit(file, '\n// guard\n'); const calls0 = ctrl.calls; const res = await publishLib.publishFix(cfgG, { sha, changedPages: ['/'], expect: [], baselineAudit: [] });
+        check(res.published === false && res.rolledBack === false && prodHead() === baseHead && originHead() === baseHead && ctrl.calls === calls0 && res.steps[0].name === 'preflight' && !res.steps[0].ok, `protected-path guard refuses ${label}: nothing merged, restarted or pushed`, JSON.stringify(res.steps));
+      }
+      fs.appendFileSync(path.join(site.repo, 'views/links.js'), '\n// dirty\n'); const resD = await publishLib.publishFix(cfgG, { sha: mkCommit('views/guides.js', '\n// x\n'), changedPages: ['/'], expect: [], baselineAudit: [] });
+      check(!resD.published && /not clean/.test(resD.error), 'a modified tracked file in the production tree stops publication', resD.error); git(site.repo, 'checkout', '--', 'views/links.js');
+      const aiAuto = await fresh({ AUTOPILOT_AI_MODE: 'openai', AUTOPILOT_AI_BASE_URL: ai.base, AUTOPILOT_AI_MODEL: 'm', AUTOPILOT_AI_API_KEY: AI_KEY, AUTOPILOT_MIN_INLINKS: '3' });
+      await runCli(site, 'dry-run', aiAuto.env, root, aiAuto.state); r = await runCli(site, 'run', aiAuto.env, root, aiAuto.state); rep = jsonReport(aiAuto.state);
+      check(rep.auto.published.length === 0 && prodHead() === baseHead && rep.changes.every((c) => branches(site.repo).includes(c.branch)) && rep.changes.length >= 1, 'AI-written changes are never published automatically: they stay on a review branch even in auto mode', r.out + JSON.stringify(rep.changes && rep.changes.map((c) => c.page)));
+
+      section('E14f: patch validation for the related-link fix, planner, target keywords');
+      const okPatch = fixersLib.plan({ repoDir: site.repo, inv: { pages: Object.fromEntries(fixersLib.parseGuides(site.repo).map((g) => ['/guides/' + g.slug, { indexable: true, linksIn: 1, linksOut: [] }])) }, findings: [{ code: 'few-inlinks', path: '/guides/what-is-besan', message: 'x' }], opportunities: [] })[0];
+      check(okPatch && patchLib2.validate(okPatch.patches[0], { repoDir: site.repo }).ok, 'the planner emits a patch that validates');
+      const badVariants = [['unknown slug', (p) => ({ ...p, replace: p.replace.replace(/'[a-z0-9-]+'\]$/, "'no-such-guide']") })], ['two slugs added', (p) => ({ ...p, replace: p.replace.replace(/\]$/, ", 'maida-vs-atta']") })], ['self link', (p) => ({ ...p, replace: p.replace.replace(/'[a-z0-9-]+'\]$/, `'${p.page.slice('/guides/'.length)}']`) })], ['existing slug removed', (p) => ({ ...p, replace: p.replace.replace(/^related: \['[a-z0-9-]+', /, 'related: [') })], ['markup', (p) => ({ ...p, replace: p.replace.replace(/\]$/, ", '<b>']") })], ['wrong file', (p) => ({ ...p, file: 'lib/mailer.js' })], ['not a guide', (p) => ({ ...p, page: '/wholesale-flour-supplier' })]];
+      for (const [label, mut] of badVariants) check(!patchLib2.validate(mut(okPatch.patches[0]), { repoDir: site.repo }).ok, `related patch rejected: ${label}`);
+      const nofix = fixersLib.plan({ repoDir: site.repo, inv: { pages: { '/guides/what-is-besan': { indexable: true, linksIn: 40, linksOut: [] } } }, findings: [], opportunities: [] });
+      check(nofix.length === 0, 'a well-linked site produces no fix (nothing is changed for the sake of it)');
+      const kfile = path.join(root, 'kw.txt'); fs.writeFileSync(kfile, '# target keywords\nbesan\nzzz no such query anywhere\n'); const kcfg = { targetKeywordsFile: kfile };
+      const rowsC = [{ keys: ['besan', 'https://x/p'], clicks: 2, impressions: 40, position: 9 }, { keys: ['old query', 'https://x/p'], clicks: 0, impressions: 3, position: 30 }]; const rowsP = [{ keys: ['besan', 'https://x/p'], clicks: 1, impressions: 20, position: 11 }, { keys: ['lost query', 'https://x/p'], clicks: 1, impressions: 12, position: 8 }];
+      const kt = keywordsLib.track(kcfg, rowsC, rowsP, { available: true }); check(kt[0].status === 'data' && kt[0].current.impressions === 40 && kt[0].previous.impressions === 20 && kt[1].status === 'no_impressions', 'target keywords: measured values for found queries, a true zero ("no impressions") for absent ones');
+      const ku = keywordsLib.track(kcfg, [], [], { available: false, status: 'auth_invalid' }); check(ku.every((k) => k.status === 'unavailable'), 'target keywords: unavailable Google data is never reported as zero');
+      const lq = keywordsLib.lostQueries(rowsC, rowsP); check(lq.length === 1 && lq[0].query === 'lost query' && keywordsLib.lostQueries([], rowsP).length === 0, 'lost queries are reported only from real data in both windows');
+      s = scenario({ AUTOPILOT_TARGET_KEYWORDS_FILE: kfile, AUTOPILOT_NOW: '2026-10-13T04:00:00Z' }); await runCli(site, 'dry-run', s.env, root, s.state); await runCli(site, 'run', s.env, root, s.state); rep = jsonReport(s.state);
+      check(rep.keywords.length === 2 && rep.keywords.every((k) => ['data', 'no_impressions'].includes(k.status)), 'a run with Google connected reports the target keywords from authenticated data', JSON.stringify(rep.keywords));
+      google.mode = 'authfail'; await runCli(site, 'run', s.env, root, s.state); rep = jsonReport(s.state); check(rep.keywords.length === 2 && rep.keywords.every((k) => k.status === 'unavailable'), 'with Google auth failing the keywords are "unavailable", not zero');
+      untouched('E14');
+      resetOrigin();
     }
 
     // ---- E12 optional: real project suites as gates

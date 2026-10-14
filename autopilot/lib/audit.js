@@ -18,7 +18,7 @@ function auditInventory(inv, opts) {
     if (p.jsonLdTypes.some((t) => /(^|\+)Product(\+|$)/.test(t))) add(path, 'high', 'product-schema', 'Product structured data present (needs offers/review/aggregateRating, none are published)');
     if (/"(offers|aggregateRating|review|price|priceCurrency)"\s*:/.test(JSON.stringify(p.jsonLdNodes))) add(path, 'high', 'unsupported-schema', 'offers/review/rating/price markup present');
     if (p.imgMissingAlt) add(path, 'medium', 'img-alt', `${p.imgMissingAlt} image(s) without alt text`);
-    if (p.linksIn < 3 && path !== '/') add(path, 'medium', 'few-inlinks', `only ${p.linksIn} internal link(s) point here`);
+    if (p.linksIn < (o.minInlinks || 3) && path !== '/') add(path, 'medium', 'few-inlinks', `only ${p.linksIn} internal link(s) point here`);
     if (p.words < 250 && !/^\/(contact|certifications)$/.test(path)) add(path, 'low', 'thin-content', `${p.words} words`);
     (titles.get(p.title) || titles.set(p.title, []).get(p.title)).push(path); (descs.get(p.description) || descs.set(p.description, []).get(p.description)).push(path);
     for (const l of p.linksOut) if (!inv.pages[l] && !/^\/(admin|images|css|js|uploads|documents)(\/|$)/.test(l) && !/\.[a-z0-9]{2,4}$/i.test(l)) add(path, 'high', 'broken-internal-link', `links to ${l}, which did not return 200`);

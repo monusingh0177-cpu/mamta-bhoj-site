@@ -33,6 +33,15 @@ function markdown(r) {
   h('Opportunities (scored; branded and unrelated queries are never opportunities)');
   L.push(...(r.opportunities.length ? ['| Score | Query | Kind | Impr. | Pos. | Best page | Action |', '|---|---|---|---|---|---|---|', ...r.opportunities.map((o) => `| ${o.score} | ${o.query} | ${o.kind} | ${o.impressions} | ${o.position} | ${o.bestPage || '-'} | ${o.action} |`)] : ['None found (no Search Console data, or nothing relevant).']));
   h('Proposals prepared on separate branches (nothing was merged, pushed, deployed or restarted)'); L.push(...(r.changes.length ? r.changes.flatMap((c) => [`- ${c.page}: ${c.kind} for query "${c.query}" -> branch \`${c.branch}\` (${c.sha ? c.sha.slice(0, 8) : ''}). ${c.rationale || ''}`, `  review: \`${c.review}\``]) : ['None.']));
+  h('Automated remediation (discovery -> proposal -> gates -> publication -> live verification)');
+  const au = r.auto || {};
+  L.push(`Mode: **${au.effective || r.effectiveMode}** (configured: ${au.mode || r.mode}). ${au.enabled ? 'Automatic publishing is ACTIVE.' : 'Automatic publishing is not active' + (au.reason ? ': ' + au.reason : '.')}`);
+  if (au.paused) L.push(`- PAUSED since ${String(au.paused.at).slice(0, 10)}: ${au.paused.reason} (resume with: node autopilot/cli.js resume-auto)`);
+  if ((r.fixes || []).length) for (const f of r.fixes) { L.push(`- ${f.id}: **${f.outcome}** - ${f.reason}`); for (const t of f.trace || []) L.push(`  - ${t.ok ? 'ok' : 'FAILED'} ${t.name}: ${t.detail}`); if (f.release && f.release.published) L.push(`  - production ${String(f.release.prev).slice(0, 8)} -> ${String(f.release.now).slice(0, 8)}`); }
+  else L.push('No deterministic fix was needed or possible this run (no internal-link finding on a guide, or no suitable related guide).');
+  h('Target keywords (Search Console, settled 28 days vs previous 28 days)');
+  L.push(...((r.keywords || []).length ? r.keywords.map((k) => (k.status === 'data' ? `- ${k.keyword}: impressions ${k.current.impressions} (was ${k.previous.impressions}), clicks ${k.current.clicks} (was ${k.previous.clicks}), position ${k.current.position == null ? 'n/a' : k.current.position}` : `- ${k.keyword}: ${k.status === 'unavailable' ? 'UNAVAILABLE' : 'no impressions'} (${k.detail})`)) : ['No target keyword file configured (AUTOPILOT_TARGET_KEYWORDS_FILE).']));
+  if ((r.lostQueries || []).length) { h('Queries with visibility last period and none this period'); L.push(...r.lostQueries.map((q) => `- ${q.query}: ${q.previousImpressions} impressions previously`)); }
   h('Pages deliberately not changed, and why'); L.push(...(r.notChanged.length ? r.notChanged.map((n) => `- ${n.page || n.query}: ${n.reason}`) : ['None to report.']));
   h('New page proposals (never auto-published)'); L.push(...(r.newPageProposals.length ? r.newPageProposals.map((n) => `- "${n.query}": ${n.verdict} (${n.gates.map((g) => `${g.name}:${g.ok ? 'ok' : 'NO'}`).join(', ')})`) : ['None.']));
   h('Audit findings'); L.push(`${r.auditSummary.critical} critical, ${r.auditSummary.high} high, ${r.auditSummary.medium} medium, ${r.auditSummary.low} low across ${r.inventory.pageCount} pages.`);
