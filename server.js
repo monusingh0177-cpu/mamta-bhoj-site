@@ -295,6 +295,7 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, () => {
+  require('./lib/spam-guard').logConfigWarnings();
   console.log(`Mamta Bhoj site running at http://localhost:${PORT}`);
   console.log(`Admin panel at http://localhost:${PORT}/admin/login`);
   if (PERSIST_DIR) {
