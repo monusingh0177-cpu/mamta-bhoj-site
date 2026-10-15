@@ -182,9 +182,11 @@ async function runOnce(cfg, opts) {
       if (openBranches.some((b) => b.includes(`-${branchLib.slug(page)}-`))) { R.notChanged.push({ page, reason: 'an open autopilot proposal branch for this page is awaiting review' }); continue; }
       const block = patchLib.sourceBlock(cfg.repoDir, page); if (!block) { R.notChanged.push({ page, reason: 'no editable source block for this page' }); continue; }
       const proposal = await ai.propose(cfg, { opportunity: op, page: inv.pages[page], path: page, block });
+      if (proposal.skipped && proposal.budget) { R.ai.status = 'budget_reached'; R.ai.note = proposal.reason; R.notChanged.push({ page, reason: `no patch generated: ${proposal.reason}` }); continue; }
       if (proposal.skipped) { R.ai.status = 'misconfigured'; R.ai.note = `AI-dependent changes are report-only: ${proposal.reason}`; R.notChanged.push({ page, reason: `no patch generated: ${proposal.reason}` }); continue; }
       if (proposal.error) { R.ai.status = 'error'; R.ai.note = proposal.error; R.notChanged.push({ page, reason: proposal.error }); A('ai_error', { page, error: proposal.error }); continue; }
-      R.ai.status = 'ok';
+      R.ai.status = 'ok'; if (proposal.usage) { const u = R.ai.usage || (R.ai.usage = { model: proposal.model, promptTokens: 0, outputTokens: 0, totalTokens: 0 }); u.promptTokens += proposal.usage.promptTokens || 0; u.outputTokens += proposal.usage.outputTokens || 0; u.totalTokens += proposal.usage.totalTokens || 0; }
+      for (const why of proposal.rejected || []) { R.notChanged.push({ page, reason: `AI patch rejected: ${why}` }); A('patch_rejected', { page, kind: 'grounding', errors: [why] }); }
       const valid = []; const kinds = new Set();
       for (const d of proposal.decisions) {
         d.page = page; const v = patchLib.validate(d, { repoDir: cfg.repoDir });
