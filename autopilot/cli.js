@@ -11,6 +11,7 @@
 //   baseline     accept the current live site as the new baseline after a deliberate manual deploy
 //   status       show mode, state and limits
 //   verify-google  check Google OAuth + access to the Search Console property (prints a status and a remedy, never a credential)
+//   verify-ai    one authenticated AI call (add --fixture: a proposal-generation check on a fixture page; nothing is applied). Prints status, model and token usage only
 //   health       exit status for external monitoring: 0 healthy, 1 last run failed, 4 no recent run (scheduler problem)
 //   weekly       build the weekly trend report now
 //   ledger       show the latest run records (id, times, checks, actions, final status)
@@ -91,6 +92,14 @@ async function main(argv) {
       out(`google: ${v.ok ? 'OK' : 'NOT OK'} [${v.status}] ${v.detail}`); if (v.remedy) out(`remedy: ${v.remedy}`);
       return v.ok ? 0 : 1;
     }
+    case 'verify-ai': {
+      const ai = require('./lib/ai');
+      const r = argv.includes('--fixture') ? await ai.fixtureCheck(cfg, cfg.repoDir) : await ai.smoke(cfg);
+      out(`ai: ${r.ok ? 'OK' : 'NOT OK'} mode=${cfg.ai.mode} model=${cfg.ai.model || '(none)'} ${r.detail}`);
+      if (r.usage) out(`usage: ${JSON.stringify(r.usage)}; today ${JSON.stringify(ai.usageToday(cfg))} of budget requests=${cfg.ai.dailyRequests} tokens=${cfg.ai.dailyTokens}`);
+      if (r.checked) for (const c of r.checked) out(`  decision ${c.kind}: ${c.valid ? 'valid' : 'rejected: ' + c.errors.join('; ')}`);
+      return r.ok ? 0 : 1;
+    }
     case 'weekly': { const z = zonedDate(new Date(), cfg.timezone); const st = state.load(cfg); const f = weekly.write(cfg, files, st, z.date); st.lastWeekly = z.date; state.save(cfg, st); out(`weekly report: ${f}`); return 0; }
     case 'health': {
       const last = state.readLedger(cfg, 200).filter((e) => !e.dryRun && e.status !== 'skipped').pop();
@@ -102,10 +111,10 @@ async function main(argv) {
     }
     case 'status': {
       const st = state.load(cfg);
-      out(JSON.stringify({ enabled: !state.isDisabled(cfg), mode: cfg.mode, publish: cfg.publish, autoPublish: { configured: cfg.mode === 'auto' && !require('./lib/publish').misconfigured(cfg), activated: require('./lib/activation').status(cfg).ok, paused: st.autoPaused || null, restartCommandSet: Boolean(cfg.auto.restartCmd), maxPerDay: cfg.auto.maxPerDay }, aiMode: cfg.ai.mode, gscConfigured: Boolean(cfg.google.clientId && cfg.google.clientSecret && cfg.google.refreshToken), alertWebhookConfigured: Boolean(cfg.alertWebhook), initialAuditDone: st.initialAuditDone, lastRun: st.lastRun, lastHealth: st.lastHealth, lastWeekly: st.lastWeekly, stateDir: cfg.stateDir, repoDir: cfg.repoDir, fetchBase: cfg.fetchBase, envFile: cfg.envFileUsed, openProposals: st.history.filter((h) => h.status === 'proposed').map((h) => ({ page: h.page, branch: h.branch, date: h.date })) }, null, 2));
+      out(JSON.stringify({ enabled: !state.isDisabled(cfg), mode: cfg.mode, publish: cfg.publish, autoPublish: { configured: cfg.mode === 'auto' && !require('./lib/publish').misconfigured(cfg), activated: require('./lib/activation').status(cfg).ok, paused: st.autoPaused || null, restartCommandSet: Boolean(cfg.auto.restartCmd), maxPerDay: cfg.auto.maxPerDay }, aiMode: cfg.ai.mode, aiModel: cfg.ai.model || null, aiUsageToday: require('./lib/ai').usageToday(cfg), gscConfigured: Boolean(cfg.google.clientId && cfg.google.clientSecret && cfg.google.refreshToken), alertWebhookConfigured: Boolean(cfg.alertWebhook), initialAuditDone: st.initialAuditDone, lastRun: st.lastRun, lastHealth: st.lastHealth, lastWeekly: st.lastWeekly, stateDir: cfg.stateDir, repoDir: cfg.repoDir, fetchBase: cfg.fetchBase, envFile: cfg.envFileUsed, openProposals: st.history.filter((h) => h.status === 'proposed').map((h) => ({ page: h.page, branch: h.branch, date: h.date })) }, null, 2));
       return 0;
     }
-    default: out('usage: node autopilot/cli.js <run|dry-run|report|enable|disable|rollback|audit-log|ledger|changes|baseline|status|verify-google|health|weekly|resume-auto|activate-auto|deactivate-auto>'); return 2;
+    default: out('usage: node autopilot/cli.js <run|dry-run|report|enable|disable|rollback|audit-log|ledger|changes|baseline|status|verify-google|verify-ai|health|weekly|resume-auto|activate-auto|deactivate-auto>'); return 2;
   }
 }
 

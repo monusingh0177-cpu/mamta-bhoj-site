@@ -16,6 +16,7 @@ const REALERT_DAYS = 7;
 function aiMisconfigured(cfg) {
   const a = cfg.ai || {}; if (!a.mode || a.mode === 'none') return '';
   if (a.mode === 'openai') return !a.baseUrl || !a.apiKey || !a.model ? 'AUTOPILOT_AI_MODE=openai needs AUTOPILOT_AI_BASE_URL, _MODEL and _API_KEY' : '';
+  if (a.mode === 'gemini') return !a.apiKey || !a.model ? 'AUTOPILOT_AI_MODE=gemini needs AUTOPILOT_AI_API_KEY and AUTOPILOT_AI_MODEL' : '';
   if (a.mode === 'anthropic') return !a.apiKey || !a.model ? 'AUTOPILOT_AI_MODE=anthropic needs AUTOPILOT_AI_API_KEY and AUTOPILOT_AI_MODEL' : '';
   if (a.mode === 'claude-cli') return '';
   return `unknown AUTOPILOT_AI_MODE "${a.mode}"`;
