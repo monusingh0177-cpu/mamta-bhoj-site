@@ -93,7 +93,8 @@ const okBody = (decisions, extra) => JSON.stringify(Object.assign({ candidates: 
   t = await run({ AUTOPILOT_AI_DAILY_REQUESTS: '2' }, reply(200, okBody([decision()])));
   let r2 = await ai.propose(t.cfg, ctx); let r3 = await ai.propose(t.cfg, ctx);
   check(t.r.decisions && r2.decisions && r3.skipped && r3.budget && /request budget reached \(2\/2\)/.test(r3.reason) && seen.length === 2, 'daily request budget stops further calls', JSON.stringify(r3));
-  t = await run({ AUTOPILOT_AI_DAILY_TOKENS: '1000' }, reply(200, okBody([decision()])));
+  const estTok = require(path.join(ROOT, 'autopilot/lib/budget')).estimateTokens(mk({}).cfg, ai.buildPrompt(ctx));
+  t = await run({ AUTOPILOT_AI_DAILY_TOKENS: String(estTok + 1000) }, reply(200, okBody([decision()])));
   r2 = await ai.propose(t.cfg, ctx); r3 = await ai.propose(t.cfg, ctx);
   check(r2.decisions && r3.budget && /token budget reached/.test(r3.reason) && seen.length === 2, 'daily token budget stops further calls');
   const u = JSON.parse(fs.readFileSync(path.join(t.dir, 'ai-usage.json'), 'utf8'));

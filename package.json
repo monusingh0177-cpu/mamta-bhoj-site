@@ -21,7 +21,8 @@
     "seo:rollback": "node autopilot/cli.js rollback",
     "seo:audit-log": "node autopilot/cli.js audit-log",
     "test:autopilot": "node scripts/test-autopilot.js",
-    "test:ai": "node scripts/test-ai-gemini.js"
+    "test:ai": "node scripts/test-ai-gemini.js",
+    "test:ai-budget": "node scripts/test-ai-budget.js"
   },
   "dependencies": {
     "nodemailer": "^10.0.10"

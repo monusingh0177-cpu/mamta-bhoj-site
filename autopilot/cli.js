@@ -94,6 +94,7 @@ async function main(argv) {
     }
     case 'verify-ai': {
       const ai = require('./lib/ai');
+      // (a budget refusal or an unreadable budget state is reported as NOT OK; nothing is sent in that case)
       const r = argv.includes('--fixture') ? await ai.fixtureCheck(cfg, cfg.repoDir) : await ai.smoke(cfg);
       out(`ai: ${r.ok ? 'OK' : 'NOT OK'} mode=${cfg.ai.mode} model=${cfg.ai.model || '(none)'} ${r.detail}`);
       if (r.usage) out(`usage: ${JSON.stringify(r.usage)}; today ${JSON.stringify(ai.usageToday(cfg))} of budget requests=${cfg.ai.dailyRequests} tokens=${cfg.ai.dailyTokens}`);

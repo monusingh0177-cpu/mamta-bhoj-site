@@ -40,5 +40,7 @@ jobs:
         run: bash scripts/test-secret-scan.sh
       - name: Gemini provider tests (fake Gemini server)
         run: node scripts/test-ai-gemini.js
+      - name: AI budget tests (hard cap, concurrency, time zone, fail-closed)
+        run: node scripts/test-ai-budget.js
       - name: Autopilot tests (installer, systemd-analyze, file modes, one-shot run)
         run: node scripts/test-autopilot.js
