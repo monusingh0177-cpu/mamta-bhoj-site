@@ -915,7 +915,7 @@ const cleanBranches = (repo) => { try { git(repo, 'worktree', 'prune'); } catch 
       const spaced = path.join(root, 'repo with space'); fs.mkdirSync(path.join(spaced, 'autopilot'), { recursive: true }); fs.writeFileSync(path.join(spaced, 'autopilot/cli.js'), '');
       r = sh('install-autopilot.sh', ['--user', 'deploy', '--node', process.execPath, '--repo', spaced]); check(r.status === 2 && /unsafe path/.test(r.stderr) && !/sudo/.test(r.stderr), 'a real install refuses a repository path that would break the systemd unit (checked before anything is written)', r.stderr);
       const odd = path.join(root, 'odd&dir#x'); fs.mkdirSync(path.join(odd, 'autopilot'), { recursive: true }); fs.mkdirSync(path.join(odd, 'deploy/autopilot'), { recursive: true }); fs.writeFileSync(path.join(odd, 'autopilot/cli.js'), '');
-      for (const f of fs.readdirSync(U)) fs.copyFileSync(path.join(U, f), path.join(odd, 'deploy/autopilot', f));
+      fs.cpSync(U, path.join(odd, 'deploy/autopilot'), { recursive: true });
       const preOdd = path.join(root, 'prefix-odd'); r = sh('install-autopilot.sh', ['--user', 'deploy', '--prefix', preOdd, '--node', process.execPath, '--repo', odd]); const svcOdd = fs.existsSync(path.join(preOdd, 'etc/systemd/system/mamta-autopilot.service')) ? fs.readFileSync(path.join(preOdd, 'etc/systemd/system/mamta-autopilot.service'), 'utf8') : '';
       check(r.status === 0 && svcOdd.includes('odd&dir#x') && svcOdd.includes(process.execPath), 'paths containing &, # (and, on Windows, backslashes and spaces) are rendered into the unit literally: the root cause of the former "one-shot run" failure', svcOdd.split('\n').filter((l) => /ExecStart/.test(l)).join());
 
