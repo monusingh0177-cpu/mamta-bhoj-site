@@ -390,6 +390,38 @@ const API_ENV = (port, extra) => Object.assign({ ZEPTOMAIL_API_URL: `http://127.
     app.stop();
   }
 
+  if (run('crm')) {
+    section('G. CRM forwarding (mock CRM; visitor answer and email must be unaffected)');
+    const CRM_KEY = 'e2e-fixture-' + 'k'.repeat(20);
+    const crmSeen = [];
+    const crmSrv = http.createServer((req, res) => {
+      let b = ''; req.on('data', (d) => { b += d; });
+      req.on('end', () => { crmSeen.push({ url: req.url, key: req.headers['x-intake-key'], body: b }); res.writeHead(201, { 'Content-Type': 'application/json' }); res.end('{"ok":true,"status":"created"}'); });
+    });
+    await new Promise((r) => crmSrv.listen(0, '127.0.0.1', r)); cleanup.push(() => crmSrv.close());
+    smtp.state.mode = 'ok'; smtp.state.requests.length = 0;
+    const app = await startApp(API_ENV(smtp.port, { CRM_INTAKE_URL: `http://127.0.0.1:${crmSrv.address().port}/api/intake`, CRM_INTAKE_KEY: CRM_KEY })); cleanup.push(app.stop);
+    const r = await post(app, VALID);
+    check(r.status === 201 && parse(r).ok === true && !r.text.includes(CRM_KEY) && !/crm/i.test(r.text), 'visitor gets the normal 201 and no CRM detail', `${r.status} ${r.text.slice(0, 100)}`);
+    await sleep(600);
+    check(crmSeen.length === 1 && crmSeen[0].key === CRM_KEY && JSON.parse(crmSeen[0].body).source === 'WEBSITE_FORM', 'enquiry forwarded to the mock CRM as WEBSITE_FORM with the key header');
+    check(smtp.state.requests.length === 1, 'the notification email is still sent exactly once');
+    const lg = app.log.join('');
+    check(!lg.includes(CRM_KEY) && /\[crm\] enquiry #\d+ forwarded/.test(lg), 'forwarding logged without the key');
+    const page = await request(app.port, 'GET', '/contact'); const js = await request(app.port, 'GET', '/js/main.js');
+    check(!page.text.includes(CRM_KEY) && !js.text.includes(CRM_KEY) && !/api\/intake/.test(page.text + js.text), 'key and endpoint never reach the browser');
+    app.stop();
+
+    const down = await startApp(API_ENV(smtp.port, { CRM_INTAKE_URL: `http://127.0.0.1:${await freePort()}/api/intake`, CRM_INTAKE_KEY: CRM_KEY })); cleanup.push(down.stop);
+    smtp.state.requests.length = 0;
+    const d = await post(down, VALID);
+    check(d.status === 201 && parse(d).ok === true && d.ms < 3000, `CRM down: visitor still gets 201 quickly (${d.ms} ms)`, `${d.status} ${d.text.slice(0, 100)}`);
+    await sleep(400);
+    check(down.rows().length === 1 && smtp.state.requests.length === 1, 'CRM down: enquiry stored and email still sent');
+    check(noLeaks(down) && !down.log.join('').includes(CRM_KEY), 'CRM down: no stack traces and no key in logs');
+    down.stop();
+  }
+
   cleanup.forEach((f) => { try { f(); } catch (e) { /* ignore */ } });
   console.log(`\nENQUIRY TESTS: ${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);

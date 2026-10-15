@@ -13,6 +13,7 @@
     "seo:indexnow": "node scripts/indexnow-submit.js",
     "test:enquiry": "node scripts/test-enquiry.js",
     "test:enquiry-unit": "node scripts/test-enquiry-unit.js",
+    "test:crm-forward": "node scripts/test-crm-forward.js",
     "seo:auto": "node autopilot/cli.js run",
     "seo:dry-run": "node autopilot/cli.js dry-run",
     "seo:report": "node autopilot/cli.js report",

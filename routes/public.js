@@ -16,6 +16,7 @@ const { renderB2B } = require('../views/b2b');
 const { findGuide, renderGuide, renderGuidesIndex, GUIDES } = require('../views/guides');
 const { B2B_PAGES, renderB2BPage } = require('../views/b2b-pages');
 const { sendEnquiryEmail } = require('../lib/mailer');
+const { forwardInBackground } = require('../lib/crm-forward');
 const { Router } = require('../lib/router');
 const seo = require('../lib/seo');
 const { INDEXNOW_KEY, INDEXNOW_KEY_PATH } = require('../lib/indexnow');
@@ -490,6 +491,10 @@ router.post('/contact', async (req, res) => {
       console.error(`[enquiry] could not store the enquiry: ${err.code || ''} ${String(err.message || '').slice(0, 200)}`);
       return fail(500, 'storage', MESSAGES.server);
     }
+
+    // Forward to the sales CRM in the background (no-op unless CRM_INTAKE_URL / CRM_INTAKE_KEY are set).
+    // Never awaited and never able to throw, so it cannot affect the visitor's answer or the email below.
+    forwardInBackground(saved);
 
     // Notification email: attempted now, waited for only briefly, never allowed to fail or delay the answer.
     const mailing = sendEnquiryEmail(saved).catch((err) => ({ sent: false, reason: 'unexpected', ms: 0, err: err && err.message }));

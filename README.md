@@ -236,6 +236,23 @@ Never commit these values.
 
 Test the whole pipeline with a fake API server (no real credentials needed): `npm run test:enquiry`.
 
+### Forwarding enquiries to the sales CRM (optional, off by default)
+
+After an enquiry is saved, the server can forward it to the DevMam sales CRM (`POST /api/intake`, source `WEBSITE_FORM`;
+contract: `docs/WEBSITE_INTEGRATION_CONTRACT.md` in the CRM repository). Code: `lib/crm-forward.js`. It runs in the
+background, so a CRM outage never changes the visitor's answer or the email. Timeout 5 s; up to 3 attempts (backoff 1 s, 5 s)
+on network errors, timeouts, 429 and 5xx; never on 400/401/other 4xx. The CRM itself de-duplicates identical enquiries for 24 h
+(`200 duplicate_attached` counts as success). Failures are logged as `[crm] ... NOT forwarded` with the status only, never the key.
+
+| Variable | Purpose |
+|---|---|
+| `CRM_INTAKE_URL` | Full CRM intake URL, e.g. `https://<crm-host>/api/intake`. Must be `https` (plain `http` only for `127.0.0.1`/`localhost`). |
+| `CRM_INTAKE_KEY` | One value from the CRM's `CRM_INTAKE_KEYS` (>= 24 chars). Server-side only; never the CRM admin/staff token. |
+| `CRM_INTAKE_TIMEOUT_MS` | Optional per-attempt timeout, 500-30000 (default 5000). |
+
+Forwarding is active only when both `CRM_INTAKE_URL` and `CRM_INTAKE_KEY` are valid; otherwise it is silently off. Test: `npm run test:crm-forward`
+and `npm run test:enquiry` (mock CRM only).
+
 **Spam protection.** The form also has a hidden honeypot field, a signed form token with a minimum fill time,
 a per-IP rate limit, strict Indian mobile validation (`^[6-9][0-9]{9}$`, enforced in the browser *and* on the server)
 and optional Cloudflare Turnstile (`TURNSTILE_SITE_KEY` + `TURNSTILE_SECRET_KEY`; off, with a logged warning, until both are set).
