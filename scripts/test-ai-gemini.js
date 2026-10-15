@@ -140,6 +140,20 @@ const okBody = (decisions, extra) => JSON.stringify(Object.assign({ candidates: 
     const sh = path.join(ROOT, 'deploy/autopilot/set-ai-key.sh'); const run = (key, extra) => { fs.writeFileSync(tty, key + '\n'); return spawnSync('bash', [sh, '--env-file', envf].concat(extra || []), { encoding: 'utf8', env: Object.assign({}, process.env, { SET_AI_KEY_TTY: tty }) }); };
     let r = run('bad key!');
     check(r.status === 1 && !fs.readFileSync(envf, 'utf8').includes('AUTOPILOT_AI_API_KEY') && fs.readdirSync(d).length === 2, 'an implausible key changes nothing and makes no backup');
+    // invalid inputs: each must change nothing, make no backup and never echo the input
+    const invalid = [['empty', ''], ['too short (19)', 'A'.repeat(19)], ['too long (513)', 'A'.repeat(513)], ['an inner space', 'AQ.' + 'x'.repeat(10) + ' ' + 'y'.repeat(10)], ['a trailing space', 'AQ.' + 'x'.repeat(30) + ' '], ['a tab', 'AQ.' + 'x'.repeat(10) + '\t' + 'y'.repeat(10)], ['a double quote', 'AQ.' + 'x'.repeat(30) + '"'], ['a command substitution', 'AQ.$(touch_pwned)' + 'x'.repeat(20)], ['a backtick', 'AQ.`id`' + 'x'.repeat(25)], ['a semicolon', 'AQ.' + 'x'.repeat(30) + ';rm'], ['a hash', 'AQ.' + 'x'.repeat(30) + '#c'], ['a backslash', 'AQ.' + 'x'.repeat(30) + '\\n'], ['a non-ASCII character', 'AQ.' + 'x'.repeat(30) + 'é']];
+    for (const [name, v] of invalid) {
+      const x = run(v); const untouched = !fs.readFileSync(envf, 'utf8').includes('AUTOPILOT_AI_API_KEY') && fs.readdirSync(d).length === 2;
+      check(x.status !== 0 && untouched && (!v || !(x.stdout + x.stderr).includes(v)), `key input with ${name} is rejected, nothing changes, input not echoed`, x.status + ' ' + x.stderr);
+    }
+    // supported formats: the classic AIza key, the newer AQ.<token> key (contains a dot), and the longest allowed
+    for (const [name, v] of [['classic AIza (39 chars)', 'AIzaSy' + 'a1B2-c3D4_e5F6g7H8i9J0k1L2m3N4o'], ['new AQ.<token> with dots', 'AQ.Ab8RN6' + 'x1Y2.z3-Q4_w5.e6R7t8Y9u0I1o2P3'], ['base64-style characters', 'AQ.abc+def/ghi~jkl=mno' + 'x'.repeat(10)], ['exactly 20 characters', 'A'.repeat(20)], ['exactly 512 characters', 'A'.repeat(512)]]) {
+      const x = run(v); const got = fs.readFileSync(envf, 'utf8');
+      check(x.status === 0 && got.includes('AUTOPILOT_AI_API_KEY=' + v + '\n') && !(x.stdout + x.stderr).includes(v), `${name} is accepted and stored verbatim, never printed`, x.stderr);
+      fs.writeFileSync(envf, 'AUTOPILOT_MODE=auto\nAUTOPILOT_GOOGLE_CLIENT_SECRET=keep-me-0123456789\nAUTOPILOT_AI_MODE=none\nAUTOPILOT_TZ=x\n', { mode: 0o600 });
+      for (const f of fs.readdirSync(d)) if (f.includes('.bak-')) fs.rmSync(path.join(d, f));
+    }
+    check(!fs.existsSync(path.join(ROOT, 'touch_pwned')) && !fs.existsSync(path.join(d, 'touch_pwned')), 'no input was ever evaluated as shell code');
     r = run(KEY); let e = fs.readFileSync(envf, 'utf8');
     check(r.status === 0 && /^AUTOPILOT_AI_MODE=none$/m.test(e) && e.includes('AUTOPILOT_AI_API_KEY=' + KEY), 'without --enable the AI mode is left unchanged');
     r = run(KEY, ['--enable']); e = fs.readFileSync(envf, 'utf8');

@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # Store the Gemini API key in the autopilot's env file WITHOUT ever echoing it, putting it in a command line, a log or Git.
 #   sudo deploy/autopilot/set-ai-key.sh [--env-file /etc/mamta-autopilot/autopilot.env] [--model gemini-2.5-flash] [--enable]
-# The key is read from the terminal with echo off (/dev/tty), so it cannot be piped in or passed as an argument.
+# The key is validated (20-512 characters of A-Za-z0-9._~+/=-) and read from the terminal with echo off (/dev/tty), so it cannot be piped in or passed as an argument.
 # It sets AUTOPILOT_AI_MODEL and AUTOPILOT_AI_API_KEY (and AUTOPILOT_AI_MODE=gemini only with --enable, once the deployed code supports it) and leaves every other line untouched
 # (Google OAuth values, limits, mode). A timestamped 600 backup is made first; the new file is written next to the old one
 # and renamed over it (atomic), keeping the original owner, group and mode. Nothing is restarted.
 set -euo pipefail
+export LC_ALL=C   # byte-wise character classes: A-Za-z never matches accented letters
 ENVF="/etc/mamta-autopilot/autopilot.env"; MODEL="gemini-2.5-flash"; ENABLE=0
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -28,7 +29,13 @@ IFS= read -r -s KEY < "$TTY_DEV" || true
 printf '\n' > "$PROMPT_DEV"
 KEY="${KEY//$'\r'/}"
 [ -n "$KEY" ] || { echo "ERROR: empty input; nothing changed" >&2; exit 1; }
-[[ "$KEY" =~ ^[A-Za-z0-9_-]{20,200}$ ]] || { echo "ERROR: that does not look like an API key (unexpected characters or length); nothing changed" >&2; unset KEY; exit 1; }
+# Accepted: 20-512 characters from  A-Z a-z 0-9 . _ ~ + / = -  (covers the classic "AIza..." keys and the newer "AQ.<token>" keys, which contain a dot).
+# Whitespace, control characters, quotes, #, $, backslash, backtick and anything else are refused, so the value is safe in the env file.
+# On refusal only the length or the kind of problem is printed, never the key or the offending character.
+KLEN=${#KEY}
+if [ "$KLEN" -lt 20 ] || [ "$KLEN" -gt 512 ]; then echo "ERROR: unexpected key length ($KLEN characters; expected 20-512); nothing changed" >&2; unset KEY; exit 1; fi
+if [[ "$KEY" =~ [[:space:][:cntrl:]] ]]; then echo "ERROR: the key contains whitespace or control characters; nothing changed" >&2; unset KEY; exit 1; fi
+[[ "$KEY" =~ ^[A-Za-z0-9._~+/=-]+$ ]] || { echo "ERROR: the key contains characters other than letters, digits and . _ ~ + / = - ; nothing changed" >&2; unset KEY; exit 1; }
 
 DIR="$(dirname "$ENVF")"; BAK="$ENVF.bak-$(date -u +%Y%m%dT%H%M%SZ)"
 cp -p "$ENVF" "$BAK"; chmod 600 "$BAK"
