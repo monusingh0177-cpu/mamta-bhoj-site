@@ -1,0 +1,64 @@
+#!/bin/bash
+# mamta-autopilot-restart - ROOT-owned, fixed-purpose helper. Installed as /usr/local/sbin/mamta-autopilot-restart (0750 root:root)
+# and started ONLY by mamta-autopilot-restart.path when a request file appears.
+#
+# What it can do: restart ONE PM2 application (APP below) and report ok/failed. That is all.
+#   * It takes no arguments and never reads the content of a request: a request is just a FILE NAME "req.<token>" created by the
+#     unprivileged autopilot user in a root-owned, sticky, group-writable directory. The token is echoed back in a root-owned
+#     result file so the requester can tell its answer from an old one. Nothing a requester writes is ever executed or interpreted.
+#   * Request files are removed with rm -f (a symlink is removed, never followed); the directories are root-owned, so the
+#     requester cannot replace them.
+#   * At most one restart every MIN_GAP seconds (a flood of requests cannot make the site flap).
+# The service user needs no sudo, no root shell and no PM2 access: NoNewPrivileges=true in its unit stays in force.
+#
+# CONSTANTS (tests substitute these lines; in production they are exactly as shipped)
+RUN_DIR=/run/mamta-autopilot-restart
+PM2_BIN=/usr/bin/pm2
+NODE_BIN=/usr/bin/node
+PM2_HOME_DIR=/root/.pm2
+APP=mamta-bhoj
+MIN_GAP=15
+ONLINE_WAIT=30
+# END CONSTANTS
+set -u
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+export HOME=/root PM2_HOME="$PM2_HOME_DIR"
+umask 022
+REQ="$RUN_DIR/req"; RES="$RUN_DIR/res"
+[ -d "$REQ" ] && [ ! -L "$REQ" ] && [ -d "$RES" ] && [ ! -L "$RES" ] || exit 0
+
+tokens=()
+for f in "$REQ"/*; do
+  [ -e "$f" ] || [ -L "$f" ] || continue
+  name="${f##*/}"
+  rm -f -- "$f"
+  if [[ "$name" =~ ^req\.([A-Za-z0-9]{8,40})$ ]]; then tokens+=("${BASH_REMATCH[1]}"); fi
+done
+[ "${#tokens[@]}" -gt 0 ] || exit 0
+
+online() {
+  "$PM2_BIN" jlist 2>/dev/null | "$NODE_BIN" -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const l=JSON.parse(s.slice(s.indexOf("[")));process.exit(l.some(a=>a.name===process.argv[1]&&a.pm2_env&&a.pm2_env.status==="online")?0:1)}catch(e){process.exit(1)}})' "$APP"
+}
+
+now=$(date +%s); last=0
+if [ -f "$RUN_DIR/last" ] && [ ! -L "$RUN_DIR/last" ]; then last=$(cat "$RUN_DIR/last" 2>/dev/null); fi
+[[ "$last" =~ ^[0-9]+$ ]] || last=0
+if [ $((now - last)) -lt "$MIN_GAP" ]; then
+  status=busy
+else
+  printf '%s\n' "$now" > "$RUN_DIR/last.$$" && mv -f -- "$RUN_DIR/last.$$" "$RUN_DIR/last"
+  status=failed
+  if "$PM2_BIN" restart "$APP" >/dev/null 2>&1; then
+    for ((i = 0; i < ONLINE_WAIT; i++)); do
+      if online; then status=ok; break; fi
+      sleep 1
+    done
+  fi
+fi
+
+ts=$(date -u +%FT%TZ)
+for t in "${tokens[@]}"; do
+  ( set -C; printf '%s %s %s\n' "$t" "$status" "$ts" > "$RES/$t" ) 2>/dev/null
+done
+find "$RES" -maxdepth 1 -type f -mmin +1440 -delete 2>/dev/null
+[ "$status" = ok ]

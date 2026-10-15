@@ -1,0 +1,17 @@
+[Unit]
+Description=Mamta Bhoj SEO autopilot: restart the website (fixed command, root helper)
+Documentation=file:@REPO@/docs/seo-autopilot.md
+
+[Service]
+Type=oneshot
+# Fixed program, no arguments, no request content is ever interpreted (see the header of the helper).
+ExecStart=/usr/local/sbin/mamta-autopilot-restart
+Environment=HOME=/root
+Environment=PM2_HOME=/root/.pm2
+TimeoutStartSec=120
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectKernelTunables=true
+ProtectControlGroups=true
+LockPersonality=true

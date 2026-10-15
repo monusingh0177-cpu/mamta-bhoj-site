@@ -1,0 +1,6 @@
+# /etc/tmpfiles.d/mamta-autopilot-restart.conf - the request/response directories of the restart helper (recreated at every boot).
+# req: sticky (1770), group-writable by the autopilot user only; the user can create/delete ITS OWN request files, nothing else.
+# res: written by root only; the autopilot user can read the answer.
+d /run/mamta-autopilot-restart      0755 root root -
+d /run/mamta-autopilot-restart/req  1770 root @USER@ -
+d /run/mamta-autopilot-restart/res  0755 root root -

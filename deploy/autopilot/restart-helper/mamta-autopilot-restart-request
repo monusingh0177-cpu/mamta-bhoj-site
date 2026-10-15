@@ -1,0 +1,25 @@
+#!/bin/bash
+# mamta-autopilot-restart-request - run by the UNPRIVILEGED autopilot service user as AUTOPILOT_RESTART_CMD
+# (installed as /usr/local/bin/mamta-autopilot-restart-request). It asks the root-owned helper to restart the website and waits for
+# the answer. Exit 0 only if the helper reports "ok" for THIS request. It needs no sudo and no privileges.
+#
+# CONSTANTS (tests substitute these lines; in production they are exactly as shipped)
+RUN_DIR=/run/mamta-autopilot-restart
+WAIT=90
+# END CONSTANTS
+set -u
+[ -d "$RUN_DIR/req" ] || { echo "restart helper is not installed: $RUN_DIR/req does not exist" >&2; exit 1; }
+token=$(od -An -N12 -tx1 /dev/urandom | tr -d ' \n')
+[ "${#token}" -eq 24 ] || { echo "cannot create a request token" >&2; exit 1; }
+: > "$RUN_DIR/req/req.$token" || { echo "cannot create a request in $RUN_DIR/req (is this the autopilot service user?)" >&2; exit 1; }
+for ((i = 0; i < WAIT; i++)); do
+  if [ -f "$RUN_DIR/res/$token" ]; then
+    read -r t status ts < "$RUN_DIR/res/$token"
+    if [ "$t" = "$token" ] && [ "$status" = ok ]; then echo "restarted at $ts"; exit 0; fi
+    echo "restart was not done: ${status:-unknown}" >&2; exit 1
+  fi
+  sleep 1
+done
+rm -f -- "$RUN_DIR/req/req.$token"
+echo "timed out after ${WAIT}s waiting for the restart helper (is mamta-autopilot-restart.path active?)" >&2
+exit 1

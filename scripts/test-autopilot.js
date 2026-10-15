@@ -819,6 +819,65 @@ const cleanBranches = (repo) => { try { git(repo, 'worktree', 'prune'); } catch 
       untouched('E15'); resetOrigin();
     }
 
+    // ---- E16 root-owned restart helper (fixed command, no sudo) and the auto-publish install with it
+    if (want('helper')) {
+      section('E16: restart helper - one fixed pm2 command, request content never interpreted, no sudo');
+      const HD = path.join(SRC, 'deploy/autopilot/restart-helper'); const posix = (p) => p.replace(/\\/g, '/');
+      const helperSrc = fs.readFileSync(path.join(HD, 'mamta-autopilot-restart'), 'utf8').replace(/\r\n/g, '\n'); const reqSrc = fs.readFileSync(path.join(HD, 'mamta-autopilot-restart-request'), 'utf8').replace(/\r\n/g, '\n');
+      const consts = (src) => (src.match(/# CONSTANTS[^\n]*\n([\s\S]*?)# END CONSTANTS/) || [])[1] || '';
+      check(/RUN_DIR=\/run\/mamta-autopilot-restart\n/.test(consts(helperSrc)) && /PM2_BIN=\/usr\/bin\/pm2\n/.test(consts(helperSrc)) && /APP=mamta-bhoj\n/.test(consts(helperSrc)) && /RUN_DIR=\/run\/mamta-autopilot-restart\n/.test(consts(reqSrc)), 'the shipped constants are the production ones (fixed run directory, /usr/bin/pm2, app mamta-bhoj)');
+      const codeOnly = (src) => src.split('\n').filter((l) => !l.trim().startsWith('#')).join('\n');
+      check(!/\bsudo\b|\beval\b|\bsource\b|\bbash -c\b|\bsh -c\b/.test(codeOnly(helperSrc) + codeOnly(reqSrc)) && (codeOnly(helperSrc).match(/"\$PM2_BIN" restart "\$APP"/g) || []).length === 1 && !/PM2_BIN" (stop|delete|kill|start|reload|save|startup|update)/.test(codeOnly(helperSrc)), 'the helper has no sudo/eval/source/sh -c and its only action on PM2 is: restart "$APP"');
+      const T = path.join(root, 'helper-test'); fs.mkdirSync(T, { recursive: true });
+      const mkEnv = (name, o) => {
+        const d = path.join(T, name); fs.mkdirSync(path.join(d, 'req'), { recursive: true }); fs.mkdirSync(path.join(d, 'res'), { recursive: true });
+        const fake = path.join(d, 'fake-pm2'); const log = path.join(d, 'pm2.log');
+        fs.writeFileSync(fake, `#!/bin/bash\necho "$@" >> '${posix(log)}'\ncase "$1" in\n  restart) exit ${o && o.restartFails ? 1 : 0} ;;\n  jlist) echo '[{"name":"mamta-bhoj","pm2_env":{"status":"${o && o.offline ? 'errored' : 'online'}"}},{"name":"other","pm2_env":{"status":"online"}}]' ;;\nesac\n`); fs.chmodSync(fake, 0o755);
+        const hp = path.join(d, 'helper.sh'); fs.writeFileSync(hp, helperSrc.replace('RUN_DIR=/run/mamta-autopilot-restart', `RUN_DIR='${posix(d)}'`).replace('PM2_BIN=/usr/bin/pm2', `PM2_BIN='${posix(fake)}'`).replace('NODE_BIN=/usr/bin/node', `NODE_BIN='${posix(process.execPath)}'`).replace('PM2_HOME_DIR=/root/.pm2', `PM2_HOME_DIR='${posix(d)}/pm2home'`).replace('MIN_GAP=15', `MIN_GAP=${o && o.gap != null ? o.gap : 0}`).replace('ONLINE_WAIT=30', 'ONLINE_WAIT=2'));
+        const rp = path.join(d, 'request.sh'); fs.writeFileSync(rp, reqSrc.replace('RUN_DIR=/run/mamta-autopilot-restart', `RUN_DIR='${posix(d)}'`).replace('WAIT=90', `WAIT=${o && o.wait != null ? o.wait : 6}`));
+        return { d, hp, rp, log, run: () => spawnSync('bash', [hp], { encoding: 'utf8', env: Object.assign({}, process.env, { HOME: posix(d) }) }), calls: () => (fs.existsSync(log) ? fs.readFileSync(log, 'utf8').trim().split('\n').filter(Boolean) : []) };
+      };
+      let e = mkEnv('ok'); fs.writeFileSync(path.join(e.d, 'req', 'req.abcdef0123456789'), 'ignored content; touch ' + posix(path.join(e.d, 'PWNED')));
+      let hr = e.run(); const resf = path.join(e.d, 'res', 'abcdef0123456789');
+      check(hr.status === 0 && fs.existsSync(resf) && /^abcdef0123456789 ok \d{4}-/.test(fs.readFileSync(resf, 'utf8')) && fs.readdirSync(path.join(e.d, 'req')).length === 0 && e.calls()[0] === 'restart mamta-bhoj' && e.calls().filter((c) => c.startsWith('restart')).length === 1 && !fs.existsSync(path.join(e.d, 'PWNED')), 'a request restarts exactly "mamta-bhoj" once, answers ok with its own token, empties the request directory, and never interprets the request content', hr.stderr + e.calls().join('|'));
+      check(e.calls().every((c) => c === 'restart mamta-bhoj' || c === 'jlist'), 'the only pm2 commands ever run are: restart mamta-bhoj and jlist (read-only status)', e.calls().join('|'));
+      e = mkEnv('badnames'); for (const n of ['req.short', 'req.has space1234', 'req.$(touch PWNED2)', 'req.;touch PWNED3;', 'other.abcdefgh12', 'req.abcdefgh12/../x']) { try { fs.writeFileSync(path.join(e.d, 'req', n), 'x'); } catch (x) { /* a name the file system rejects is also fine */ } }
+      hr = e.run(); check(e.calls().length === 0 && fs.readdirSync(path.join(e.d, 'res')).length === 0 && fs.readdirSync(path.join(e.d, 'req')).length === 0 && !fs.readdirSync(e.d).some((n) => /PWNED/.test(n)), 'malformed or hostile request names are discarded: no restart, no answer, nothing executed', e.calls().join('|'));
+      e = mkEnv('symlink'); const victim = path.join(e.d, 'victim.txt'); fs.writeFileSync(victim, 'precious'); let linked = false;
+      try { fs.symlinkSync(victim, path.join(e.d, 'req', 'req.symlink12345')); linked = true; } catch (x) { /* symlinks need privileges on Windows */ }
+      if (linked) { hr = e.run(); check(fs.readFileSync(victim, 'utf8') === 'precious' && !fs.existsSync(path.join(e.d, 'req', 'req.symlink12345')) && fs.existsSync(victim), 'a symlinked request is removed as a link and never followed: its target is untouched'); } else skip('a symlinked request is never followed', 'creating symlinks needs elevated rights on this Windows account; asserted on Linux');
+      e = mkEnv('gap', { gap: 3600 }); fs.writeFileSync(path.join(e.d, 'req', 'req.firstreq12345'), ''); e.run(); fs.writeFileSync(path.join(e.d, 'req', 'req.secondreq1234'), ''); hr = e.run();
+      check(e.calls().filter((c) => c.startsWith('restart')).length === 1 && /busy/.test(fs.readFileSync(path.join(e.d, 'res', 'secondreq1234'), 'utf8')) && hr.status !== 0, 'a second request inside the minimum gap is answered "busy" and does not restart again');
+      e = mkEnv('fail', { restartFails: true }); fs.writeFileSync(path.join(e.d, 'req', 'req.failedreq12345'), ''); hr = e.run(); check(/ failed /.test(fs.readFileSync(path.join(e.d, 'res', 'failedreq12345'), 'utf8')) && hr.status !== 0, 'a failing pm2 restart is answered "failed"');
+      e = mkEnv('offline', { offline: true }); fs.writeFileSync(path.join(e.d, 'req', 'req.offlinereq12345'), ''); hr = e.run(); check(/ failed /.test(fs.readFileSync(path.join(e.d, 'res', 'offlinereq12345'), 'utf8')), 'a restart after which the app is not online is answered "failed", not "ok"');
+      e = mkEnv('absent'); fs.rmSync(path.join(e.d, 'req'), { recursive: true }); hr = e.run(); check(hr.status === 0 && e.calls().length === 0, 'with no request directory the helper does nothing');
+      // the requester (runs as the unprivileged service user)
+      e = mkEnv('requester', { wait: 8 }); const rq = spawn('bash', [e.rp], { stdio: ['ignore', 'pipe', 'pipe'] }); let rqOut = ''; rq.stdout.on('data', (d) => (rqOut += d)); rq.stderr.on('data', (d) => (rqOut += d)); const rqDone = new Promise((r) => rq.on('close', r));
+      let seen = null; for (let i = 0; i < 40 && !seen; i++) { await sleep(200); seen = fs.readdirSync(path.join(e.d, 'req')).find((n) => /^req\.[0-9a-f]{24}$/.test(n)); }
+      check(!!seen, 'the request script creates a request file with a random 24-hex token'); e.run(); const code = await rqDone;
+      check(code === 0 && /restarted at/.test(rqOut), 'the request script exits 0 only after the helper answered ok for its own token', rqOut);
+      e = mkEnv('requester-timeout', { wait: 1 }); const to = spawnSync('bash', [e.rp], { encoding: 'utf8' }); check(to.status === 1 && /timed out/.test(to.stderr) && fs.readdirSync(path.join(e.d, 'req')).length === 0, 'without an answer the request script times out (exit 1) and withdraws its request');
+      e = mkEnv('requester-busy', { wait: 6 }); const rq2 = spawn('bash', [e.rp], { stdio: ['ignore', 'pipe', 'pipe'] }); let o2 = ''; rq2.stderr.on('data', (d) => (o2 += d)); const d2 = new Promise((r) => rq2.on('close', r));
+      let s2 = null; for (let i = 0; i < 40 && !s2; i++) { await sleep(200); s2 = fs.readdirSync(path.join(e.d, 'req')).find((n) => /^req\./.test(n)); } fs.writeFileSync(path.join(e.d, 'res', s2.slice(4)), `${s2.slice(4)} failed 2026-01-01T00:00:00Z\n`); check((await d2) === 1 && /restart was not done: failed/.test(o2), 'a "failed" answer makes the request script exit 1');
+      e = mkEnv('requester-nodir'); fs.rmSync(path.join(e.d, 'req'), { recursive: true }); const nd = spawnSync('bash', [e.rp], { encoding: 'utf8' }); check(nd.status === 1 && /not installed/.test(nd.stderr), 'a missing helper installation is reported clearly (exit 1)');
+
+      section('E16: installer - restart helper and the drop-in that matches it');
+      const sh16 = (a) => spawnSync('bash', [path.join(SRC, 'deploy/autopilot/install-autopilot.sh'), ...a], { encoding: 'utf8' }); const pre3 = path.join(root, 'prefix-helper');
+      let ir = sh16(['--user', 'deploy', '--prefix', pre3, '--node', process.execPath, '--repo', SRC, '--auto-publish', '--restart-helper']);
+      const di3 = fs.existsSync(path.join(pre3, 'etc/systemd/system/mamta-autopilot.service.d/auto-publish.conf')) ? fs.readFileSync(path.join(pre3, 'etc/systemd/system/mamta-autopilot.service.d/auto-publish.conf'), 'utf8') : ''; const rw3 = (di3.match(/^ReadWritePaths=(.*)$/m) || [])[1] || '';
+      check(ir.status === 0 && rw3.trim().split(/\s+/).length === 2 && /\/views$/.test(rw3.trim().split(/\s+/)[0]) && rw3.trim().split(/\s+/)[1] === '-/run/mamta-autopilot-restart/req' && !/pm2|\/home\/|\/root/.test(rw3.split(SRC).join('')) && !/@[A-Z0-9]+@/.test(di3), 'with the helper the drop-in grants write access to exactly the views directory and the restart-request directory (no PM2 path, no home directory)', ir.stdout + ir.stderr + di3);
+      const need = ['usr/local/sbin/mamta-autopilot-restart', 'usr/local/bin/mamta-autopilot-restart-request', 'etc/systemd/system/mamta-autopilot-restart.service', 'etc/systemd/system/mamta-autopilot-restart.path', 'etc/tmpfiles.d/mamta-autopilot-restart.conf'];
+      check(need.every((f) => fs.existsSync(path.join(pre3, f))) && !fs.existsSync(path.join(pre3, 'etc/sudoers.d')), 'the helper, the request command, both units and the tmpfiles entry are installed, and no sudoers rule is created');
+      const tm = fs.readFileSync(path.join(pre3, 'etc/tmpfiles.d/mamta-autopilot-restart.conf'), 'utf8'); const hsvc = fs.readFileSync(path.join(pre3, 'etc/systemd/system/mamta-autopilot-restart.service'), 'utf8'); const hpath = fs.readFileSync(path.join(pre3, 'etc/systemd/system/mamta-autopilot-restart.path'), 'utf8');
+      check(/^d \/run\/mamta-autopilot-restart\/req\s+1770 root deploy/m.test(tm) && /^d \/run\/mamta-autopilot-restart\/res\s+0755 root root/m.test(tm) && /^ExecStart=\/usr\/local\/sbin\/mamta-autopilot-restart$/m.test(hsvc) && /NoNewPrivileges=true/.test(hsvc) && /DirectoryNotEmpty=\/run\/mamta-autopilot-restart\/req/.test(hpath), 'request directory is sticky and writable only by root and the service user; the root unit runs the one fixed program; the path unit watches the request directory');
+      if (WIN) skip('installed helper file modes (0750 helper, 0755 request command)', 'Windows/NTFS has no POSIX modes; asserted on Linux'); else check((fs.statSync(path.join(pre3, need[0])).mode & 0o777) === 0o750 && (fs.statSync(path.join(pre3, need[1])).mode & 0o777) === 0o755, 'installed helper file modes: 0750 helper, 0755 request command');
+      // the installed ExecStart= program does not exist in a scratch prefix, so verify copies whose ExecStart points at /bin/true: this checks the unit syntax and the path-to-service link
+      const vdir = path.join(root, 'verify-helper-units'); fs.mkdirSync(vdir, { recursive: true }); fs.writeFileSync(path.join(vdir, 'mamta-autopilot-restart.service'), hsvc.replace(/^ExecStart=.*$/m, 'ExecStart=/bin/true')); fs.writeFileSync(path.join(vdir, 'mamta-autopilot-restart.path'), hpath);
+      const an3 = spawnSync('systemd-analyze', ['verify', path.join(vdir, 'mamta-autopilot-restart.service'), path.join(vdir, 'mamta-autopilot-restart.path')], { encoding: 'utf8' });
+      if (an3.error) skip('systemd-analyze verify accepts the helper units', 'systemd-analyze is not installed on this machine'); else check(!/fatal|Unknown|error|Failed/i.test((an3.stdout || '') + (an3.stderr || '')), 'systemd-analyze verify accepts the helper units (service + path)', (an3.stdout || '') + (an3.stderr || ''));
+      ir = sh16(['--user', 'deploy', '--dry-run', '--node', process.execPath, '--repo', SRC, '--auto-publish', '--restart-helper']); check(ir.status === 0 && /\[dry-run\] install .*mamta-autopilot-restart \(0750 root:root/.test(ir.stdout) && /no sudo rule is created/.test(ir.stdout), 'the installer dry-run prints the helper plan and says no sudo rule is created');
+    }
+
     // ---- E12 optional: real project suites as gates
     if (FULL && want('full')) {
       section('E12: the project\'s real SEO hard check and enquiry tests run as gates in the worktree');
@@ -856,7 +915,7 @@ const cleanBranches = (repo) => { try { git(repo, 'worktree', 'prune'); } catch 
       const spaced = path.join(root, 'repo with space'); fs.mkdirSync(path.join(spaced, 'autopilot'), { recursive: true }); fs.writeFileSync(path.join(spaced, 'autopilot/cli.js'), '');
       r = sh('install-autopilot.sh', ['--user', 'deploy', '--node', process.execPath, '--repo', spaced]); check(r.status === 2 && /unsafe path/.test(r.stderr) && !/sudo/.test(r.stderr), 'a real install refuses a repository path that would break the systemd unit (checked before anything is written)', r.stderr);
       const odd = path.join(root, 'odd&dir#x'); fs.mkdirSync(path.join(odd, 'autopilot'), { recursive: true }); fs.mkdirSync(path.join(odd, 'deploy/autopilot'), { recursive: true }); fs.writeFileSync(path.join(odd, 'autopilot/cli.js'), '');
-      for (const f of fs.readdirSync(U)) fs.copyFileSync(path.join(U, f), path.join(odd, 'deploy/autopilot', f));
+      fs.cpSync(U, path.join(odd, 'deploy/autopilot'), { recursive: true });
       const preOdd = path.join(root, 'prefix-odd'); r = sh('install-autopilot.sh', ['--user', 'deploy', '--prefix', preOdd, '--node', process.execPath, '--repo', odd]); const svcOdd = fs.existsSync(path.join(preOdd, 'etc/systemd/system/mamta-autopilot.service')) ? fs.readFileSync(path.join(preOdd, 'etc/systemd/system/mamta-autopilot.service'), 'utf8') : '';
       check(r.status === 0 && svcOdd.includes('odd&dir#x') && svcOdd.includes(process.execPath), 'paths containing &, # (and, on Windows, backslashes and spaces) are rendered into the unit literally: the root cause of the former "one-shot run" failure', svcOdd.split('\n').filter((l) => /ExecStart/.test(l)).join());
 

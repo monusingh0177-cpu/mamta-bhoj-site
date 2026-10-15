@@ -1,0 +1,10 @@
+[Unit]
+Description=Mamta Bhoj SEO autopilot: watch for website restart requests
+
+[Path]
+# A request is a file created by the autopilot user in this root-owned, sticky directory; the helper empties it.
+DirectoryNotEmpty=/run/mamta-autopilot-restart/req
+Unit=mamta-autopilot-restart.service
+
+[Install]
+WantedBy=multi-user.target
