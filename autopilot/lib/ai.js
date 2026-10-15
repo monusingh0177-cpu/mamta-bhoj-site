@@ -5,11 +5,12 @@
 // data/ files. Its answer must be a JSON patch object; it is checked here for factual grounding and then validated by
 // lib/patch.js (allow-listed files, exact single-occurrence replace, business-claim rules) before anything is applied.
 // Every network call has an input cap, an output-token cap, a timeout, a bounded retry count and counts against a
-// daily budget kept in the state directory. Error text never contains the API key or the provider's response body.
+// HARD daily budget (lib/budget.js): each outbound attempt, retries included, is reserved under a lock BEFORE it is sent. Error text never contains the API key or the provider's response body.
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { request, requestRetry, readJson, writeJson, today } = require('./util');
+const { request, sleep } = require('./util');
+const budget = require('./budget');
 
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta';
 const MODEL_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{1,80}$/;
@@ -41,22 +42,8 @@ function extractJson(text) {
   return null;
 }
 
-// ---- daily budget (requests and tokens per UTC day), persisted in the state directory
-const usageFile = (cfg) => path.join(cfg.stateDir, 'ai-usage.json');
-function usageToday(cfg) {
-  const d = today(cfg.now || new Date());
-  let u = null; try { u = readJson(usageFile(cfg), null); } catch (e) { u = null; }
-  return u && u.date === d ? { date: d, requests: Number(u.requests) || 0, tokens: Number(u.tokens) || 0 } : { date: d, requests: 0, tokens: 0 };
-}
-function budgetLeft(cfg) {
-  const u = usageToday(cfg); const a = cfg.ai;
-  if (a.dailyRequests > 0 && u.requests >= a.dailyRequests) return { ok: false, reason: `daily AI request budget reached (${u.requests}/${a.dailyRequests})`, usage: u };
-  if (a.dailyTokens > 0 && u.tokens >= a.dailyTokens) return { ok: false, reason: `daily AI token budget reached (${u.tokens}/${a.dailyTokens})`, usage: u };
-  return { ok: true, usage: u };
-}
-function recordUsage(cfg, requests, tokens) {
-  try { const u = usageToday(cfg); u.requests += requests; u.tokens += tokens; writeJson(usageFile(cfg), u); } catch (e) { /* the budget file is best effort; the per-run caps still apply */ }
-}
+// ---- daily budget: see lib/budget.js (atomic per-attempt reservation, configurable day boundary, fail closed)
+const usageToday = (cfg) => budget.snapshot(cfg);
 
 class AiError extends Error { constructor(category, message) { super(message); this.category = category; } }
 
@@ -71,23 +58,44 @@ function classifyHttp(status, body) {
   return new AiError('bad_request', `Gemini rejected the request (HTTP ${status}${st ? ' ' + st : ''})`);
 }
 
+// One reserved attempt = one HTTP request. Returns { res } or { err }; never sends when the budget refuses.
+async function attempt(cfg, prompt, send) {
+  let r;
+  try { r = budget.reserve(cfg, budget.estimateTokens(cfg, prompt)); } catch (e) { throw new AiError('budget', e.message); }
+  if (!r.ok) throw new AiError('budget', r.reason);
+  try { return { res: await send(), r }; } catch (err) { return { err, r }; }
+}
+
 async function geminiCall(cfg, prompt) {
   const a = cfg.ai;
   if (!a.apiKey || !a.model) throw new AiError('config', 'Gemini mode needs AUTOPILOT_AI_API_KEY and AUTOPILOT_AI_MODEL');
   if (!MODEL_RE.test(a.model)) throw new AiError('config', 'AUTOPILOT_AI_MODEL is not a valid model name');
   const base = (a.baseUrl || GEMINI_BASE).replace(/\/$/, '');
+  const url = `${base}/models/${encodeURIComponent(a.model)}:generateContent`;
   const body = JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { temperature: 0.2, maxOutputTokens: a.maxOutputTokens, responseMimeType: 'application/json' } });
-  let res;
-  try {
-    res = await requestRetry(`${base}/models/${encodeURIComponent(a.model)}:generateContent`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': a.apiKey }, timeoutMs: a.timeoutMs, body }, { retries: Math.min(3, Math.max(0, a.retries)) });
-  } catch (e) {
-    recordUsage(cfg, e.attempts || 1, 0);
-    throw new AiError(e.code === 'ETIMEDOUT' ? 'timeout' : 'network', e.code === 'ETIMEDOUT' ? `Gemini request timed out after ${a.timeoutMs} ms` : `Gemini request failed (${e.code || 'network error'})`);
+  const retries = Math.min(3, Math.max(0, a.retries)); const baseMs = Number.isFinite(Number(process.env.AUTOPILOT_RETRY_BASE_MS)) && process.env.AUTOPILOT_RETRY_BASE_MS !== undefined ? Number(process.env.AUTOPILOT_RETRY_BASE_MS) : 1000;
+  let res = null; let lastErr = null; let n = 0; let rsv = null;
+  for (; n <= retries; n++) {
+    let out;
+    try { out = await attempt(cfg, prompt, () => request(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': a.apiKey }, timeoutMs: a.timeoutMs, body })); } catch (e) {
+      // the budget refused this attempt (or its state is untrustworthy): nothing was sent; say so, and mention what the previous attempt returned
+      if (e instanceof AiError && n > 0) e.message += `; retry not sent after ${lastErr ? (lastErr.code === 'ETIMEDOUT' ? 'a timeout' : 'a network error') : 'HTTP ' + (res && res.status)}`;
+      throw e;
+    }
+    rsv = out.r; res = out.res || null; lastErr = out.err || null;
+    const transient = lastErr ? true : res.status === 429 || res.status >= 500;
+    // settle the token estimate: unknown consumption (timeout, network error, 5xx) keeps it; a 4xx answer was rejected before generation, so it is released
+    if (lastErr || (res && res.status >= 500)) budget.settle(cfg, rsv, null); else if (res && res.status !== 200) budget.settle(cfg, rsv, 0);
+    if (!transient || n >= retries) break;
+    let wait = Math.min(30000, baseMs * 2 ** n);
+    const ra = res && res.headers ? Number(res.headers['retry-after']) : NaN; if (Number.isFinite(ra)) wait = Math.min(30000, Math.max(wait, ra * 1000));
+    await sleep(wait);
   }
+  if (lastErr) throw new AiError(lastErr.code === 'ETIMEDOUT' ? 'timeout' : 'network', lastErr.code === 'ETIMEDOUT' ? `Gemini request timed out after ${a.timeoutMs} ms` : `Gemini request failed (${lastErr.code || 'network error'})`);
   let j = null; try { j = JSON.parse(res.body); } catch (e) { /* handled below */ }
   const used = j && j.usageMetadata ? j.usageMetadata : {};
   const usage = { promptTokens: Number(used.promptTokenCount) || 0, outputTokens: Number(used.candidatesTokenCount) || 0, totalTokens: Number(used.totalTokenCount) || 0 };
-  recordUsage(cfg, res.attempts || 1, res.status === 200 ? usage.totalTokens : 0);
+  if (res.status === 200 && j && j.usageMetadata && usage.totalTokens > 0) budget.settle(cfg, rsv, usage.totalTokens); // provider-reported usage replaces the estimate
   if (res.status !== 200) throw classifyHttp(res.status, res.body);
   if (!j || typeof j !== 'object') throw new AiError('malformed', 'Gemini response was not JSON');
   if (j.promptFeedback && j.promptFeedback.blockReason) throw new AiError('blocked', `Gemini blocked the prompt (${String(j.promptFeedback.blockReason).slice(0, 40)})`);
@@ -120,20 +128,23 @@ async function complete(cfg, prompt) {
   if (mode === 'gemini') return geminiCall(cfg, prompt);
   if (mode === 'openai') {
     if (!a.baseUrl || !a.apiKey || !a.model) throw new AiError('config', 'OpenAI-compatible mode needs AUTOPILOT_AI_BASE_URL, _MODEL and _API_KEY');
-    const r = await request(a.baseUrl.replace(/\/$/, '') + '/chat/completions', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${a.apiKey}` }, timeoutMs: a.timeoutMs, body: JSON.stringify({ model: a.model, temperature: 0.2, max_tokens: a.maxOutputTokens, messages: [{ role: 'user', content: prompt }] }) });
-    recordUsage(cfg, 1, 0);
-    if (r.status !== 200) throw new AiError('http', `AI API HTTP ${r.status}`);
-    return { text: (((JSON.parse(r.body).choices || [])[0] || {}).message || {}).content || '', usage: {} };
+    const o = await attempt(cfg, prompt, () => request(a.baseUrl.replace(/\/$/, '') + '/chat/completions', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${a.apiKey}` }, timeoutMs: a.timeoutMs, body: JSON.stringify({ model: a.model, temperature: 0.2, max_tokens: a.maxOutputTokens, messages: [{ role: 'user', content: prompt }] }) }));
+    if (o.err) { budget.settle(cfg, o.r, null); throw o.err; }
+    const r = o.res; if (r.status !== 200) { budget.settle(cfg, o.r, r.status >= 500 ? null : 0); throw new AiError('http', `AI API HTTP ${r.status}`); }
+    const j = JSON.parse(r.body); budget.settle(cfg, o.r, j.usage && Number(j.usage.total_tokens) > 0 ? Number(j.usage.total_tokens) : null);
+    return { text: (((j.choices || [])[0] || {}).message || {}).content || '', usage: {} };
   }
   if (mode === 'anthropic') {
     if (!a.apiKey || !a.model) throw new AiError('config', 'Anthropic mode needs AUTOPILOT_AI_API_KEY and AUTOPILOT_AI_MODEL');
     const base = (a.baseUrl || 'https://api.anthropic.com').replace(/\/$/, '');
-    const r = await request(base + '/v1/messages', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': a.apiKey, 'anthropic-version': '2023-06-01' }, timeoutMs: a.timeoutMs, body: JSON.stringify({ model: a.model, max_tokens: Math.min(a.maxOutputTokens, 1500), messages: [{ role: 'user', content: prompt }] }) });
-    recordUsage(cfg, 1, 0);
-    if (r.status !== 200) throw new AiError('http', `AI API HTTP ${r.status}`);
-    return { text: ((JSON.parse(r.body).content || [])[0] || {}).text || '', usage: {} };
+    const o = await attempt(cfg, prompt, () => request(base + '/v1/messages', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': a.apiKey, 'anthropic-version': '2023-06-01' }, timeoutMs: a.timeoutMs, body: JSON.stringify({ model: a.model, max_tokens: Math.min(a.maxOutputTokens, 1500), messages: [{ role: 'user', content: prompt }] }) }));
+    if (o.err) { budget.settle(cfg, o.r, null); throw o.err; }
+    const r = o.res; if (r.status !== 200) { budget.settle(cfg, o.r, r.status >= 500 ? null : 0); throw new AiError('http', `AI API HTTP ${r.status}`); }
+    const j = JSON.parse(r.body); const u = j.usage || {}; budget.settle(cfg, o.r, Number(u.input_tokens) + Number(u.output_tokens) > 0 ? Number(u.input_tokens) + Number(u.output_tokens) : null);
+    return { text: ((j.content || [])[0] || {}).text || '', usage: {} };
   }
   if (mode === 'claude-cli') {
+    let rv; try { rv = budget.reserve(cfg, budget.estimateTokens(cfg, prompt)); } catch (e) { throw new AiError('budget', e.message); } if (!rv.ok) throw new AiError('budget', rv.reason);
     const r = spawnSync(a.cliPath, ['-p', '--output-format', 'text'], { input: prompt, encoding: 'utf8', timeout: 180000, cwd: require('os').tmpdir(), env: Object.assign({}, process.env, { ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY || '' }) });
     if (r.error || r.status !== 0) throw new AiError('cli', 'claude CLI is not installed/authenticated or failed');
     return { text: r.stdout, usage: {} };
@@ -147,7 +158,6 @@ async function propose(cfg, ctx) {
   if (mode === 'none' || !mode) return { skipped: true, reason: 'no AI integration configured (report-only)' };
   const prompt = buildPrompt(ctx);
   if (prompt.length > cfg.ai.maxInputChars) return { error: `AI input too large (${prompt.length} > ${cfg.ai.maxInputChars} characters); nothing was sent` };
-  const budget = budgetLeft(cfg); if (!budget.ok) return { skipped: true, budget: true, reason: budget.reason };
   try {
     const { text, usage } = await complete(cfg, prompt);
     const j = extractJson(text);
@@ -161,6 +171,7 @@ async function propose(cfg, ctx) {
     }
     return { decisions, rejected, usage, model: cfg.ai.model };
   } catch (e) {
+    if (e instanceof AiError && e.category === 'budget') return { skipped: true, budget: true, reason: e.message };
     if (e instanceof AiError) return { error: `AI step failed (${e.category}): ${e.message}`.slice(0, 220), category: e.category };
     return { error: `AI step failed: ${String(e.message).slice(0, 120)}` };
   }
@@ -169,7 +180,6 @@ async function propose(cfg, ctx) {
 // ---- operator checks (CLI verify-ai): never print the key, never write to the repository
 async function smoke(cfg) {
   if (cfg.ai.mode !== 'gemini') return { ok: false, detail: `AUTOPILOT_AI_MODE is "${cfg.ai.mode}", not gemini` };
-  const b = budgetLeft(cfg); if (!b.ok) return { ok: false, detail: b.reason };
   try {
     const { text, usage } = await geminiCall(cfg, 'Reply with exactly this JSON and nothing else: {"ok":true}');
     const j = extractJson(text);
@@ -195,4 +205,4 @@ async function fixtureCheck(cfg, repoDir) {
   return { ok: true, detail: `${p.decisions.length} decision(s) passed grounding, ${checked.filter((c) => c.valid).length} passed patch validation, ${p.rejected.length} rejected by grounding (fixture only, nothing applied)`, model: cfg.ai.model, usage: p.usage, checked, rejected: p.rejected };
 }
 
-module.exports = { propose, buildPrompt, extractJson, groundingIssues, smoke, fixtureCheck, usageToday, budgetLeft, GEMINI_BASE };
+module.exports = { propose, buildPrompt, extractJson, groundingIssues, smoke, fixtureCheck, usageToday, GEMINI_BASE };
