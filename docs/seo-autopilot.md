@@ -218,3 +218,8 @@ Platform notes: the installer scenario renders and verifies the systemd units ev
 - The AI is optional; without it, patch generation is report-only. A configured but incomplete or failing AI is reported (degraded) and never blocks the audits.
 - Automatically **publishable** are the internal-link fixer and, only in activated `auto` mode, an AI-written **title or description** rewrite that passes every gate in "AI rewrites" below. Body copy, new pages, redirects, robots/canonical changes, schema claims and template changes need business facts or judgement, so they stay a review branch (even in `auto` mode) or with a person. The audit currently finds nothing for the fixer to do on the live site (when this was written every guide had at least 6 internal links; the audit flags fewer than 3), so a healthy site gets no changes: the autopilot does not change pages for the sake of it.
 - Publishing happens only in `AUTOPILOT_MODE=auto`, after every gate, on top of the released commit, with live verification and rollback. If a safe release cannot be established the answer is a reviewable branch plus a report.
+
+### verify-ai versus verify-ai --fixture
+
+- `node autopilot/cli.js verify-ai` is the **only live provider check**: one authenticated request, counted against the daily budget. A provider outage (for example HTTP 503) is reported as `NOT OK` and nothing else changes.
+- `node autopilot/cli.js verify-ai --fixture` is **offline**: it feeds a canned local answer through prompt building, JSON extraction, grounding (an invented number must be rejected) and patch validation. It makes no network request, needs no key and spends no budget. A passing fixture check does **not** prove Gemini is reachable; always run `verify-ai` for that.
