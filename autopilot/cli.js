@@ -11,7 +11,7 @@
 //   baseline     accept the current live site as the new baseline after a deliberate manual deploy
 //   status       show mode, state and limits
 //   verify-google  check Google OAuth + access to the Search Console property (prints a status and a remedy, never a credential)
-//   verify-ai    one authenticated AI call (add --fixture: a proposal-generation check on a fixture page; nothing is applied). Prints status, model and token usage only
+//   verify-ai    the ONLY live provider check: one authenticated AI call (counts against the daily budget). Add --fixture for an OFFLINE proposal-pipeline check (canned local answer: no network, no key, no budget; it does not prove the provider is reachable). Prints status, model and token usage only
 //   health       exit status for external monitoring: 0 healthy, 1 last run failed, 4 no recent run (scheduler problem)
 //   weekly       build the weekly trend report now
 //   ledger       show the latest run records (id, times, checks, actions, final status)

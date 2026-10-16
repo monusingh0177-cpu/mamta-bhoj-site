@@ -153,13 +153,14 @@ async function complete(cfg, prompt) {
 }
 
 // -> { skipped, reason } | { error } | { decisions, rejected, usage, model }
-async function propose(cfg, ctx) {
-  const mode = cfg.ai.mode;
-  if (mode === 'none' || !mode) return { skipped: true, reason: 'no AI integration configured (report-only)' };
+// opts.completer (tests and the offline fixture check only) replaces the provider call: no network, no budget use.
+async function propose(cfg, ctx, opts) {
+  const mode = cfg.ai.mode; const completer = opts && opts.completer;
+  if (!completer && (mode === 'none' || !mode)) return { skipped: true, reason: 'no AI integration configured (report-only)' };
   const prompt = buildPrompt(ctx);
   if (prompt.length > cfg.ai.maxInputChars) return { error: `AI input too large (${prompt.length} > ${cfg.ai.maxInputChars} characters); nothing was sent` };
   try {
-    const { text, usage } = await complete(cfg, prompt);
+    const { text, usage } = await (completer || complete)(cfg, prompt);
     const j = extractJson(text);
     if (!j || !Array.isArray(j.decisions)) return { error: 'AI output was not the required JSON patch object', usage };
     const decisions = []; const rejected = [];
@@ -187,8 +188,10 @@ async function smoke(cfg) {
   } catch (e) { return { ok: false, detail: e instanceof AiError ? `${e.category}: ${e.message}` : String(e.message).slice(0, 120), model: cfg.ai.model }; }
 }
 
-// A proposal-generation check on a FIXTURE page (a copy of a real source block, fake search numbers): the decisions are
-// validated exactly like a real proposal but nothing is applied, branched, committed or published.
+// OFFLINE proposal-pipeline check on a FIXTURE page (a copy of a real source block, fake search numbers). The provider answer is
+// a canned local JSON reply, so this makes NO network request, needs no API key and spends no budget; it proves prompt building,
+// JSON extraction, grounding and patch validation only. It says nothing about whether Gemini is reachable: that is `verify-ai`
+// (without --fixture), the only live check. Nothing is applied, branched, committed or published.
 async function fixtureCheck(cfg, repoDir) {
   const patchLib = require('./patch');
   const pagePath = '/guides/how-to-choose-chakki-atta-for-your-business';
@@ -198,11 +201,16 @@ async function fixtureCheck(cfg, repoDir) {
   if (!block) return { ok: false, detail: 'no guide source block found for the fixture' };
   const title = (block.text.match(/title:\s*'([^']{10,})'/) || [])[1] || 'Guide'; const desc = (block.text.match(/(?:description|metaDescription):\s*'([^']{20,})'/) || [])[1] || '';
   const ctx = { opportunity: { query: 'fixture query: flour guide', kind: 'informational', impressions: 120, clicks: 2, ctr: 0.017, position: 11.2, flags: ['fixture'] }, page: { title, description: desc, h1: [title], headings: [] }, path: usedPath, block };
-  const p = await propose(cfg, ctx);
+  const canned = (cfg_, prompt) => {
+    const find = desc || title; const good = find.replace(/[.!\s]+$/, '') + ' for your business.';
+    // one clean rewrite and one with an invented number that grounding must reject
+    return { text: JSON.stringify({ decisions: [{ page: usedPath, kind: desc ? 'description' : 'title', file: block.file, find, replace: good, rationale: 'offline fixture answer', confidence: 0.9 }, { page: usedPath, kind: 'description', file: block.file, find, replace: find + ' Since 1987.', rationale: 'offline fixture answer (must be rejected)', confidence: 0.9 }] }), usage: {} };
+  };
+  const p = await propose(cfg, ctx, { completer: canned });
   if (p.skipped) return { ok: false, detail: p.reason };
   if (p.error) return { ok: false, detail: p.error };
   const checked = p.decisions.map((d) => { d.page = usedPath; const v = patchLib.validate(d, { repoDir }); return { kind: d.kind, valid: v.ok, errors: v.ok ? [] : v.errors.map((x) => String(x).slice(0, 100)) }; });
-  return { ok: true, detail: `${p.decisions.length} decision(s) passed grounding, ${checked.filter((c) => c.valid).length} passed patch validation, ${p.rejected.length} rejected by grounding (fixture only, nothing applied)`, model: cfg.ai.model, usage: p.usage, checked, rejected: p.rejected };
+  return { ok: true, detail: `${p.decisions.length} decision(s) passed grounding, ${checked.filter((c) => c.valid).length} passed patch validation, ${p.rejected.length} rejected by grounding (OFFLINE fixture: no network request was made and no budget was used; this does not prove the live provider is reachable, run verify-ai for that)`, model: 'offline-fixture', usage: p.usage, checked, rejected: p.rejected };
 }
 
 module.exports = { propose, buildPrompt, extractJson, groundingIssues, smoke, fixtureCheck, usageToday, GEMINI_BASE };

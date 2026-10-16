@@ -169,6 +169,31 @@ const okBody = (decisions, extra) => JSON.stringify(Object.assign({ candidates: 
     fs.rmSync(d, { recursive: true, force: true });
   }
 
+  console.log('\n== verify-ai --fixture is OFFLINE; verify-ai is the only live check');
+  {
+    const net = require('net'); const https = require('https'); const { spawn } = require('child_process');
+    // (a) in-process: every way out to the network is trapped while the fixture check runs
+    let attempts = 0; const origHttp = http.request; const origHttps = https.request; const origConnect = net.Socket.prototype.connect;
+    http.request = () => { attempts++; throw new Error('network trapped'); }; https.request = () => { attempts++; throw new Error('network trapped'); }; net.Socket.prototype.connect = function () { attempts++; throw new Error('network trapped'); };
+    seen.length = 0; handler = reply(503, '{}'); const tf = mk({}); let fr;
+    try { fr = await ai.fixtureCheck(tf.cfg, ROOT); } finally { http.request = origHttp; https.request = origHttps; net.Socket.prototype.connect = origConnect; }
+    check(fr.ok === true && attempts === 0 && seen.length === 0, 'fixture check makes ZERO network requests (http, https and raw sockets trapped; the mock provider saw nothing) and passes', JSON.stringify(fr) + ' attempts=' + attempts);
+    check(!fs.existsSync(path.join(tf.dir, 'ai-usage.json')), 'fixture check spends no budget (no usage file is created)');
+    check(fr.rejected.length === 1 && /number/.test(fr.rejected[0]) && fr.checked.length === 1 && fr.checked[0].valid === true, 'it still exercises grounding (invented number rejected) and patch validation (clean rewrite valid)');
+    check(/OFFLINE/.test(fr.detail) && /does not prove the live provider is reachable/.test(fr.detail) && fr.model === 'offline-fixture', 'its output says it is offline and does not prove live availability');
+    // works with no key, no mode and an unreachable provider
+    const tn = mk({ AUTOPILOT_AI_MODE: 'none', AUTOPILOT_AI_API_KEY: '', AUTOPILOT_AI_BASE_URL: 'http://127.0.0.1:9/v1beta' }); const fn = await ai.fixtureCheck(tn.cfg, ROOT);
+    check(fn.ok === true, 'the fixture check needs no API key, no AI mode and no reachable provider');
+    // (b) through the real CLI, provider answering 503 to anything it receives
+    const cli = path.join(ROOT, 'autopilot', 'cli.js');
+    const runCli = (args, env) => new Promise((resolve) => { const d = fs.mkdtempSync(path.join(os.tmpdir(), 'gemcli-')); seen.length = 0; handler = reply(503, '{"error":{"message":"overloaded"}}'); const ch = spawn(process.execPath, [cli, ...args], { env: Object.assign({}, process.env, { AUTOPILOT_ENV_FILE: '/nonexistent', AUTOPILOT_STATE_DIR: d, AUTOPILOT_REPO_DIR: ROOT, AUTOPILOT_AI_MODE: 'gemini', AUTOPILOT_AI_MODEL: 'gemini-test-model', AUTOPILOT_AI_API_KEY: KEY, AUTOPILOT_AI_BASE_URL: base, AUTOPILOT_AI_RETRIES: '0', AUTOPILOT_AI_TIMEOUT_MS: '1500', AUTOPILOT_AI_DAILY_REQUESTS: '10' }, env || {}) }); let o = ''; ch.stdout.on('data', (x) => { o += x; }); ch.stderr.on('data', (x) => { o += x; }); ch.on('close', (code) => resolve({ status: code, dir: d, all: o })); });
+    let c = await runCli(['verify-ai', '--fixture']);
+    check(c.status === 0 && seen.length === 0 && /ai: OK/.test(c.all) && /OFFLINE/.test(c.all) && !fs.existsSync(path.join(c.dir, 'ai-usage.json')), 'CLI verify-ai --fixture while the provider returns 503: exit 0, zero requests reached the provider, no budget used', c.all.slice(0, 300) + ' seen=' + seen.length);
+    c = await runCli(['verify-ai']);
+    check(c.status === 1 && seen.length === 1 && /ai: NOT OK/.test(c.all) && /HTTP 503/.test(c.all) && !c.all.includes(KEY), 'CLI verify-ai (live) while the provider returns 503: reports NOT OK / HTTP 503 safely (exit 1, one request, key never printed)', c.all.slice(0, 300) + ' seen=' + seen.length);
+    const u = JSON.parse(fs.readFileSync(path.join(c.dir, 'ai-usage.json'), 'utf8')); check(u.requests === 1, 'the single live attempt is counted against the budget (1), the fixture run counted nothing');
+  }
+
   srv.close();
   console.log(`\nGEMINI TESTS ${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);
