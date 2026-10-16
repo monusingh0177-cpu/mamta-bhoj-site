@@ -59,9 +59,11 @@ function loadConfig(overrides) {
     publish: /^auto$/i.test(env.AUTOPILOT_PUBLISH || '') ? 'auto' : 'branch',
     ai: { mode: (env.AUTOPILOT_AI_MODE || 'none').toLowerCase(), baseUrl: env.AUTOPILOT_AI_BASE_URL || '', model: env.AUTOPILOT_AI_MODEL || '', apiKey: env.AUTOPILOT_AI_API_KEY || '', cliPath: env.AUTOPILOT_CLAUDE_CLI || 'claude',
       // request guards (all providers): per-request timeout, bounded retries (transient errors only, max 3), input/output caps, daily budget (0 = unlimited)
-      timeoutMs: int(env.AUTOPILOT_AI_TIMEOUT_MS, 60000), retries: int(env.AUTOPILOT_AI_RETRIES, 2), maxInputChars: int(env.AUTOPILOT_AI_MAX_INPUT_CHARS, 12000), maxOutputTokens: int(env.AUTOPILOT_AI_MAX_OUTPUT_TOKENS, 2048), dailyRequests: int(env.AUTOPILOT_AI_DAILY_REQUESTS, 10), dailyTokens: int(env.AUTOPILOT_AI_DAILY_TOKENS, 100000),
+      timeoutMs: int(env.AUTOPILOT_AI_TIMEOUT_MS, 60000), retries: int(env.AUTOPILOT_AI_RETRIES, 2), maxInputChars: int(env.AUTOPILOT_AI_MAX_INPUT_CHARS, 12000), maxOutputTokens: int(env.AUTOPILOT_AI_MAX_OUTPUT_TOKENS, 4096), dailyRequests: int(env.AUTOPILOT_AI_DAILY_REQUESTS, 10), dailyTokens: int(env.AUTOPILOT_AI_DAILY_TOKENS, 100000),
       // the budget day is a calendar day in this time zone (default: AUTOPILOT_TZ, i.e. Asia/Kolkata); the lock wait is how long a request waits for the shared budget file before refusing
-      budgetTz: env.AUTOPILOT_AI_BUDGET_TZ || env.AUTOPILOT_TZ || 'Asia/Kolkata', lockWaitMs: int(env.AUTOPILOT_AI_LOCK_WAIT_MS, 5000) },
+      budgetTz: env.AUTOPILOT_AI_BUDGET_TZ || env.AUTOPILOT_TZ || 'Asia/Kolkata', lockWaitMs: int(env.AUTOPILOT_AI_LOCK_WAIT_MS, 5000),
+      // Gemini 3 models think by default and thought tokens count against the output cap (a live fixture check was truncated at 2048): ask for little thinking. minimal|low|medium|high, or none to send no thinkingConfig
+      thinkingLevel: (env.AUTOPILOT_AI_THINKING_LEVEL || 'low').toLowerCase() },
     limits: { fixesPerDay: int(env.AUTOPILOT_MAX_FIXES_PER_DAY, 1), pagesPerDay: int(env.AUTOPILOT_MAX_PAGES_PER_DAY, 2), newPagesPer7Days: int(env.AUTOPILOT_MAX_NEW_PAGES_PER_7_DAYS, 1), cooldownDays: int(env.AUTOPILOT_COOLDOWN_DAYS, 14), minScore: int(env.AUTOPILOT_MIN_SCORE, 40), inspectPerRun: int(env.AUTOPILOT_INSPECT_PER_RUN, 10) },
     // auto-publish settings (only used when AUTOPILOT_MODE=auto). The restart command is TRUSTED operator input, executed
     // as given (e.g. `pm2 restart mamta-bhoj`); it lives in the root-owned env file, never in the repository or the unit.

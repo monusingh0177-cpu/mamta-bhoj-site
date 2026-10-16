@@ -84,7 +84,7 @@ const readUsage = (dir) => JSON.parse(fs.readFileSync(path.join(dir, 'ai-usage.j
 
   console.log('\n== token budget: reserved before sending, settled afterwards');
   const probe = mk({}); const est = budget.estimateTokens(probe.cfg, ai.buildPrompt(ctx));
-  check(est === Math.ceil(ai.buildPrompt(ctx).length / 3) + 2048, 'the documented estimate is input characters / 3 plus the output-token cap');
+  check(est === Math.ceil(ai.buildPrompt(ctx).length / 3) + 4096, 'the documented estimate is input characters / 3 plus the output-token cap');
   t = mk({ AUTOPILOT_AI_DAILY_TOKENS: String(est - 1) }); hits = 0; const tx = await call(t, reply(200, okBody()));
   check(hits === 0 && tx.budget && /token budget reached/.test(tx.reason), 'a request whose worst case exceeds the token budget is refused before sending');
   t = mk({ AUTOPILOT_AI_DAILY_TOKENS: '100000' }); await call(t, reply(200, okBody({ totalTokenCount: 777, promptTokenCount: 700, candidatesTokenCount: 77 })));

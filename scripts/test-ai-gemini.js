@@ -52,7 +52,11 @@ const okBody = (decisions, extra) => JSON.stringify(Object.assign({ candidates: 
   check(t.r.usage && t.r.usage.totalTokens === 790 && t.r.usage.promptTokens === 700, 'usage metadata is returned');
   check(seen.length === 1 && seen[0].url === '/v1beta/models/gemini-test-model:generateContent' && seen[0].key === KEY && !seen[0].url.includes(KEY) && !seen[0].auth, 'key travels only in the x-goog-api-key header, never in the URL');
   const sent = JSON.parse(seen[0].body);
-  check(sent.generationConfig.maxOutputTokens === 2048 && sent.generationConfig.responseMimeType === 'application/json' && !/AIzaSy|passwordHash|enquiries\.json/i.test(seen[0].body), 'output-token cap and JSON mode are set; the request carries no secrets');
+  check(sent.generationConfig.maxOutputTokens === 4096 && sent.generationConfig.responseMimeType === 'application/json' && !/AIzaSy|passwordHash|enquiries\.json/i.test(seen[0].body), 'output-token cap and JSON mode are set; the request carries no secrets');
+  check(sent.generationConfig.thinkingConfig && sent.generationConfig.thinkingConfig.thinkingLevel === 'low', 'thinking is limited to "low" by default so thought tokens do not exhaust the output cap');
+  t = await run({ AUTOPILOT_AI_THINKING_LEVEL: 'none' }, reply(200, okBody([decision()]))); check(!('thinkingConfig' in JSON.parse(seen[0].body).generationConfig), 'AUTOPILOT_AI_THINKING_LEVEL=none sends no thinkingConfig');
+  t = await run({ AUTOPILOT_AI_THINKING_LEVEL: 'bogus; drop' }, reply(200, okBody([decision()]))); check(!('thinkingConfig' in JSON.parse(seen[0].body).generationConfig), 'an invalid thinking level is never sent');
+  t = await run({}, reply(200, okBody([decision()])));
   check(!redact(JSON.stringify(t.r)).includes(KEY) && !JSON.stringify(t.r).includes(KEY), 'result never contains the key');
 
   t = await run({}, reply(200, JSON.stringify({ candidates: [{ content: { parts: [{ text: 'sure! here is my answer, no json' }] }, finishReason: 'STOP' }] })));

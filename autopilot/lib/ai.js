@@ -72,7 +72,7 @@ async function geminiCall(cfg, prompt) {
   if (!MODEL_RE.test(a.model)) throw new AiError('config', 'AUTOPILOT_AI_MODEL is not a valid model name');
   const base = (a.baseUrl || GEMINI_BASE).replace(/\/$/, '');
   const url = `${base}/models/${encodeURIComponent(a.model)}:generateContent`;
-  const body = JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { temperature: 0.2, maxOutputTokens: a.maxOutputTokens, responseMimeType: 'application/json' } });
+  const body = JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { temperature: 0.2, maxOutputTokens: a.maxOutputTokens, responseMimeType: 'application/json', ...(/^(minimal|low|medium|high)$/.test(a.thinkingLevel) ? { thinkingConfig: { thinkingLevel: a.thinkingLevel } } : {}) } });
   const retries = Math.min(3, Math.max(0, a.retries)); const baseMs = Number.isFinite(Number(process.env.AUTOPILOT_RETRY_BASE_MS)) && process.env.AUTOPILOT_RETRY_BASE_MS !== undefined ? Number(process.env.AUTOPILOT_RETRY_BASE_MS) : 1000;
   let res = null; let lastErr = null; let n = 0; let rsv = null;
   for (; n <= retries; n++) {
