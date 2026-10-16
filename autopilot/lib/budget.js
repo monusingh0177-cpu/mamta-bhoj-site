@@ -40,7 +40,11 @@ function acquire(cfg) {
   try { fs.mkdirSync(cfg.stateDir, { recursive: true, mode: 0o750 }); } catch (e) { throw new BudgetError('AI budget state directory is not usable'); }
   for (;;) {
     try { const fd = fs.openSync(lf, 'wx', 0o600); try { fs.writeSync(fd, `${process.pid} ${Date.now()}\n`); } finally { fs.closeSync(fd); } return; } catch (e) {
-      if (e.code !== 'EEXIST') throw new BudgetError(`AI budget lock cannot be created (${e.code || 'error'})`);
+      // Windows reports EPERM/EACCES (not EEXIST) while a just-released lock file is still delete-pending because another process
+      // holds a handle on it for an instant. That is contention, not a fault: wait and retry inside the same bounded window. On other
+      // platforms those codes are real permission errors and still fail closed immediately.
+      const transient = process.platform === 'win32' && (e.code === 'EPERM' || e.code === 'EACCES');
+      if (e.code !== 'EEXIST' && !transient) throw new BudgetError(`AI budget lock cannot be created (${e.code || 'error'})`);
     }
     // a lock older than STALE_LOCK_MS belongs to a process that died: move it aside atomically (only one contender wins the rename)
     try { const age = Date.now() - fs.statSync(lf).mtimeMs; if (age > STALE_LOCK_MS) { const aside = `${lf}.stale-${process.pid}-${Date.now()}`; try { fs.renameSync(lf, aside); fs.unlinkSync(aside); } catch (e) { /* lost the race: someone else took it */ } continue; } } catch (e) { /* vanished: retry */ }

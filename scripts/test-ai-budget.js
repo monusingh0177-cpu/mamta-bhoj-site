@@ -119,7 +119,9 @@ process.stdout.write(JSON.stringify({ ok, refused, errors }));
   const sum = (k) => rs.reduce((a, x) => a + x[k], 0);
   check(sum('ok') === 10 && sum('refused') === 30 && sum('errors') === 0 && readUsage(dir).requests === 10, '8 processes x 5 attempts against a limit of 10: exactly 10 granted, 30 refused, counter 10', JSON.stringify(rs.map((x) => x.ok)) + JSON.stringify(readUsage(dir)));
   dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bud-')); rs = await runWorkers(dir, 6, 25, 0);
-  check(sum('ok') === 150 && sum('errors') === 0 && readUsage(dir).requests === 150, '6 processes x 25 reservations with no limit: no increment is lost (150 of 150)', JSON.stringify(readUsage(dir)));
+  check(sum('ok') === 150 && sum('errors') === 0 && readUsage(dir).requests === 150, '6 processes x 25 reservations with no limit: no increment is lost (150 of 150)', JSON.stringify(readUsage(dir)) + JSON.stringify(rs));
+  // heavier contention (reproduced the Windows EPERM-on-delete-pending lock race in ~40% of rounds before the fix)
+  for (let round = 0; round < 3; round++) { dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bud-')); rs = await runWorkers(dir, 16, 25, 0); check(sum('ok') === 400 && sum('errors') === 0 && readUsage(dir).requests === 400, `16 processes x 25 reservations (round ${round + 1}): every reservation succeeds and the counter is exactly 400`, JSON.stringify(readUsage(dir)) + JSON.stringify(rs.filter((x) => x.errors))); }
   fs.rmSync(worker, { force: true });
   check(!fs.existsSync(path.join(dir, 'ai-usage.json.lock')), 'the lock is released after use');
 
