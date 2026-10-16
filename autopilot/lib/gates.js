@@ -12,21 +12,45 @@ const { isProtected, ALLOWED_FILES } = require('./patch');
 const { request, requestRetry } = require('./util');
 
 function freePort() { return new Promise((r) => { const s = net.createServer().listen(0, '127.0.0.1', () => { const p = s.address().port; s.close(() => r(p)); }); }); }
-function copyTree(src, dst) {
+// What a preview snapshot may contain. The preview renders public pages only, so it never needs credentials, sessions,
+// uploads from production, mail settings, payroll or backups. Anything not on this list under data/ is left out, and
+// secret-like names are dropped wherever they are. Nothing is read from a file that is not copied (no EACCES on protected files).
+const PREVIEW_DATA_ALLOW = ['content.json', 'gallery.json', 'products.json'];
+const SECRET_NAME_RE = /^(\.env(\..*)?|.*\.(pem|key|log)|.*\.bak(-.*)?|.*payroll.*|admin\.json.*|sessions?\.json|.*\.sqlite3?|.*\.db)$/i;
+function copyTree(src, dst, rel) {
+  rel = rel || '';
   fs.mkdirSync(dst, { recursive: true });
   for (const n of fs.readdirSync(src)) {
-    if (['node_modules', '.git', 'logs'].includes(n)) continue;
-    const f = path.join(src, n), t = path.join(dst, n), st = fs.statSync(f);
-    if (st.isDirectory()) copyTree(f, t); else fs.copyFileSync(f, t);
+    if (['node_modules', '.git', 'logs'].includes(n) || SECRET_NAME_RE.test(n)) continue;
+    const r = rel ? rel + '/' + n : n;
+    if (r === 'data') continue; // data/ is rebuilt below from an allow-list
+    const f = path.join(src, n), t = path.join(dst, n), st = fs.lstatSync(f);
+    if (st.isSymbolicLink()) continue;
+    if (st.isDirectory()) copyTree(f, t, r); else fs.copyFileSync(f, t);
+  }
+}
+// data/ for the preview: only the public content files, taken from the snapshot itself and then (when configured)
+// overlaid with the same-named files from the production data directory. Unreadable overlay files fall back to the snapshot.
+function copyPublicData(dst, ...sources) {
+  fs.mkdirSync(dst, { recursive: true });
+  for (const src of sources) {
+    if (!src) continue;
+    for (const n of PREVIEW_DATA_ALLOW) {
+      const f = path.join(src, n);
+      try { if (fs.lstatSync(f).isFile()) fs.copyFileSync(f, path.join(dst, n)); } catch (e) { /* absent or unreadable: keep what we have */ }
+    }
   }
 }
 
-// An isolated copy of the working tree on a free port, with a sanitised environment (its own data/, no mail, no PERSIST_DIR).
+// An isolated, deterministic snapshot of the working tree on a free port, with a sanitised environment (its own data/
+// holding only public content, no mail, no PERSIST_DIR). Protected data is never copied.
 async function previewServer(repoDir, opts) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mamta-autopilot-'));
-  copyTree(repoDir, dir);
-  // use the production data/ (read-only copy) so the preview renders the real content
-  if (opts && opts.dataDir && fs.existsSync(opts.dataDir)) { fs.rmSync(path.join(dir, 'data'), { recursive: true, force: true }); copyTree(opts.dataDir, path.join(dir, 'data')); }
+  try {
+    copyTree(repoDir, dir);
+    copyPublicData(path.join(dir, 'data'), path.join(repoDir, 'data'), opts && opts.dataDir);
+  } catch (e) { try { fs.rmSync(dir, { recursive: true, force: true }); } catch (x) { /* ignore */ } throw e; }
+  if (opts && opts.onDir) opts.onDir(dir);
   const nm = path.join(repoDir, 'node_modules'); if (fs.existsSync(nm)) fs.symlinkSync(nm, path.join(dir, 'node_modules'));
   const port = await freePort();
   const env = Object.assign({}, process.env, { PORT: String(port) });
@@ -35,8 +59,14 @@ async function previewServer(repoDir, opts) {
   const base = `http://127.0.0.1:${port}`;
   let up = false;
   for (let i = 0; i < 60 && !up; i++) { try { const r = await request(base + '/robots.txt', { timeoutMs: 2000 }); up = r.status === 200; } catch (e) { await new Promise((r) => setTimeout(r, 200)); } }
-  const stop = () => { try { child.kill(); } catch (e) { /* ignore */ } try { fs.rmSync(dir, { recursive: true, force: true }); } catch (e) { /* ignore */ } };
-  if (!up) { stop(); throw new Error('preview copy of the site did not start'); }
+  // stop: end the child, wait until it has really exited (its files are locked until then on some platforms), then remove the workspace
+  const stop = async () => {
+    const exited = new Promise((r) => { if (child.exitCode !== null || child.signalCode) return r(); child.once('exit', r); setTimeout(r, 5000).unref(); });
+    try { child.kill(); } catch (e) { /* ignore */ }
+    await exited;
+    try { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); } catch (e) { /* ignore */ }
+  };
+  if (!up) { await stop(); throw new Error('preview copy of the site did not start'); }
   return { base, stop };
 }
 
@@ -94,7 +124,7 @@ async function runGates(cfg, ctx) {
     const schemaBad = Object.entries(inv.pages).filter(([, p]) => p.jsonLdErrors.length || p.jsonLdTypes.some((t) => /Product/.test(t)) || /"(offers|aggregateRating|review|price)"\s*:/.test(JSON.stringify(p.jsonLdNodes))).map(([p]) => p);
     add('schema-valid', schemaBad.length === 0, schemaBad.join(', '));
     add('no-5xx-or-404', inv.nonOk.filter((n) => n.status >= 500 || n.status === 0 || (n.status === 404 && inv.sitemapPaths.includes(n.path))).length === 0, JSON.stringify(inv.nonOk.slice(0, 3)));
-  } catch (e) { add('preview', false, e.message); } finally { if (pv) pv.stop(); }
+  } catch (e) { add('preview', false, e.message); } finally { if (pv) await pv.stop(); }
   // 4. the project's own strict SEO suite and enquiry tests
   if (cfg.gates.hardCheck) { const r = run('bash scripts/seo-hard-check.sh', repo, 600000); add('seo-hard-check', r.code === 0, r.code === 0 ? (r.out.match(/RESULT:.*/) || ['passed'])[0] : r.out.split('\n').filter((l) => /FAIL|ERROR/.test(l)).slice(0, 3).join(' | ')); }
   if (cfg.gates.enquiry && fs.existsSync(path.join(repo, 'scripts/test-enquiry.js'))) { const r = run('node scripts/test-enquiry.js', repo, 600000); add('enquiry-tests', r.code === 0, (r.out.match(/ENQUIRY TESTS:.*/) || [r.out.slice(-200)])[0]); }
