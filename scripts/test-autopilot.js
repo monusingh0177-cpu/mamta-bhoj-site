@@ -1084,10 +1084,10 @@ const cleanBranches = (repo) => { try { git(repo, 'worktree', 'prune'); } catch 
         lock(); check((fs.statSync(adminFile).mode & 0o777) === 0, 'the restrictive mode on data/admin.json was left as it was'); unlock();
         // unsafe change still fails closed with the same restrictions
         for (const mode of ['protected', 'code', 'newword']) {
-          s = await fresh(); await runCli(site, 'dry-run', s.env, root, s.state); ai.mode = mode; lock(); const o1 = originHead(); r = await runCli(site, 'run', s.env, root, s.state); unlock(); rep = jsonReport(s.state);
-          check(rep.auto.published.length === 0 && prodHead() === baseHead && originHead() === o1 && tmpPreviews() === nBefore && fs.readFileSync(adminFile).equals(adminBytes), `unsafe AI change (${mode}) still fails closed with admin.json unreadable: nothing published, production and origin unchanged, workspaces cleaned`, r.out);
+          s = await fresh(); fs.appendFileSync(adminFile, String.fromCharCode(10)); const adminB = fs.readFileSync(adminFile); await runCli(site, 'dry-run', s.env, root, s.state); ai.mode = mode; lock(); const o1 = originHead(); r = await runCli(site, 'run', s.env, root, s.state); unlock(); rep = jsonReport(s.state);
+          check(rep.auto.published.length === 0 && prodHead() === baseHead && originHead() === o1 && tmpPreviews() === nBefore && fs.readFileSync(adminFile).equals(adminB), `unsafe AI change (${mode}) still fails closed with admin.json unreadable: nothing published, production and origin unchanged, workspaces cleaned`, r.out);
         }
-        ai.mode = 'good'; fs.writeFileSync(adminFile, adminBytes);
+        ai.mode = 'good'; git(site.repo, 'checkout', '--', tracked || 'data/admin.json');
       }
 
       untouched('E17');
