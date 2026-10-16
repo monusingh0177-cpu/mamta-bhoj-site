@@ -1045,6 +1045,51 @@ const cleanBranches = (repo) => { try { git(repo, 'worktree', 'prune'); } catch 
       check(outs.filter((x) => x === 'granted').length === 3 && outs.filter((x) => x === 'refused').length === 5 && usage(s.state).requests === 3, '8 concurrent processes against a limit of 3: exactly 3 are granted, 5 refused, the counter is exactly 3', outs.join());
       ai.mode = 'good'; ai.calls = 0; const o1 = originHead(); r = await runCli(site, 'run', Object.assign({}, s.env, { AUTOPILOT_AI_DAILY_REQUESTS: '3' }), root, s.state); rep = jsonReport(s.state);
       check(ai.calls === 0 && rep.ai.status === 'budget_reached' && rep.auto.published.length === 0 && prodHead() === baseHead && originHead() === o1 && usage(s.state).requests === 3 && r.code === 0, 'with the budget exhausted the pipeline sends NO request, publishes nothing and the counter is not touched', r.out + JSON.stringify(rep.ai));
+      section('E17g: the preview snapshot never reads or copies protected data (production data/admin.json unreadable for the service user)');
+      const gatesLib = require('../autopilot/lib/gates');
+      const tmpPreviews = () => fs.readdirSync(os.tmpdir()).filter((n) => n.startsWith('mamta-autopilot-')).length;
+      const canLock = !WIN && typeof process.getuid === 'function' && process.getuid() !== 0;
+      // a decoy data directory full of things the preview must never carry
+      const decoy = path.join(root, 'decoy-data'); fs.mkdirSync(decoy, { recursive: true });
+      const decoyFiles = { 'content.json': fs.readFileSync(path.join(site.repo, 'data/content.json')), 'admin.json': Buffer.from('{"username":"x","passwordHash":"DECOY-HASH"}'), 'admin.json.bak-2026-10-09-1': Buffer.from('DECOY-BAK'), '.env': Buffer.from('DECOY=1'), 'payroll-2026.json': Buffer.from('DECOY-PAYROLL'), 'sessions.json': Buffer.from('DECOY-SESSION'), 'enquiries.json': Buffer.from('DECOY-ENQUIRY') };
+      for (const [n, b] of Object.entries(decoyFiles)) fs.writeFileSync(path.join(decoy, n), b);
+      const decoyBefore = Object.fromEntries(Object.keys(decoyFiles).map((n) => [n, fs.readFileSync(path.join(decoy, n))]));
+      let snap = null; const n0 = tmpPreviews();
+      let pv = await gatesLib.previewServer(site.repo, { dataDir: decoy, onDir: (d) => { snap = { dir: d, data: fs.readdirSync(path.join(d, 'data')).sort(), all: [] }; const walk = (p) => { for (const x of fs.readdirSync(p)) { const f = path.join(p, x); if (x === 'node_modules') continue; if (fs.statSync(f).isDirectory()) walk(f); else snap.all.push(path.relative(d, f).split(path.sep).join('/')); } }; walk(d); } });
+      check((await http_(pv.base + '/')).status === 200, 'the preview starts and serves pages from the snapshot without admin.json');
+      check(snap.data.join() === 'content.json,gallery.json,products.json', 'the snapshot data/ holds only the public content files', snap.data.join());
+      check(!snap.all.some((f) => /(^|\/)(\.env|admin\.json|sessions\.json|enquiries\.json)/.test(f) || /payroll|\.bak/.test(f)), 'no credentials, backups, sessions, payroll, enquiry or .env file is in the snapshot', snap.all.filter((f) => /env|admin|session|payroll|bak|enquir/.test(f)).join());
+      await pv.stop();
+      check(!fs.existsSync(snap.dir) && tmpPreviews() === n0, 'stopping the preview removes the temporary workspace');
+      check(Object.keys(decoyFiles).every((n) => fs.readFileSync(path.join(decoy, n)).equals(decoyBefore[n])), 'the source data directory is byte-for-byte unchanged by the preview');
+      let threw = false; const emptyRepo = path.join(root, 'no-server'); fs.mkdirSync(emptyRepo, { recursive: true });
+      try { await gatesLib.previewServer(emptyRepo, { dataDir: decoy }); } catch (e) { threw = true; }
+      check(threw && tmpPreviews() === n0, 'a preview that cannot start fails closed (throws) and leaves no temporary workspace');
+
+      if (!canLock) skip('E17g locked-admin runs', WIN ? 'POSIX file modes (an unreadable admin.json) cannot be reproduced on Windows; the Linux CI/server run covers it' : 'running as root: mode bits do not restrict root');
+      else {
+        // reproduce production: admin.json modified and unreadable to the service user
+        const lock = () => { fs.chmodSync(adminFile, 0o000); }; const unlock = () => { try { fs.chmodSync(adminFile, 0o644); } catch (e) { /* ignore */ } };
+        s = await fresh(); fs.appendFileSync(adminFile, '\n'); const adminBytes = fs.readFileSync(adminFile); lock();
+        let eacces = false; try { fs.copyFileSync(adminFile, path.join(root, 'eacces-probe')); } catch (e) { eacces = e.code === 'EACCES'; }
+        check(eacces, 'control: copying the locked data/admin.json really fails with EACCES (the reported failure is reproduced)');
+        const nBefore = tmpPreviews(); const before17g = prodHead();
+        r = await runCli(site, 'dry-run', s.env, root, s.state); r = await runCli(site, 'run', s.env, root, s.state); rep = jsonReport(s.state); const fx2 = rep.fixes.find((f) => f.source === 'ai') || {};
+        const gatesStep = (fx2.trace || []).find((t) => t.name === 'gates') || {};
+        check(fx2.outcome === 'published' && rep.auto.published.length === 1 && gatesStep.ok === true, 'with admin.json unreadable, the valid allow-listed SEO change passes the preview and every quality gate and is published', r.out + JSON.stringify(fx2.trace) + JSON.stringify(rep.notChanged.slice(0, 2)));
+        check(!/EACCES|permission denied/i.test(r.out + JSON.stringify(rep)), 'no permission error appears in the run output or report');
+        check(git(site.repo, 'diff', '--name-only', before17g, 'HEAD') === 'views/b2b-pages.js' && (await liveDesc()).includes(NEW), 'only the allow-listed view file changed and the new wording is live');
+        check(tmpPreviews() === nBefore && git(site.repo, 'worktree', 'list').split('\n').length === 1, 'every temporary preview workspace and worktree was cleaned up');
+        unlock(); check(fs.readFileSync(adminFile).equals(adminBytes), 'production data/admin.json is byte-for-byte unchanged (mode was never altered by the autopilot)');
+        lock(); check((fs.statSync(adminFile).mode & 0o777) === 0, 'the restrictive mode on data/admin.json was left as it was'); unlock();
+        // unsafe change still fails closed with the same restrictions
+        for (const mode of ['protected', 'code', 'newword']) {
+          s = await fresh(); await runCli(site, 'dry-run', s.env, root, s.state); ai.mode = mode; lock(); const o1 = originHead(); r = await runCli(site, 'run', s.env, root, s.state); unlock(); rep = jsonReport(s.state);
+          check(rep.auto.published.length === 0 && prodHead() === baseHead && originHead() === o1 && tmpPreviews() === nBefore && fs.readFileSync(adminFile).equals(adminBytes), `unsafe AI change (${mode}) still fails closed with admin.json unreadable: nothing published, production and origin unchanged, workspaces cleaned`, r.out);
+        }
+        ai.mode = 'good'; fs.writeFileSync(adminFile, adminBytes);
+      }
+
       untouched('E17');
       resetOrigin();
     }
