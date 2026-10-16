@@ -34,7 +34,7 @@ const TEST_PASS = 'test-token-do-not-use-0123456789'; // fake Send Mail token
 const TO = 'enquiries@example.test';
 const SENDER = 'info@sender.example.test';
 
-let passed = 0; let failed = 0; const lines = [];
+let passed = 0; let failed = 0; let skipped = 0; const lines = [];
 const check = (cond, name, detail) => { if (cond) passed++; else failed++; const l = `${cond ? 'PASS' : 'FAIL'}  ${name}${cond || !detail ? '' : '  -> ' + detail}`; lines.push(l); console.log('  ' + l); };
 const section = (t) => console.log(`\n== ${t}`);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -410,6 +410,29 @@ const API_ENV = (port, extra) => Object.assign({ ZEPTOMAIL_API_URL: `http://127.
     check(!lg.includes(CRM_KEY) && /\[crm\] enquiry #\d+ forwarded/.test(lg), 'forwarding logged without the key');
     const page = await request(app.port, 'GET', '/contact'); const js = await request(app.port, 'GET', '/js/main.js');
     check(!page.text.includes(CRM_KEY) && !js.text.includes(CRM_KEY) && !/api\/intake/.test(page.text + js.text), 'key and endpoint never reach the browser');
+
+    // Optional email: blank accepted (above), valid stored + emailed + forwarded, invalid rejected.
+    check(!('email' in JSON.parse(crmSeen[0].body)), 'blank email: not sent to the CRM');
+    check(/type="email" id="f-email" name="email"[^>]*maxlength="254"[^>]*autocomplete="email"/.test(page.text) && /Email Address <span class="field-optional">\(optional\)<\/span>/.test(page.text) && !/id="f-email"[^>]*required/.test(page.text), 'contact form has an optional Email Address field (type=email, autocomplete=email, maxlength)');
+    smtp.state.requests.length = 0; crmSeen.length = 0;
+    const EM = 'buyer.test@example.test';
+    const withEm = await post(app, Object.assign({}, VALID, { message: 'email case', email: '  ' + EM + ' ' }));
+    await sleep(600);
+    check(withEm.status === 201 && app.rows().some((x) => x.message === 'email case' && x.email === EM), 'valid email trimmed and stored with the enquiry', withEm.text.slice(0, 100));
+    check(smtp.state.requests.length === 1 && /Email: buyer\.test@example\.test/.test(smtp.state.requests[0].body.textbody || '') && (smtp.state.requests[0].body.htmlbody || '').includes(EM), 'internal notification carries the email, sent exactly once');
+    check(crmSeen.length === 1 && JSON.parse(crmSeen[0].body).email === EM && JSON.parse(crmSeen[0].body).source === 'WEBSITE_FORM' && crmSeen[0].key === CRM_KEY, 'valid email forwarded to the CRM server-side with WEBSITE_FORM and the key header');
+    check(!app.log.join('').includes(EM), 'submitted email never appears in logs');
+    check(!smtp.state.requests.some((q) => (q.body.subject || '').includes(EM)), 'email not placed in the subject line');
+    smtp.state.requests.length = 0; crmSeen.length = 0;
+    const rowsBefore = app.rows().length;
+    for (const bad of ['not-an-email', 'a@b', 'a b@example.test', 'x@@example.test', 'a@example..test', 'a'.repeat(250) + '@example.test']) {
+      const br = await post(app, Object.assign({}, VALID, { message: 'bad email ' + bad.length, email: bad }));
+      check(br.status === 422 && parse(br).fields && parse(br).fields.email && /valid email/i.test(parse(br).fields.email), `invalid email "${bad.slice(0, 20)}" -> 422 friendly field error`, `${br.status} ${br.text.slice(0, 120)}`);
+    }
+    await sleep(300);
+    check(app.rows().length === rowsBefore && smtp.state.requests.length === 0 && crmSeen.length === 0, 'invalid email: nothing stored, emailed or forwarded');
+    const ne = await post(app, Object.assign({}, VALID, { message: 'non-string email', email: ['a@example.test'] }));
+    check(ne.status === 201, 'a non-string email value is ignored, not a crash', String(ne.status));
     app.stop();
 
     const down = await startApp(API_ENV(smtp.port, { CRM_INTAKE_URL: `http://127.0.0.1:${await freePort()}/api/intake`, CRM_INTAKE_KEY: CRM_KEY })); cleanup.push(down.stop);
@@ -418,11 +441,78 @@ const API_ENV = (port, extra) => Object.assign({ ZEPTOMAIL_API_URL: `http://127.
     check(d.status === 201 && parse(d).ok === true && d.ms < 3000, `CRM down: visitor still gets 201 quickly (${d.ms} ms)`, `${d.status} ${d.text.slice(0, 100)}`);
     await sleep(400);
     check(down.rows().length === 1 && smtp.state.requests.length === 1, 'CRM down: enquiry stored and email still sent');
+    smtp.state.requests.length = 0;
+    const dEm = await post(down, Object.assign({}, VALID, { message: 'crm down with email', email: 'down.test@example.test' }));
+    await sleep(400);
+    check(dEm.status === 201 && down.rows().some((x) => x.email === 'down.test@example.test') && smtp.state.requests.length === 1, 'CRM down + email supplied: enquiry stored with email and notification sent once');
+    check(!down.log.join('').includes('down.test@example.test'), 'CRM down: submitted email not in logs');
     check(noLeaks(down) && !down.log.join('').includes(CRM_KEY), 'CRM down: no stack traces and no key in logs');
     down.stop();
   }
 
+  if (run('browser')) {
+    section('H. Browser: inauguration popup must not block the enquiry form (real Chromium, fake mail, isolated data)');
+    let pw = null;
+    for (const base of [REPO, process.env.PLAYWRIGHT_DIR, path.join(os.homedir(), 'devmam-b2b-syndication-engine')]) {
+      if (!base) continue;
+      try { pw = require(require.resolve('playwright', { paths: [base] })); break; } catch (e) { /* try next */ }
+    }
+    let browser = null;
+    if (pw) { try { browser = await pw.chromium.launch(); } catch (e) { browser = null; } }
+    if (!browser) {
+      skipped++; console.log('  SKIP  Playwright/Chromium not available (set PLAYWRIGHT_DIR to a folder containing node_modules/playwright); browser checks NOT run');
+      if (args.includes('--require-browser')) check(false, 'browser checks required but Playwright/Chromium unavailable');
+    } else {
+      cleanup.push(() => browser.close());
+      smtp.state.mode = 'ok'; smtp.state.requests.length = 0;
+      const app = await startApp(API_ENV(smtp.port, { ENQUIRY_MIN_FILL_MS: '1000' })); cleanup.push(app.stop);
+      const page = await browser.newPage();
+      await page.goto(`http://127.0.0.1:${app.port}/contact`);
+      const modal = page.locator('#launch-modal');
+      const submit = page.getByRole('button', { name: 'Send Enquiry' });
+      check(await modal.isVisible(), 'inauguration popup opens on page load');
+      let blocked = false;
+      try { await submit.click({ timeout: 1500, trial: true }); } catch (e) { blocked = true; }
+      check(blocked, 'while the popup is open it really covers the submit button (the original timeout cause)');
+      await page.getByRole('button', { name: 'Close inauguration banner' }).click();
+      check(!(await modal.isVisible()), 'popup closed with its visible close button');
+      let usable = true;
+      try { await submit.click({ timeout: 3000, trial: true }); } catch (e) { usable = false; }
+      check(usable, 'after closing, the submit button is clickable without force');
+
+      const fill = async (name, msg, email) => {
+        await page.fill('#f-name', name); await page.fill('#f-phone', '9876500011');
+        await page.selectOption('#f-type', 'General Product Enquiry'); await page.selectOption('#f-product', 'All Products');
+        await page.fill('#f-email', email || ''); await page.fill('#f-msg', msg);
+      };
+      // invalid email: rejected with a friendly message, nothing stored
+      await fill('Browser Test', 'browser invalid email', 'bad@@example.test');
+      await page.waitForTimeout(1200);
+      await submit.click();
+      await page.waitForTimeout(500);
+      check(await page.locator('#f-email').evaluate((el) => !el.validity.valid) && app.rows().length === 0 && smtp.state.requests.length === 0, 'invalid email is stopped by the browser (type=email); nothing stored or emailed (server-side rejection is covered by section G)');
+      // blank email: accepted
+      await fill('Browser Test', 'browser blank email', '');
+      await page.waitForTimeout(1200);
+      await submit.click();
+      await page.waitForFunction(() => /submitted successfully/i.test((document.getElementById('enquiry-status') || {}).textContent || ''), null, { timeout: 8000 });
+      check(app.rows().length === 1 && !app.rows()[0].email, 'blank email: enquiry submitted via the real form and stored');
+      // valid email: stored
+      await page.reload();
+      if (await modal.isVisible()) await page.getByRole('button', { name: 'Close inauguration banner' }).click();
+      await fill('Browser Test Two', 'browser valid email', 'visitor.test@example.test');
+      await page.waitForTimeout(1200);
+      await submit.click();
+      await page.waitForFunction(() => /submitted successfully/i.test((document.getElementById('enquiry-status') || {}).textContent || ''), null, { timeout: 8000 });
+      await sleep(500);
+      check(app.rows().length === 2 && app.rows()[1].email === 'visitor.test@example.test', 'valid email: stored via the real form');
+      check(smtp.state.requests.length === 2 && /visitor\.test@example\.test/.test(smtp.state.requests[1].body.textbody || ''), 'one notification email per stored enquiry (2 enquiries, 2 emails), the second carrying the email');
+      check(!app.log.join('').includes('visitor.test@example.test') && noLeaks(app), 'logs contain no submitted email, no secrets, no stack traces');
+      await page.close(); app.stop();
+    }
+  }
+
   cleanup.forEach((f) => { try { f(); } catch (e) { /* ignore */ } });
-  console.log(`\nENQUIRY TESTS: ${passed} passed, ${failed} failed`);
+  console.log(`\nENQUIRY TESTS: ${passed} passed, ${failed} failed${skipped ? `, ${skipped} section(s) SKIPPED` : ""}`);
   process.exit(failed ? 1 : 0);
 })().catch((e) => { console.error('test harness error:', e); process.exit(2); });

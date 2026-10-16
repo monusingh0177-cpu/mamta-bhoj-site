@@ -72,6 +72,7 @@ function renderContact(content, query, products) {
         <div class="field"><label for="f-name">Full Name</label><input type="text" id="f-name" name="name" placeholder="Your name" required></div>
         <div class="field"><label for="f-phone">Phone Number</label><input type="tel" id="f-phone" name="phone" placeholder="10-digit mobile number" required inputmode="numeric" maxlength="10" minlength="10" pattern="[6-9][0-9]{9}" autocomplete="tel-national" title="Enter a 10-digit Indian mobile number starting with 6, 7, 8 or 9" aria-describedby="f-phone-hint"><span class="field-hint" id="f-phone-hint">10 digits, without +91 or 0</span></div>
       </div>
+      <div class="field"><label for="f-email">Email Address <span class="field-optional">(optional)</span></label><input type="email" id="f-email" name="email" placeholder="you@example.com" maxlength="254" autocomplete="email"></div>
       <div class="field-row">
         <div class="field">
           <label for="f-type">Enquiry Type</label>

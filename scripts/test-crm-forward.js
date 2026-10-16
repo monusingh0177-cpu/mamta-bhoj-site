@@ -48,6 +48,8 @@ const cfgFor = (url) => crm.loadConfig({ CRM_INTAKE_URL: url, CRM_INTAKE_KEY: KE
   check(p.source === 'WEBSITE_FORM', 'source is WEBSITE_FORM');
   check(p.name === ENQ.name && p.phone === ENQ.phone && p.type === ENQ.type && p.productInterest === 'Maida' && p.cityState === ENQ.cityState && p.message === ENQ.message && p.monthlyRequirement === ENQ.monthlyRequirement, 'documented fields mapped');
   check(!('id' in p) && !('read' in p) && !('createdAt' in p), 'internal fields (id, read, createdAt) not sent');
+  check(crm.buildPayload({ name: 'A B', phone: '9876543210', email: 'a@example.test' }).email === 'a@example.test', 'email included when supplied');
+  check(!('email' in crm.buildPayload({ name: 'A B', phone: '9876543210', email: '' })), 'blank email omitted');
   check(!('message' in crm.buildPayload({ name: 'A B', phone: '9876543210', message: '' })), 'empty optional fields omitted');
 
   section('successful forwarding against a mock CRM');

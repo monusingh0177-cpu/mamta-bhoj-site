@@ -47,6 +47,12 @@ for (const [input, valid] of PHONE_CASES) {
   if (valid) check(r.data.phone === input.replace(/[\s-]+/g, ''), `  stored normalised as ${r.data.phone}`);
   else check(r.fields.phone && r.fields.phone.length > 5, '  clear message returned', JSON.stringify(r.fields));
 }
+section('A2. Optional email validation');
+for (const [e, ok] of [['', true], ['a@example.com', true], ['  first.last+tag@sub.example.co.in ', true], ['nope', false], ['a@b', false], ['a b@c.com', false], ['a@c..com', false], ['@c.com', false], ['a@c.com\nBcc: x@y.com', false]]) {
+  const r = enquiry.validateEnquiry({ name: 'Test Name', phone: '9876543210', type: 'Retailer', productInterest: 'All Products', email: e }, []);
+  check(r.ok === ok, 'email ' + JSON.stringify(e) + (ok ? ' accepted' : ' rejected'), JSON.stringify(r));
+  if (ok) check(r.data.email === e.trim(), '  stored trimmed');
+}
 check(enquiry.PHONE_RE.source === '^[6-9][0-9]{9}$', 'regex is exactly ^[6-9][0-9]{9}$', enquiry.PHONE_RE.source);
 check(!run({ phone: '98765432101' }).ok, 'an 11-digit number is never truncated to 10 and accepted');
 check(!run({ phone: ['9876543210'] }).ok && !run({ phone: { a: 1 } }).ok && !run({ phone: null }).ok, 'array / object / null phone values are rejected');
