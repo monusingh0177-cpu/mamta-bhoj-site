@@ -4,8 +4,9 @@
 //   patch -> validate it (claims, allow-list, exact match) -> apply it ONLY in a separate git worktree on a new
 //   branch -> run every quality gate there -> commit to that branch only -> report.
 // The production branch, the production working tree, PM2, nginx, .env, data/ and uploads are never modified.
-// Merging, pushing, deploying and restarting are manual. publish=auto (autonomous publishing) is a configuration
-// value that this build refuses: it is reported as a stop condition.
+// In AUTOPILOT_MODE=auto (activated, not paused) a validated title/description rewrite is released through the guarded
+// publish pipeline only when every lib/ai-release.js gate passes; otherwise it stays on its review branch.
+// publish=auto (AUTOPILOT_PUBLISH) is a configuration value that this build refuses: it is reported as a stop condition.
 const crypto = require('crypto');
 const state = require('./lib/state');
 const gscLib = require('./lib/gsc');
@@ -25,6 +26,7 @@ const health = require('./lib/health');
 const weekly = require('./lib/weekly');
 const remediateLib = require('./lib/remediate');
 const publishLib = require('./lib/publish');
+const aiRelease = require('./lib/ai-release');
 const keywordsLib = require('./lib/keywords');
 const indexingLib = require('./lib/indexing');
 const semrushLib = require('./lib/semrush');
@@ -184,7 +186,12 @@ async function runOnce(cfg, opts) {
       const proposal = await ai.propose(cfg, { opportunity: op, page: inv.pages[page], path: page, block });
       if (proposal.skipped && proposal.budget) { R.ai.status = 'budget_reached'; R.ai.note = proposal.reason; R.notChanged.push({ page, reason: `no patch generated: ${proposal.reason}` }); continue; }
       if (proposal.skipped) { R.ai.status = 'misconfigured'; R.ai.note = `AI-dependent changes are report-only: ${proposal.reason}`; R.notChanged.push({ page, reason: `no patch generated: ${proposal.reason}` }); continue; }
-      if (proposal.error) { R.ai.status = 'error'; R.ai.note = proposal.error; R.notChanged.push({ page, reason: proposal.error }); A('ai_error', { page, error: proposal.error }); continue; }
+      if (proposal.error) {
+        R.ai.status = 'error'; R.ai.note = proposal.error; R.notChanged.push({ page, reason: proposal.error }); A('ai_error', { page, error: proposal.error });
+        // a provider-level failure (rate limit, outage, timeout, auth, model) will repeat for the next page: stop asking this run instead of spending more of the budget
+        if (proposal.category && !['malformed', 'empty', 'truncated', 'blocked'].includes(proposal.category)) { R.notChanged.push({ page: '(all)', reason: 'AI provider failure: no further AI requests this run' }); break; }
+        continue;
+      }
       R.ai.status = 'ok'; if (proposal.usage) { const u = R.ai.usage || (R.ai.usage = { model: proposal.model, promptTokens: 0, outputTokens: 0, totalTokens: 0 }); u.promptTokens += proposal.usage.promptTokens || 0; u.outputTokens += proposal.usage.outputTokens || 0; u.totalTokens += proposal.usage.totalTokens || 0; }
       for (const why of proposal.rejected || []) { R.notChanged.push({ page, reason: `AI patch rejected: ${why}` }); A('patch_rejected', { page, kind: 'grounding', errors: [why] }); }
       const valid = []; const kinds = new Set();
@@ -195,6 +202,18 @@ async function runOnce(cfg, opts) {
         kinds.add(d.kind); valid.push(d);
       }
       if (!valid.length) continue;
+      // auto mode: a title/description rewrite that passes every AI-release gate is published through the same guarded
+      // pipeline as the deterministic fixes (see lib/ai-release.js); anything else falls through to the review branch below
+      if (effectiveMode === 'auto' && R.auto.enabled) {
+        const rel = await aiRelease.release({ cfg, R, st, inv, date, runId, A, op, page, valid, block, changedUrls });
+        inv = rel.inv || inv;
+        if (rel.handled) {
+          if (rel.published) { remaining--; chosen.add(page); break; } // production HEAD moved: further AI changes wait for the next run
+          if (rel.proposed) { remaining--; chosen.add(page); continue; }
+          blocked = true; break;
+        }
+        for (const why of rel.reasons || []) R.notChanged.push({ page, reason: `AI change not auto-published (kept for review): ${why}` });
+      }
       let wt = null;
       try {
         wt = branchLib.create(cfg, { date, page, id: runId });
@@ -220,6 +239,8 @@ async function runOnce(cfg, opts) {
       }
     }
   }
+
+  aiRelease.recordLedger(cfg, R, runId, date);
 
   // ---- lastmod, IndexNow, Google sitemap (real live content changes only; never in dry-run)
   if (!dryRun) {

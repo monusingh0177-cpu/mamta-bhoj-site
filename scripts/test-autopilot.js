@@ -94,22 +94,28 @@ async function startAi() {
   a.server = http.createServer((req, res) => {
     let body = ''; req.on('data', (c) => (body += c));
     req.on('end', () => {
-      a.calls++; const prompt = (JSON.parse(body || '{}').messages || [{}])[0].content || ''; a.prompts.push({ auth: req.headers.authorization, prompt });
+      a.calls++; const jb = JSON.parse(body || '{}'); const gem = /:generateContent$/.test(req.url); const prompt = gem ? (((jb.contents || [{}])[0].parts || [{}])[0].text || '') : ((jb.messages || [{}])[0].content || ''); a.prompts.push({ auth: req.headers.authorization, key: req.headers['x-goog-api-key'], prompt, gem });
       if (a.mode === 'timeout') return;
       if (a.mode === 'http500') { res.writeHead(500); return res.end('boom'); }
+      if (a.mode === 'http503') { res.writeHead(503); return res.end('unavailable'); }
+      if (a.mode === 'http429') { res.writeHead(429, { 'Retry-After': '0' }); return res.end('slow down'); }
       const page = (prompt.match(/Target page: (\S+)/) || [])[1]; const P = PATCH[page];
       const mk = (replace, extra) => ({ page, kind: 'description', file: P.file, find: P.find, replace, rationale: 'Clearer wording for buyers.', confidence: 0.9, ...(extra || {}) });
       let content;
       if (a.mode === 'garbage') content = 'Sure! Here is my advice: change things.';
       else if (!P) content = JSON.stringify({ decisions: [] });
       else if (a.mode === 'good') content = JSON.stringify({ decisions: [mk(P.good)] });
+      else if (a.mode === 'copy') content = JSON.stringify({ decisions: [mk(P.good, { kind: 'copy' })] });
+      else if (a.mode === 'lowconf') content = JSON.stringify({ decisions: [mk(P.good, { confidence: 0.7 })] });
+      else if (a.mode === 'newword') content = JSON.stringify({ decisions: [mk('Dealers, traders and quokkas can enquire.')] });
+      else if (a.mode === 'number') content = JSON.stringify({ decisions: [mk('Dealers, traders and retailers can enquire 24 hours.')] });
       else if (a.mode === 'claims') content = JSON.stringify({ decisions: [mk('Lowest price flour in Delhi, 5 stars, delivery within 24 hours.')] });
       else if (a.mode === 'badfind') content = JSON.stringify({ decisions: [mk(P.good, { find: 'this text does not exist anywhere in the file' })] });
       else if (a.mode === 'syntax') content = JSON.stringify({ decisions: [mk("Dealers can't miss this.")] });
       else if (a.mode === 'length') content = JSON.stringify({ decisions: [mk(P.long)] });
       else if (a.mode === 'protected') content = JSON.stringify({ decisions: [mk(P.good, { file: 'lib/mailer.js' })] });
       else if (a.mode === 'code') content = JSON.stringify({ decisions: [mk('x ${process.exit(1)} y')] });
-      res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ choices: [{ message: { content } }] }));
+      res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(gem ? { candidates: [{ content: { parts: [{ text: content }] }, finishReason: 'STOP' }], usageMetadata: { promptTokenCount: 200, candidatesTokenCount: 100, totalTokenCount: 300 } } : { choices: [{ message: { content } }] }));
     });
   });
   const port = await freePort(); await new Promise((r) => a.server.listen(port, '127.0.0.1', r)); a.base = `http://127.0.0.1:${port}`; return a;
@@ -641,7 +647,7 @@ const cleanBranches = (repo) => { try { git(repo, 'worktree', 'prune'); } catch 
       check(r.code === 1 && rep.status === 'failed' && rep.fixes[0].outcome === 'rollback-failed' && rep.health.some((i) => i.id === 'release' && i.level === 'fail') && hook.posts.length > nPosts, 'a FAILED rollback is a failed run: exit code 1, a "fail" health item and an alert', r.out + rep.status);
       check(prodHead() === baseHead, 'even when the restart cannot be completed, the code on disk is back at the previous commit');
 
-      section('E14e: guards - not at the remote release commit, not configured, protected paths, AI patches never auto-publish');
+      section('E14e: guards - not at the remote release commit, not configured, protected paths, AI body copy never auto-publishes');
       s = await fresh(); await runCli(site, 'dry-run', s.env, root, s.state);
       const ahead = git(site.repo, 'commit-tree', 'HEAD^{tree}', '-p', 'HEAD', '-m', 'someone else deployed'); git(site.repo, 'push', '-q', 'origin', `${ahead}:refs/heads/main`);
       r = await runCli(site, 'run', s.env, root, s.state); rep = jsonReport(s.state);
@@ -661,8 +667,8 @@ const cleanBranches = (repo) => { try { git(repo, 'worktree', 'prune'); } catch 
       fs.appendFileSync(path.join(site.repo, 'views/links.js'), '\n// dirty\n'); const resD = await publishLib.publishFix(cfgG, { sha: mkCommit('views/guides.js', '\n// x\n'), changedPages: ['/'], expect: [], baselineAudit: [] });
       check(!resD.published && /not clean/.test(resD.error), 'a modified tracked file in the production tree stops publication', resD.error); git(site.repo, 'checkout', '--', 'views/links.js');
       const aiAuto = await fresh({ AUTOPILOT_AI_MODE: 'openai', AUTOPILOT_AI_BASE_URL: ai.base, AUTOPILOT_AI_MODEL: 'm', AUTOPILOT_AI_API_KEY: AI_KEY, AUTOPILOT_MIN_INLINKS: '3' });
-      await runCli(site, 'dry-run', aiAuto.env, root, aiAuto.state); r = await runCli(site, 'run', aiAuto.env, root, aiAuto.state); rep = jsonReport(aiAuto.state);
-      check(rep.auto.published.length === 0 && prodHead() === baseHead && rep.changes.every((c) => branches(site.repo).includes(c.branch)) && rep.changes.length >= 1, 'AI-written changes are never published automatically: they stay on a review branch even in auto mode', r.out + JSON.stringify(rep.changes && rep.changes.map((c) => c.page)));
+      await runCli(site, 'dry-run', aiAuto.env, root, aiAuto.state); ai.mode = 'copy'; r = await runCli(site, 'run', aiAuto.env, root, aiAuto.state); rep = jsonReport(aiAuto.state);
+      check(rep.auto.published.length === 0 && prodHead() === baseHead && rep.changes.every((c) => branches(site.repo).includes(c.branch)) && rep.changes.length >= 1, 'AI-written body copy is never published automatically (only title/description rewrites that pass every gate are): it stays on a review branch even in auto mode', r.out + JSON.stringify(rep.changes && rep.changes.map((c) => c.page)));
 
       section('E14f: patch validation for the related-link fix, planner, target keywords');
       const okPatch = fixersLib.plan({ repoDir: site.repo, inv: { pages: Object.fromEntries(fixersLib.parseGuides(site.repo).map((g) => ['/guides/' + g.slug, { indexable: true, linksIn: 1, linksOut: [] }])) }, findings: [{ code: 'few-inlinks', path: '/guides/what-is-besan', message: 'x' }], opportunities: [] })[0];
@@ -939,6 +945,108 @@ const cleanBranches = (repo) => { try { git(repo, 'worktree', 'prune'); } catch 
       r = sh('uninstall-autopilot.sh', ['--prefix', pre]); check(r.status === 0 && !fs.existsSync(path.join(pre, 'etc/systemd/system/mamta-autopilot.timer')) && fs.existsSync(path.join(pre, 'etc/mamta-autopilot/autopilot.env')), 'uninstall removes the units and keeps credentials and state by default', r.stdout + r.stderr);
       r = sh('uninstall-autopilot.sh', ['--prefix', pre, '--purge', '--state-dir', '/var/lib/mamta-autopilot-test']); check(!fs.existsSync(path.join(pre, 'etc/mamta-autopilot')), 'uninstall --purge removes the credentials directory');
 
+    }
+    // ---- E17 AI proposal -> validation -> guarded automatic publication -> live verification -> rollback (Gemini wire format, fake provider only)
+    if (want('e17')) {
+      const aiRel = require('../autopilot/lib/ai-release'); const stateLib = require('../autopilot/lib/state'); const budgetLib = require('../autopilot/lib/budget');
+      const bare = path.join(root, 'origin-e17.git'); git(root, 'init', '-q', '--bare', '-b', 'main', bare);
+      try { git(site.repo, 'remote', 'remove', 'origin'); } catch (e) { /* none yet */ }
+      git(site.repo, 'remote', 'add', 'origin', bare);
+      const resetOrigin = () => git(site.repo, 'push', '-q', '-f', 'origin', `${baseHead}:refs/heads/main`);
+      const prodHead = () => git(site.repo, 'rev-parse', 'HEAD'); const originHead = () => git(bare, 'rev-parse', 'main');
+      const ctrl = { queue: [] };
+      ctrl.server = http.createServer(async (req, res) => { const m = ctrl.queue.length ? ctrl.queue.shift() : 'ok'; if (m === 'norestart') { res.writeHead(200); return res.end('ok'); } await site.restart(); res.writeHead(200); res.end('ok'); });
+      await new Promise((r) => ctrl.server.listen(0, '127.0.0.1', r)); cleanups.push(() => ctrl.server.close());
+      const restartJs = path.join(root, 'restart17.js');
+      fs.writeFileSync(restartJs, "require('http').get('http://127.0.0.1:' + process.argv[2] + '/', (r) => { r.resume(); r.on('end', () => process.exit(r.statusCode === 200 ? 0 : 1)); }).on('error', () => process.exit(1));");
+      const RESTART = `node ${restartJs.replace(/\\/g, '/')} ${ctrl.server.address().port}`;
+      const aiEnv = (extra) => Object.assign({ AUTOPILOT_MODE: 'auto', AUTOPILOT_RESTART_CMD: RESTART, AUTOPILOT_MIN_INLINKS: '3', AUTOPILOT_VERIFY_TIMEOUT_MS: '20000', AUTOPILOT_NOW: '2026-10-13T04:00:00Z', AUTOPILOT_AI_MODE: 'gemini', AUTOPILOT_AI_BASE_URL: ai.base + '/v1beta', AUTOPILOT_AI_MODEL: 'gemini-test', AUTOPILOT_AI_API_KEY: AI_KEY, AUTOPILOT_MAX_PAGES_PER_DAY: '1' }, extra || {});
+      const fresh = async (extra, noActivation) => { const s = scenario(aiEnv(extra)); resetOrigin(); ctrl.queue.length = 0; await site.restart(); if (!noActivation) await runCli(site, 'activate-auto', s.env, root, s.state); return s; };
+      const liveDesc = async () => ((await http_(site.base + '/wholesale-flour-supplier')).body.match(/name="description" content="([^"]*)"/) || [])[1] || '';
+      const NEW = 'Dealers, traders and retailers can enquire.'; const OLD = 'Dealers and retailers can enquire.';
+      const tracked = git(site.repo, 'ls-files', 'data').split('\n').filter(Boolean)[0]; const adminFile = path.join(site.repo, tracked || 'data/admin.json');
+      const usage = (st) => { try { return JSON.parse(fs.readFileSync(path.join(st, 'ai-usage.json'), 'utf8')); } catch (e) { return null; } };
+      const names = (f) => (f.trace || []).map((t) => t.name).join();
+
+      section('E17a: report-only and propose modes never publish; the AI is not even called in report-only');
+      let s = scenario(aiEnv({ AUTOPILOT_MODE: 'report' })); resetOrigin(); await runCli(site, 'dry-run', s.env, root, s.state); let r = await runCli(site, 'run', s.env, root, s.state); let rep = jsonReport(s.state);
+      check(r.code === 0 && ai.calls === 0 && rep.changes.length === 0 && branches(site.repo).length === 0 && prodHead() === baseHead && rep.auto.published.length === 0 && /report only/.test(rep.auto.reason), 'AUTOPILOT_MODE=report: no AI request, no branch, nothing published', r.out + rep.auto.reason);
+      s = scenario(aiEnv({ AUTOPILOT_MODE: 'propose' })); resetOrigin(); await runCli(site, 'dry-run', s.env, root, s.state); r = await runCli(site, 'run', s.env, root, s.state); rep = jsonReport(s.state);
+      check(ai.calls === 1 && rep.changes.length === 1 && branches(site.repo).length === 1 && prodHead() === baseHead && originHead() === baseHead && rep.auto.published.length === 0, 'AUTOPILOT_MODE=propose: the AI answer becomes a review branch only', r.out + JSON.stringify(rep.notChanged));
+      const lastP = ai.prompts[ai.prompts.length - 1] || {}; check(lastP.gem && lastP.key === AI_KEY && !lastP.auth, 'the provider call used the Gemini wire format with the key only in the x-goog-api-key header (mock server)');
+
+      section('E17b: auto mode WITHOUT activation does not publish AI changes either');
+      s = await fresh({}, true); await runCli(site, 'dry-run', s.env, root, s.state); r = await runCli(site, 'run', s.env, root, s.state); rep = jsonReport(s.state);
+      check(rep.auto.published.length === 0 && prodHead() === baseHead && rep.changes.length >= 1, 'not activated: the AI change stays a review branch', rep.auto.reason);
+
+      section('E17c: guarded automatic publication of an AI title/description rewrite, verified live');
+      s = await fresh(); fs.appendFileSync(adminFile, '\n'); const adminBefore = fs.readFileSync(adminFile);
+      await runCli(site, 'dry-run', s.env, root, s.state); check((await liveDesc()).includes(OLD) && !(await liveDesc()).includes(NEW), 'before the run the live page has the old wording');
+      const before = prodHead(); r = await runCli(site, 'run', s.env, root, s.state); rep = jsonReport(s.state); const fx = rep.fixes.find((f) => f.source === 'ai') || {};
+      check(r.code === 0 && fx.outcome === 'published' && rep.auto.published.length === 1 && rep.auto.published[0].source === 'ai', 'the AI rewrite is published automatically after all gates pass', r.out + JSON.stringify(rep.fixes.map((f) => [f.id, f.outcome, f.trace && f.trace.map((t) => t.name + ':' + t.ok)])) + JSON.stringify(rep.notChanged));
+      check(names(fx) === 'discover,ai-gates,propose,gates,preflight,merge,restart,verify-live,push' && fx.trace.every((t) => t.ok), 'every step is traced: discover, ai-gates, propose, gates, preflight, merge, restart, verify-live, push', JSON.stringify((fx.trace || []).map((t) => [t.name, t.ok])));
+      check(git(site.repo, 'rev-list', '--count', `${before}..HEAD`) === '1' && prodHead() === originHead() && prodHead() !== before, 'production moved exactly one commit and origin has the same verified commit');
+      check(git(site.repo, 'diff', '--name-only', before, 'HEAD') === 'views/b2b-pages.js', 'only the allow-listed SEO view file changed');
+      check((await liveDesc()).includes(NEW), 'the new wording is LIVE on the running site (fetched over HTTP)');
+      check(fs.readFileSync(adminFile).equals(adminBefore), 'the server-modified data/admin.json is byte-identical after the release');
+      const chg = stateLib.readChanges({ stateDir: s.state }, 20).filter((c) => c.source === 'ai'); check(chg.length === 1 && chg[0].published === true && chg[0].change[0].old === OLD && chg[0].change[0].new === NEW && chg[0].previousCommit === before, 'the change ledger records old/new text, commit and verification', JSON.stringify(chg));
+      check(inow.posts.length > 0 && JSON.stringify(inow.posts).includes('/wholesale-flour-supplier'), 'the changed URL is submitted to IndexNow');
+      check(usage(s.state) && usage(s.state).requests === 1 && usage(s.state).requests === ai.calls, 'exactly one AI request was made and counted against the budget');
+      const calls1 = ai.calls; r = await runCli(site, 'run', s.env, root, s.state); rep = jsonReport(s.state);
+      check(git(site.repo, 'rev-list', '--count', `${before}..HEAD`) === '1' && rep.auto.published.length === 0, 'a second run the same day publishes nothing more (one change per day)', JSON.stringify(rep.notChanged.slice(0, 3)));
+      check(git(site.repo, 'branch', '--list', 'seo-autopilot/*').trim() === '' && git(site.repo, 'worktree', 'list').split('\n').length === 1, 'no leftover branch or worktree');
+
+      section('E17d: unsafe or unverifiable AI content is NEVER published (gates: claims, numbers, vocabulary, confidence, field allow-list, protected file, code)');
+      const rejectedBy = [['claims', 'unsupported business claims'], ['number', 'a number that is not on the page'], ['badfind', 'text that is not in the source'], ['protected', 'a protected file'], ['code', 'code injection'], ['garbage', 'a non-JSON answer']];
+      for (const [mode, why] of rejectedBy) {
+        s = await fresh(); await runCli(site, 'dry-run', s.env, root, s.state); ai.mode = mode; const o0 = originHead(); r = await runCli(site, 'run', s.env, root, s.state); rep = jsonReport(s.state);
+        check(rep.auto.published.length === 0 && prodHead() === baseHead && originHead() === o0 && branches(site.repo).length === 0 && (await liveDesc()).includes(OLD), `AI answer with ${why}: nothing published, no branch, live page unchanged`, r.out + JSON.stringify(rep.notChanged.slice(0, 2)));
+      }
+      for (const [mode, gate, why] of [['newword', 'ai-vocabulary', 'a word that appears nowhere on the site'], ['lowconf', 'ai-confidence', 'confidence below 0.8'], ['copy', 'ai-field-allowlist', 'body copy instead of title/description']]) {
+        s = await fresh(); await runCli(site, 'dry-run', s.env, root, s.state); ai.mode = mode; r = await runCli(site, 'run', s.env, root, s.state); rep = jsonReport(s.state); const f = rep.fixes.find((x) => x.source === 'ai') || {};
+        check(rep.auto.published.length === 0 && prodHead() === baseHead && originHead() === baseHead && (await liveDesc()).includes(OLD) && f.outcome === 'review-only' && (f.trace || []).some((t) => t.name === 'ai-gates' && !t.ok && t.detail.includes(gate)), `AI answer with ${why}: refused by gate ${gate}, not published`, r.out + JSON.stringify(f.trace));
+        check(rep.changes.length === 1 && branches(site.repo).length === 1 && rep.notChanged.some((x) => /kept for review/.test(x.reason)), `...and it is kept as a review branch only (${mode})`, JSON.stringify(rep.notChanged.slice(0, 3)));
+      }
+      const gl = (o) => aiRel.gateList(Object.assign({ cfg: { siteOrigin: 'https://x.test', auto: { maxPerDay: 1 } }, R: { auto: { enabled: true, published: [] } }, st: { history: [] }, date: '2026-10-13', op: { impressions: 40, query: 'q' }, page: '/p', block: { text: '' },
+        inv: { pages: { '/p': { status: 200, indexable: true, inSitemap: true, canonical: 'https://x.test/p', title: 'Flour supplier', description: 'Flour for dealers', h1: ['Flour'], headings: [], text: 'dealers retailers flour' } } }, decision: { kind: 'description', confidence: 0.9, find: 'Flour for dealers', replace: 'Flour for dealers and retailers' } }, o)).filter((g) => !g.ok).map((g) => g.name);
+      check(gl({}).length === 0, 'unit: a clean title/description rewrite passes every AI gate');
+      check(gl({ R: { auto: { enabled: false, published: [], reason: 'paused' } } }).join() === 'auto-enabled', 'unit: auto-publishing not enabled -> gate fails');
+      check(gl({ op: { impressions: 3, query: 'q' } }).join() === 'ai-search-evidence', 'unit: too little search evidence -> gate fails');
+      check(gl({ st: { history: [{ status: 'published', date: '2026-10-13' }] } }).join() === 'one-change-per-day', 'unit: a release already happened today -> gate fails');
+      check(gl({ inv: { pages: {} } }).includes('ai-page-eligible'), 'unit: page missing from the live inventory -> gate fails');
+      check(gl({ decision: { kind: 'description', confidence: 0.9, find: 'Flour for dealers', replace: 'Flour for dealers and retailers, delivered across the whole of the country quickly' } }).includes('ai-size-change'), 'unit: a large rewrite -> gate fails');
+      check(gl({ decision: { kind: 'description', confidence: 0.9, find: 'Flour for dealers', replace: 'x' } }).includes('ai-fragment'), 'unit: a replacement too short to be confirmed live -> gate fails');
+      check(gl({ decision: { kind: 'related', confidence: 1, find: 'a', replace: 'b' } }).includes('ai-field-allowlist'), 'unit: a field outside the allow-list -> gate fails');
+
+      section('E17e: live verification fails -> automatic rollback, nothing reaches origin, publishing is paused');
+      s = await fresh(); fs.appendFileSync(adminFile, '\n'); const adminB2 = fs.readFileSync(adminFile); await runCli(site, 'dry-run', s.env, root, s.state); ctrl.queue.push('norestart'); r = await runCli(site, 'run', s.env, root, s.state); rep = jsonReport(s.state);
+      const rf = rep.fixes.find((x) => x.source === 'ai') || {};
+      check(rf.outcome === 'rolled-back' && prodHead() === baseHead && originHead() === baseHead && (await liveDesc()).includes(OLD), 'the AI release is rolled back to the previous commit; origin never received it; the live page is unchanged', r.out + JSON.stringify(rf.trace));
+      check(/merge:true,restart:true,verify-live:false,rollback-code:true,rollback-restart:true,rollback-verify:true/.test((rf.trace || []).map((t) => t.name + ':' + t.ok).join()), 'trace shows the failed live verification followed by a verified rollback');
+      check(JSON.parse(fs.readFileSync(path.join(s.state, 'state.json'), 'utf8')).autoPaused != null && rep.health.some((i) => i.id === 'auto-paused') && fs.readFileSync(adminFile).equals(adminB2), 'auto-publishing is paused (circuit breaker) and data/admin.json is untouched');
+      const ch2 = stateLib.readChanges({ stateDir: s.state }, 20).filter((c) => c.source === 'ai'); check(ch2.length === 1 && ch2[0].outcome === 'rolled-back' && ch2[0].rollback && ch2[0].rollback.attempted, 'the change ledger records the rollback');
+      r = await runCli(site, 'run', Object.assign({}, s.env), root, s.state); rep = jsonReport(s.state);
+      check(rep.auto.enabled === false && /paused/.test(rep.auto.reason) && rep.auto.published.length === 0 && prodHead() === baseHead, 'while paused, later runs do not publish');
+
+      section('E17f: provider failures (429, 503, 500, timeout) and the hard budget across retries and concurrent processes');
+      for (const [mode, label] of [['http429', 'rate limit (429)'], ['http503', 'server error (503)'], ['http500', 'server error (500)']]) {
+        s = await fresh(); await runCli(site, 'dry-run', s.env, root, s.state); ai.mode = mode; ai.calls = 0; r = await runCli(site, 'run', s.env, root, s.state); rep = jsonReport(s.state);
+        check(r.code === 0 && ai.calls === 3 && usage(s.state).requests === 3 && rep.auto.published.length === 0 && prodHead() === baseHead && branches(site.repo).length === 0 && rep.status !== 'failed' && !/SECRET/.test(JSON.stringify(rep)), `${label}: 1 try + 2 bounded retries, all counted, nothing published, the run completes`, `code=${r.code} calls=${ai.calls} usage=${JSON.stringify(usage(s.state))} branches=${branches(site.repo).length} status=${rep.status} prod=${prodHead() === baseHead}`);
+      }
+      s = await fresh({ AUTOPILOT_AI_DAILY_REQUESTS: '2' }); await runCli(site, 'dry-run', s.env, root, s.state); ai.mode = 'http503'; ai.calls = 0; r = await runCli(site, 'run', s.env, root, s.state); rep = jsonReport(s.state);
+      check(ai.calls === 2 && usage(s.state).requests === 2 && rep.ai.status === 'budget_reached' && rep.auto.published.length === 0, 'a daily limit of 2 stops the retry loop: only 2 HTTP requests are sent, the third is refused', String(ai.calls) + JSON.stringify(rep.ai));
+      s = await fresh({ AUTOPILOT_AI_TIMEOUT_MS: '300', AUTOPILOT_AI_RETRIES: '1' }); await runCli(site, 'dry-run', s.env, root, s.state); ai.mode = 'timeout'; ai.calls = 0; r = await runCli(site, 'run', s.env, root, s.state); rep = jsonReport(s.state);
+      check(ai.calls === 2 && usage(s.state).requests === 2 && rep.auto.published.length === 0 && prodHead() === baseHead, 'timeouts are counted as attempts (1 try + 1 retry = 2 requests) and nothing is published', `calls=${ai.calls} usage=${JSON.stringify(usage(s.state))}`);
+      // exhausted budget: no network call at all, run still completes, nothing published
+      s = await fresh(); await runCli(site, 'dry-run', s.env, root, s.state);
+      const cfgB = require('../autopilot/config').loadConfig({ AUTOPILOT_ENV_FILE: '/nonexistent', AUTOPILOT_STATE_DIR: s.state, AUTOPILOT_NOW: '2026-10-13T04:00:00Z', AUTOPILOT_AI_DAILY_REQUESTS: '3' }); stateLib.init(cfgB);
+      const worker = "const c=require(process.argv[1]).loadConfig({AUTOPILOT_ENV_FILE:'/nonexistent',AUTOPILOT_STATE_DIR:process.argv[2],AUTOPILOT_NOW:'2026-10-13T04:00:00Z',AUTOPILOT_AI_DAILY_REQUESTS:'3'});const b=require(process.argv[3]);process.stdout.write(b.reserve(c,100).ok?'granted':'refused');";
+      const outs = await Promise.all(Array.from({ length: 8 }, () => new Promise((resolve) => { const c = spawn(process.execPath, ['-e', worker, path.join(SRC, 'autopilot/config.js'), s.state, path.join(SRC, 'autopilot/lib/budget.js')], { stdio: ['ignore', 'pipe', 'ignore'] }); let o = ''; c.stdout.on('data', (d) => (o += d)); c.on('close', () => resolve(o)); })));
+      check(outs.filter((x) => x === 'granted').length === 3 && outs.filter((x) => x === 'refused').length === 5 && usage(s.state).requests === 3, '8 concurrent processes against a limit of 3: exactly 3 are granted, 5 refused, the counter is exactly 3', outs.join());
+      ai.mode = 'good'; ai.calls = 0; const o1 = originHead(); r = await runCli(site, 'run', Object.assign({}, s.env, { AUTOPILOT_AI_DAILY_REQUESTS: '3' }), root, s.state); rep = jsonReport(s.state);
+      check(ai.calls === 0 && rep.ai.status === 'budget_reached' && rep.auto.published.length === 0 && prodHead() === baseHead && originHead() === o1 && usage(s.state).requests === 3 && r.code === 0, 'with the budget exhausted the pipeline sends NO request, publishes nothing and the counter is not touched', r.out + JSON.stringify(rep.ai));
+      untouched('E17');
+      resetOrigin();
     }
   } catch (e) { failed++; console.log('  FAIL  test harness error: ' + (e.stack || e.message)); }
   finally { for (const f of cleanups) { try { f(); } catch (e) { /* ignore */ } } try { fs.rmSync(root, { recursive: true, force: true }); } catch (e) { /* ignore */ } }
