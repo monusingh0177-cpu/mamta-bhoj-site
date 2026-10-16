@@ -32,8 +32,10 @@ function dayOf(cfg, tz) {
 }
 const budgetTz = (cfg) => cfg.ai.budgetTz || cfg.timezone || 'Asia/Kolkata';
 
-// Conservative documented estimate for one request: ~3 characters per token of input plus the full output cap.
-function estimateTokens(cfg, prompt) { return Math.ceil(String(prompt || '').length / 3) + Math.max(0, cfg.ai.maxOutputTokens || 0); }
+// Conservative documented estimate for one request: ONE token per 3 UTF-8 BYTES of input (English text is ~4 characters per token, so
+// this over-counts; multi-byte text such as Devanagari or typographic dashes is counted by its bytes) plus the FULL output cap (thought
+// tokens count against that cap). It is the worst case the provider can bill for the request, reserved before anything is sent.
+function estimateTokens(cfg, prompt) { return Math.ceil(Buffer.byteLength(String(prompt || ''), 'utf8') / 3) + Math.max(0, cfg.ai.maxOutputTokens || 0); }
 
 function acquire(cfg) {
   const lf = lockFile(cfg); const waitMs = Math.max(50, cfg.ai.lockWaitMs || 5000); const t0 = Date.now();

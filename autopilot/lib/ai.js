@@ -61,6 +61,8 @@ function classifyHttp(status, body) {
 // One reserved attempt = one HTTP request. Returns { res } or { err }; never sends when the budget refuses.
 async function attempt(cfg, prompt, send) {
   let r;
+  // bounded input: nothing larger than AUTOPILOT_AI_MAX_INPUT_CHARS is ever sent, for any caller (checked before the reservation)
+  if (String(prompt).length > cfg.ai.maxInputChars) throw new AiError('config', `AI input too large (${String(prompt).length} > ${cfg.ai.maxInputChars} characters); nothing was sent`);
   try { r = budget.reserve(cfg, budget.estimateTokens(cfg, prompt)); } catch (e) { throw new AiError('budget', e.message); }
   if (!r.ok) throw new AiError('budget', r.reason);
   try { return { res: await send(), r }; } catch (err) { return { err, r }; }
@@ -95,7 +97,9 @@ async function geminiCall(cfg, prompt) {
   let j = null; try { j = JSON.parse(res.body); } catch (e) { /* handled below */ }
   const used = j && j.usageMetadata ? j.usageMetadata : {};
   const usage = { promptTokens: Number(used.promptTokenCount) || 0, outputTokens: Number(used.candidatesTokenCount) || 0, totalTokens: Number(used.totalTokenCount) || 0 };
-  if (res.status === 200 && j && j.usageMetadata && usage.totalTokens > 0) budget.settle(cfg, rsv, usage.totalTokens); // provider-reported usage replaces the estimate
+  // provider-reported usage replaces the estimate. Conservative: the larger of the provider's total and the sum of its parts (prompt + answer + thoughts + tool use)
+  const parts = usage.promptTokens + usage.outputTokens + (Number(used.thoughtsTokenCount) || 0) + (Number(used.toolUsePromptTokenCount) || 0);
+  if (res.status === 200 && j && j.usageMetadata && Math.max(usage.totalTokens, parts) > 0) budget.settle(cfg, rsv, Math.max(usage.totalTokens, parts));
   if (res.status !== 200) throw classifyHttp(res.status, res.body);
   if (!j || typeof j !== 'object') throw new AiError('malformed', 'Gemini response was not JSON');
   if (j.promptFeedback && j.promptFeedback.blockReason) throw new AiError('blocked', `Gemini blocked the prompt (${String(j.promptFeedback.blockReason).slice(0, 40)})`);

@@ -20,6 +20,8 @@ function parseEnvFile(file) {
 }
 
 const int = (v, d) => { const n = parseInt(v, 10); return Number.isFinite(n) ? n : d; };
+// documented bounds: a mistyped input/output size can never open the per-request token reservation wide
+const clamp = (n, lo, hi) => Math.min(hi, Math.max(lo, n));
 const flag = (v, d) => (v == null || v === '' ? d : /^(1|true|yes|on)$/i.test(String(v)));
 
 function loadConfig(overrides) {
@@ -59,7 +61,7 @@ function loadConfig(overrides) {
     publish: /^auto$/i.test(env.AUTOPILOT_PUBLISH || '') ? 'auto' : 'branch',
     ai: { mode: (env.AUTOPILOT_AI_MODE || 'none').toLowerCase(), baseUrl: env.AUTOPILOT_AI_BASE_URL || '', model: env.AUTOPILOT_AI_MODEL || '', apiKey: env.AUTOPILOT_AI_API_KEY || '', cliPath: env.AUTOPILOT_CLAUDE_CLI || 'claude',
       // request guards (all providers): per-request timeout, bounded retries (transient errors only, max 3), input/output caps, daily budget (0 = unlimited)
-      timeoutMs: int(env.AUTOPILOT_AI_TIMEOUT_MS, 60000), retries: int(env.AUTOPILOT_AI_RETRIES, 2), maxInputChars: int(env.AUTOPILOT_AI_MAX_INPUT_CHARS, 12000), maxOutputTokens: int(env.AUTOPILOT_AI_MAX_OUTPUT_TOKENS, 4096), dailyRequests: int(env.AUTOPILOT_AI_DAILY_REQUESTS, 10), dailyTokens: int(env.AUTOPILOT_AI_DAILY_TOKENS, 100000),
+      timeoutMs: int(env.AUTOPILOT_AI_TIMEOUT_MS, 60000), retries: int(env.AUTOPILOT_AI_RETRIES, 2), maxInputChars: clamp(int(env.AUTOPILOT_AI_MAX_INPUT_CHARS, 12000), 1000, 30000), maxOutputTokens: clamp(int(env.AUTOPILOT_AI_MAX_OUTPUT_TOKENS, 4096), 256, 8192), dailyRequests: int(env.AUTOPILOT_AI_DAILY_REQUESTS, 10), dailyTokens: int(env.AUTOPILOT_AI_DAILY_TOKENS, 100000),
       // the budget day is a calendar day in this time zone (default: AUTOPILOT_TZ, i.e. Asia/Kolkata); the lock wait is how long a request waits for the shared budget file before refusing
       budgetTz: env.AUTOPILOT_AI_BUDGET_TZ || env.AUTOPILOT_TZ || 'Asia/Kolkata', lockWaitMs: int(env.AUTOPILOT_AI_LOCK_WAIT_MS, 5000),
       // Gemini 3 models think by default and thought tokens count against the output cap (a live fixture check was truncated at 2048): ask for little thinking. minimal|low|medium|high, or none to send no thinkingConfig

@@ -189,6 +189,59 @@ process.stdout.write(JSON.stringify({ ok, refused, errors }));
     check(hits === 1 && readUsage(x.dir).requests === 1, 'openai-compatible mode: a timeout is counted (the old code recorded usage only after a response)'); }
 
   for (const s of sockets) s.destroy();
+  console.log('\n== token cap hardening: the 10,000-token limit / 21,500-token symptom, boundaries, reconciliation, bounds');
+  {
+    const prompt0 = ai.buildPrompt(ctx); const inEst = Math.ceil(Buffer.byteLength(prompt0, 'utf8') / 3);
+    // (1) reproduce the symptom with mocks: ten attempts whose usage is unknown (503) keep their reservation. With a roomy cap the counter
+    // reads ~21,500 after 10 requests (retained ESTIMATES, nothing real was spent) ...
+    const outFor2150 = 2150 - inEst; // output cap that makes one reservation exactly 2,150 tokens
+    t = mk({ AUTOPILOT_AI_DAILY_REQUESTS: '10', AUTOPILOT_AI_DAILY_TOKENS: '100000', AUTOPILOT_AI_MAX_OUTPUT_TOKENS: String(outFor2150) }); hits = 0;
+    if (outFor2150 < 256) { check(false, 'test setup: the probe prompt is too long for the 2,150-token reproduction', String(inEst)); }
+    for (let i = 0; i < 12; i++) await call(t, reply(503, '{}'));
+    check(hits === 10 && readUsage(t.dir).requests === 10 && readUsage(t.dir).tokens === 21500, 'reproduction: 10 attempts with unknown usage under a roomy token cap read requests=10, tokens=21,500 (retained estimates), and the 11th and 12th calls are refused', JSON.stringify(readUsage(t.dir)) + ' hits=' + hits);
+    // ... but with a 10,000-token cap the same traffic is stopped by the reservation BEFORE the request is sent
+    t = mk({ AUTOPILOT_AI_DAILY_REQUESTS: '10', AUTOPILOT_AI_DAILY_TOKENS: '10000', AUTOPILOT_AI_MAX_OUTPUT_TOKENS: String(outFor2150) }); hits = 0; const rr = [];
+    for (let i = 0; i < 10; i++) rr.push(await call(t, reply(503, '{}')));
+    const u = readUsage(t.dir);
+    check(hits === 4 && u.requests === 4 && u.tokens === 8600 && u.tokens <= 10000, 'with a 10,000-token cap only 4 attempts (4 x 2,150 = 8,600) reach the network; the counter can never read 21,500', JSON.stringify(u) + ' hits=' + hits);
+    check(rr.slice(4).every((x) => x.skipped && x.budget && /token budget reached/.test(x.reason)), 'attempts 5..10 are refused with a token-budget reason before any network I/O');
+    // (2) a single request whose MAXIMUM reservation exceeds what is left is refused, even though its real usage would have been small
+    t = mk({ AUTOPILOT_AI_DAILY_TOKENS: String(est + 400) }); hits = 0; await call(t, reply(200, okBody({ promptTokenCount: 600, candidatesTokenCount: 100, totalTokenCount: 700 })));
+    const after1 = readUsage(t.dir).tokens; const second = await call(t, reply(200, okBody()));
+    check(after1 === 700 && hits === 1 && second.skipped && second.budget && /needs up to/.test(second.reason) && readUsage(t.dir).tokens === 700, 'worst-case reservation above the remaining budget is refused before sending (usage 700 stays, only 1 request reached the server)', second.reason);
+    // (3) reconciliation is exact and conservative
+    t = mk({ AUTOPILOT_AI_DAILY_TOKENS: '100000' }); await call(t, reply(200, okBody({ promptTokenCount: 700, candidatesTokenCount: 90, thoughtsTokenCount: 300, totalTokenCount: 790 })));
+    check(readUsage(t.dir).tokens === 1090, 'when the provider total omits thought tokens the larger sum of its parts (700+90+300) is recorded, never less', JSON.stringify(readUsage(t.dir)));
+    t = mk({ AUTOPILOT_AI_DAILY_TOKENS: String(est * 2) }); hits = 0; await call(t, reply(200, okBody({ promptTokenCount: est, candidatesTokenCount: est, totalTokenCount: est * 2 })));
+    check(readUsage(t.dir).tokens === est * 2, 'actual usage above the reservation is recorded as it really was (not capped to the estimate)');
+    const nxt = await call(t, reply(200, okBody())); check(hits === 1 && nxt.skipped && nxt.budget, 'and the cap then refuses the next call before sending');
+    t = mk({ AUTOPILOT_AI_DAILY_TOKENS: '100000' }); await call(t, reply(200, okBody({ promptTokenCount: 10, candidatesTokenCount: 5, totalTokenCount: 15 })));
+    check(readUsage(t.dir).tokens === 15, 'the unused part of a reservation is released atomically when real usage is reported (estimate ' + est + ' -> 15)');
+    // (4) unknown usage (timeout) fails closed: the whole reservation stays and blocks the next call at the boundary
+    t = mk({ AUTOPILOT_AI_DAILY_TOKENS: String(est * 2 - 1), AUTOPILOT_AI_TIMEOUT_MS: '150' }); hits = 0; await call(t, () => {}); const afterTo = await call(t, reply(200, okBody()));
+    check(readUsage(t.dir).tokens === est && afterTo.skipped && afterTo.budget && hits === 1, 'after a timeout the full reservation is retained (not assumed zero), so a second call at the boundary is refused without a request');
+    // (5) retries respect BOTH caps
+    t = mk({ AUTOPILOT_AI_RETRIES: '3', AUTOPILOT_AI_DAILY_REQUESTS: '10', AUTOPILOT_AI_DAILY_TOKENS: String(est * 2 + 100) }); hits = 0; const rt = await call(t, reply(503, '{}'));
+    check(hits === 2 && rt.skipped && rt.budget && /token budget/.test(rt.reason) && /retry not sent/.test(rt.reason) && readUsage(t.dir).tokens === est * 2, 'with 3 retries allowed the TOKEN cap stops the retry loop after 2 sends (request cap alone would allow 4)', JSON.stringify(rt) + ' hits=' + hits);
+    t = mk({ AUTOPILOT_AI_RETRIES: '3', AUTOPILOT_AI_DAILY_REQUESTS: '3', AUTOPILOT_AI_DAILY_TOKENS: '100000' }); hits = 0; await call(t, reply(503, '{}'));
+    check(hits === 3 && readUsage(t.dir).requests === 3, 'and the REQUEST cap stops the same loop at 3 sends when tokens are plentiful');
+    // (6) bounds: documented limits, bytes not characters
+    const big = mk({ AUTOPILOT_AI_MAX_OUTPUT_TOKENS: '1000000', AUTOPILOT_AI_MAX_INPUT_CHARS: '999999999' }); const tiny = mk({ AUTOPILOT_AI_MAX_OUTPUT_TOKENS: '1', AUTOPILOT_AI_MAX_INPUT_CHARS: '1' });
+    check(big.cfg.ai.maxOutputTokens === 8192 && big.cfg.ai.maxInputChars === 30000 && tiny.cfg.ai.maxOutputTokens === 256 && tiny.cfg.ai.maxInputChars === 1000, 'output tokens are bounded to 256..8192 and input characters to 1,000..30,000 whatever the environment says');
+    const dev = 'अ'.repeat(30); check(budget.estimateTokens(probe.cfg, dev) === Math.ceil(Buffer.byteLength(dev, 'utf8') / 3) + 4096 && budget.estimateTokens(probe.cfg, dev) > Math.ceil(dev.length / 3) + 4096, 'the input estimate counts UTF-8 bytes / 3, so multi-byte text is reserved conservatively');
+    t = mk({ AUTOPILOT_AI_DAILY_TOKENS: '100000', AUTOPILOT_AI_MAX_INPUT_CHARS: '1000' }); hits = 0; const bigCtx = Object.assign({}, ctx, { block: { text: 'x '.repeat(3000) } }); const ro = await ai.propose(t.cfg, bigCtx);
+    check(hits === 0 && ro.error && /input too large/.test(ro.error) && !fs.existsSync(path.join(t.dir, 'ai-usage.json')), 'an oversized prompt is refused before the reservation and before any network I/O');
+    // (7) concurrent processes at the token boundary: cap 10,500, 1,000 per reservation -> exactly 10 granted of 24 attempts
+    const w2 = path.join(os.tmpdir(), 'bud-w2-' + process.pid + '.js');
+    fs.writeFileSync(w2, `const budget = require(${JSON.stringify(path.join(ROOT, 'autopilot/lib/budget'))});
+const a = JSON.parse(process.argv[2]); const cfg = { stateDir: a.dir, now: new Date(a.now), timezone: 'Asia/Kolkata', ai: { dailyRequests: 0, dailyTokens: a.tokens, maxOutputTokens: 0, lockWaitMs: 30000, budgetTz: 'Asia/Kolkata' } };
+let ok = 0; let refused = 0; let errors = 0; for (let i = 0; i < a.n; i++) { try { const r = budget.reserve(cfg, 1000); if (r.ok) ok++; else refused++; } catch (e) { errors++; } }
+process.stdout.write(JSON.stringify({ ok, refused, errors }));`);
+    const cdir = fs.mkdtempSync(path.join(os.tmpdir(), 'bud-')); const crs = await Promise.all(Array.from({ length: 8 }, () => new Promise((resolve) => { const c = spawn(process.execPath, [w2, JSON.stringify({ dir: cdir, n: 3, tokens: 10500, now: '2026-10-15T10:00:00Z' })]); let o = ''; c.stdout.on('data', (d) => { o += d; }); c.on('close', () => { try { resolve(JSON.parse(o)); } catch (e) { resolve({ ok: 0, refused: 0, errors: 999 }); } }); })));
+    const granted = crs.reduce((x, y) => x + y.ok, 0); const cu = readUsage(cdir);
+    check(granted === 10 && crs.reduce((x, y) => x + y.refused, 0) === 14 && crs.every((x) => x.errors === 0) && cu.tokens === 10000 && cu.tokens <= 10500, '8 processes x 3 reservations of 1,000 tokens against a 10,500 cap: exactly 10 granted, 14 refused, counter exactly 10,000 (never above the cap)', JSON.stringify(crs) + JSON.stringify(cu));
+    fs.rmSync(w2, { force: true });
+  }
   srv.close();
   console.log(`\nBUDGET TESTS ${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);
