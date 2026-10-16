@@ -38,6 +38,8 @@ jobs:
           for f in scripts/*.sh deploy/autopilot/*.sh; do bash -n "$f"; done
       - name: Secret-scan tests
         run: bash scripts/test-secret-scan.sh
+      - name: Deploy guard tests (protected paths)
+        run: node scripts/test-deploy-guard.js
       - name: Gemini provider tests (fake Gemini server)
         run: node scripts/test-ai-gemini.js
       - name: AI budget tests (hard cap, concurrency, time zone, fail-closed)
