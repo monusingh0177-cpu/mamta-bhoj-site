@@ -40,6 +40,8 @@ jobs:
         run: bash scripts/test-secret-scan.sh
       - name: Deploy guard tests (protected paths)
         run: node scripts/test-deploy-guard.js
+      - name: Opportunity funnel tests (opportunities vs proposals vs publications)
+        run: node scripts/test-funnel.js
       - name: Gemini provider tests (fake Gemini server)
         run: node scripts/test-ai-gemini.js
       - name: AI budget tests (hard cap, concurrency, time zone, fail-closed)
