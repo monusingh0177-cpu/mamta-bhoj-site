@@ -32,6 +32,13 @@ function markdown(r) {
   }
   h('Opportunities (scored; branded and unrelated queries are never opportunities)');
   L.push(...(r.opportunities.length ? ['| Score | Query | Kind | Impr. | Pos. | Best page | Action |', '|---|---|---|---|---|---|---|', ...r.opportunities.map((o) => `| ${o.score} | ${o.query} | ${o.kind} | ${o.impressions} | ${o.position} | ${o.bestPage || '-'} | ${o.action} |`)] : ['None found (no Search Console data, or nothing relevant).']));
+  if (r.funnel) {
+    h('Why this run produced the proposals it did (opportunities are not proposals)'); L.push(r.funnel.summary);
+    const rows = []; const seen = new Set();
+    for (const d of r.funnel.dispositions) { const k = `${d.outcome}|${d.page}|${d.reason}`; if (d.outcome === 'not-a-candidate' || seen.has(k)) continue; seen.add(k); rows.push(`- ${d.page || '(no page)'} [${d.outcome}] "${d.query}" (${d.impressions} impr.): ${d.reason}`); }
+    L.push(...(rows.length ? rows : ['- No opportunity was eligible for a change this run.']));
+    L.push('A successful audit is not an SEO publication: only the "published" count above reflects a verified live change.');
+  }
   h('Proposals prepared on separate branches (nothing was merged, pushed, deployed or restarted)'); L.push(...(r.changes.length ? r.changes.flatMap((c) => [`- ${c.page}: ${c.kind} for query "${c.query}" -> branch \`${c.branch}\` (${c.sha ? c.sha.slice(0, 8) : ''}). ${c.rationale || ''}`, `  review: \`${c.review}\``]) : ['None.']));
   h('Automated remediation (discovery -> proposal -> gates -> publication -> live verification)');
   const au = r.auto || {};
@@ -48,7 +55,7 @@ function markdown(r) {
   };
   L.push(...((r.keywords || []).length ? r.keywords.map(kwLine) : ['No target keyword file configured (AUTOPILOT_TARGET_KEYWORDS_FILE).']));
   if ((r.lostQueries || []).length) { h('Queries with visibility last period and none this period'); L.push(...r.lostQueries.map((q) => `- ${q.query}: ${q.previousImpressions} impressions previously`)); }
-  h('Pages deliberately not changed, and why'); L.push(...(r.notChanged.length ? r.notChanged.map((n) => `- ${n.page || n.query}: ${n.reason}`) : ['None to report.']));
+  h('Pages deliberately not changed, and why'); L.push(...(r.notChanged.length ? r.notChanged.filter((n, i, a) => a.findIndex((m) => (m.page || m.query) === (n.page || n.query) && m.reason === n.reason) === i).map((n) => `- ${n.page || n.query}: ${n.reason}`) : ['None to report.']));
   h('New page proposals (never auto-published)'); L.push(...(r.newPageProposals.length ? r.newPageProposals.map((n) => `- "${n.query}": ${n.verdict} (${n.gates.map((g) => `${g.name}:${g.ok ? 'ok' : 'NO'}`).join(', ')})`) : ['None.']));
   h('Audit findings'); L.push(`${r.auditSummary.critical} critical, ${r.auditSummary.high} high, ${r.auditSummary.medium} medium, ${r.auditSummary.low} low across ${r.inventory.pageCount} pages.`);
   r.findings.filter((f) => ['critical', 'high'].includes(f.severity)).slice(0, 20).forEach((f) => L.push(`- [${f.severity}] ${f.path}: ${f.message}`));

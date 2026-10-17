@@ -145,6 +145,10 @@ Opportunity analysis recognises the target keywords (a flag and a modest score b
 
 **Semrush (optional, `AUTOPILOT_SEMRUSH_API_KEY`)** adds *estimated monthly search volume* per keyword. States: `not_configured` (nothing asked), `ok` (a number, or "none recorded" when Semrush answers "NOTHING FOUND", a genuine absence), `no_units` (no API units: **not** a zero, shown as "NOT MEASURED", and the batch stops), `auth_invalid`, `rate_limited`, `network`. Results are cached for 7 days so units are not spent twice. It is market data, never a ranking or an impression count. **Not verified against a live Semrush account**: the request and the "ERROR nn :: text" classification follow Semrush's documented convention and are tested with fixtures only.
 
+## Why a run can have opportunities but no proposals
+
+The report counts four different things: **opportunities** (scored queries), **eligible candidates** (only "improve existing page" ones can become a title/description change; "monitor", "consolidate" and "possible content gap" are never auto-edited), **proposals** (a branch was prepared, not published) and **published** (released and verified live; rollbacks are counted separately). The section "Why this run produced the proposals it did" gives every eligible query a reason (page cooldown with its end date, open proposal branch, AI budget/error, report-only run, stop condition, review-only gate). A successful audit is not an SEO publication. The funnel only reports; it changes no gate, threshold or cooldown. Test: `npm run test:funnel`.
+
 ## Install later (nothing is installed by this repository)
 
 ```bash

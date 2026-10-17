@@ -24,7 +24,8 @@
     "test:autopilot": "node scripts/test-autopilot.js",
     "test:ai": "node scripts/test-ai-gemini.js",
     "test:ai-budget": "node scripts/test-ai-budget.js",
-    "test:deploy-guard": "node scripts/test-deploy-guard.js"
+    "test:deploy-guard": "node scripts/test-deploy-guard.js",
+    "test:funnel": "node scripts/test-funnel.js"
   },
   "dependencies": {
     "nodemailer": "^10.0.10"

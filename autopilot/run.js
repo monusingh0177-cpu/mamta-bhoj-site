@@ -27,6 +27,7 @@ const weekly = require('./lib/weekly');
 const remediateLib = require('./lib/remediate');
 const publishLib = require('./lib/publish');
 const aiRelease = require('./lib/ai-release');
+const funnelLib = require('./lib/funnel');
 const keywordsLib = require('./lib/keywords');
 const indexingLib = require('./lib/indexing');
 const semrushLib = require('./lib/semrush');
@@ -241,6 +242,7 @@ async function runOnce(cfg, opts) {
   }
 
   aiRelease.recordLedger(cfg, R, runId, date);
+  R.funnel = funnelLib.build(R);
 
   // ---- lastmod, IndexNow, Google sitemap (real live content changes only; never in dry-run)
   if (!dryRun) {
